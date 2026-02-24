@@ -20,7 +20,6 @@ from backend.models import AircraftDesign
 # Constants
 # ---------------------------------------------------------------------------
 
-_WALL_THICKNESS_MM: float = 1.6  # F14 -- preset-controlled in MVP
 _MOTOR_BOSS_DIAMETER_MM: float = 30.0
 _MOTOR_BOSS_DEPTH_MM: float = 15.0
 
@@ -86,9 +85,9 @@ def build_fuselage(design: AircraftDesign) -> cq.Workplane:
     # Add motor mount boss
     result = _add_motor_boss(cq, result, design, length)
 
-    # Hollow interior if requested
+    # Hollow interior if requested — F14: wall_thickness is user-editable
     if design.hollow_parts:
-        result = _shell_fuselage(result, _WALL_THICKNESS_MM)
+        result = _shell_fuselage(result, design.wall_thickness)
 
     return result
 
@@ -109,9 +108,21 @@ def _build_conventional(cq_mod: type, design: AircraftDesign, length: float) -> 
     nose_radius = max_width * 0.15
     tail_radius = max_width * 0.2
 
-    # Zone boundaries along X
-    nose_end = length * 0.25
-    cabin_end = length * 0.75
+    # Zone boundaries along X — F05/F06/F07: user-editable section lengths.
+    # Scale proportionally so sections sum to fuselage_length.
+    section_sum = (
+        design.fuselage_nose_length
+        + design.fuselage_cabin_length
+        + design.fuselage_tail_length
+    )
+    if section_sum > 0:
+        nose_end = length * (design.fuselage_nose_length / section_sum)
+        cabin_end = length * (
+            (design.fuselage_nose_length + design.fuselage_cabin_length) / section_sum
+        )
+    else:
+        nose_end = length * 0.25
+        cabin_end = length * 0.75
 
     # Wing mount Z offset
     mount_z = _wing_mount_z_offset(design, max_height)
@@ -150,9 +161,20 @@ def _build_pod(cq_mod: type, design: AircraftDesign, length: float) -> cq.Workpl
     nose_radius = max_width * 0.3  # blunter nose
     tail_radius = max_width * 0.15
 
-    # Zone boundaries
-    nose_end = length * 0.15
-    cabin_end = length * 0.75
+    # Zone boundaries — F05/F06/F07: user-editable section lengths.
+    section_sum = (
+        design.fuselage_nose_length
+        + design.fuselage_cabin_length
+        + design.fuselage_tail_length
+    )
+    if section_sum > 0:
+        nose_end = length * (design.fuselage_nose_length / section_sum)
+        cabin_end = length * (
+            (design.fuselage_nose_length + design.fuselage_cabin_length) / section_sum
+        )
+    else:
+        nose_end = length * 0.15
+        cabin_end = length * 0.75
 
     stations = [
         (0.0, nose_radius, nose_radius),

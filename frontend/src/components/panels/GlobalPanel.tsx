@@ -3,12 +3,12 @@
 // Issue #25
 // ============================================================================
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { useDesignStore } from '../../store/designStore';
 import { PRESET_DESCRIPTIONS } from '../../lib/presets';
 import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
-import { ParamSlider, ParamSelect } from '../ui';
+import { ParamSlider, ParamSelect, BidirectionalParam } from '../ui';
 import type {
   PresetName,
   FuselagePreset,
@@ -119,6 +119,39 @@ export function GlobalPanel(): React.JSX.Element {
     [setParam],
   );
 
+  // ── Chord / Aspect Ratio bidirectional mode ────────────────────────
+  // 'a' = chord is editable, aspect ratio is derived
+  // 'b' = aspect ratio is editable, chord is derived from wingspan / AR
+  const [chordArMode, setChordArMode] = useState<'a' | 'b'>('a');
+
+  // Compute aspect ratio from current wingspan and chord (simple rectangular approx)
+  const computedAspectRatio = useMemo(
+    () => (design.wingChord > 0 ? design.wingSpan / design.wingChord : 0),
+    [design.wingSpan, design.wingChord],
+  );
+
+  // When user changes aspect ratio, compute chord = wingspan / AR and send it
+  const handleArSliderChange = useCallback(
+    (ar: number) => {
+      if (ar > 0) {
+        const newChord = Math.round(design.wingSpan / ar / 5) * 5; // snap to step=5
+        const clamped = Math.min(500, Math.max(50, newChord));
+        setParam('wingChord', clamped, 'slider');
+      }
+    },
+    [design.wingSpan, setParam],
+  );
+  const handleArInputChange = useCallback(
+    (ar: number) => {
+      if (ar > 0) {
+        const newChord = Math.round(design.wingSpan / ar / 5) * 5;
+        const clamped = Math.min(500, Math.max(50, newChord));
+        setParam('wingChord', clamped, 'text');
+      }
+    },
+    [design.wingSpan, setParam],
+  );
+
   // ── Slider handlers ─────────────────────────────────────────────────
 
   const setWingSpanSlider = useCallback(
@@ -221,6 +254,7 @@ export function GlobalPanel(): React.JSX.Element {
       </h3>
 
       {/* G01 — Fuselage Preset */}
+      <div data-section="fuselage" />
       <ParamSelect
         label="Fuselage Style"
         value={design.fuselagePreset}
@@ -271,18 +305,29 @@ export function GlobalPanel(): React.JSX.Element {
         warningText={warnText('wingSpan')}
       />
 
-      {/* G05 — Wing Chord */}
-      <ParamSlider
-        label="Wing Chord"
-        unit="mm"
-        value={design.wingChord}
-        min={50}
-        max={500}
-        step={5}
-        onSliderChange={setWingChordSlider}
-        onInputChange={setWingChordInput}
-        hasWarning={fieldHasWarning(warnings, 'wingChord')}
-        warningText={warnText('wingChord')}
+      {/* G05 — Wing Chord / Aspect Ratio (bidirectional) */}
+      <BidirectionalParam
+        labelA="Wing Chord"
+        labelB="Aspect Ratio"
+        valueA={design.wingChord}
+        valueB={Math.round(computedAspectRatio * 100) / 100}
+        unitA="mm"
+        minA={50}
+        maxA={500}
+        stepA={5}
+        minB={2}
+        maxB={30}
+        stepB={0.5}
+        mode={chordArMode}
+        onModeChange={setChordArMode}
+        onSliderChangeA={setWingChordSlider}
+        onInputChangeA={setWingChordInput}
+        onSliderChangeB={handleArSliderChange}
+        onInputChangeB={handleArInputChange}
+        hasWarningA={fieldHasWarning(warnings, 'wingChord')}
+        warningTextA={warnText('wingChord')}
+        decimalsA={0}
+        decimalsB={2}
       />
 
       {/* F13 — Wing Mount Type */}

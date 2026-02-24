@@ -18,10 +18,9 @@ if TYPE_CHECKING:
 from backend.models import AircraftDesign
 
 # ---------------------------------------------------------------------------
-# Constants (MVP fixed values per spec)
+# Constants
 # ---------------------------------------------------------------------------
 
-_V_TAIL_SWEEP_DEG: float = 0.0   # T15 -- fixed at 0 deg for MVP
 _TAIL_AIRFOIL: str = "NACA-0012"  # Symmetric airfoil for all tail surfaces
 
 
@@ -283,6 +282,7 @@ def _build_v_tail_half(
     half_span = design.v_tail_span / 2.0
     dihedral = design.v_tail_dihedral
     incidence = design.v_tail_incidence
+    sweep_deg = design.v_tail_sweep  # T15: user-editable V-tail sweep
 
     y_sign = -1.0 if side == "left" else 1.0
 
@@ -290,20 +290,24 @@ def _build_v_tail_half(
     half_thickness = chord * thickness_ratio / 2.0
 
     dihedral_rad = math.radians(dihedral)
+    sweep_rad = math.radians(sweep_deg)
 
     # Tip offset due to dihedral
     tip_y = y_sign * half_span * math.cos(dihedral_rad)
     tip_z = half_span * math.sin(dihedral_rad)
 
+    # Sweep offset: tip LE moves aft along X
+    sweep_offset_x = half_span * math.tan(sweep_rad)
+
     # Loft from root to tip using chained workplane offsets
     # workplane(offset=tip_y) moves along Y (XZ plane normal),
-    # transformed adds the Z offset from dihedral
+    # transformed adds the Z offset from dihedral and X offset from sweep
     result = (
         cq.Workplane("XZ")
         .transformed(rotate=(0, -incidence, 0))
         .ellipse(chord / 2, half_thickness)
         .workplane(offset=tip_y)
-        .transformed(offset=(0, tip_z, 0))
+        .transformed(offset=(sweep_offset_x, tip_z, 0))
         .ellipse(chord / 2, half_thickness)
         .loft(ruled=False)
     )

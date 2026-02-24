@@ -16,14 +16,6 @@ from backend.models import AircraftDesign
 from backend.geometry.airfoil import load_airfoil
 
 # ---------------------------------------------------------------------------
-# Constants (MVP fixed values per spec)
-# ---------------------------------------------------------------------------
-
-_WING_INCIDENCE_DEG: float = 2.0   # W08 -- fixed at 2 deg for MVP
-_WING_TWIST_DEG: float = 0.0       # W06 -- fixed at 0 deg for MVP
-
-
-# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -44,11 +36,11 @@ def build_wing(
        Normalised to chord=1.0.
 
     2. **Root section**: Scale airfoil to design.wing_chord (G05).
-       Position at Y=0.  Apply wing incidence (2 deg, MVP fixed).
+       Position at Y=0.  Apply wing incidence (W08, user-editable).
 
     3. **Tip section**: Scale airfoil to tip_chord = wing_chord * wing_tip_root_ratio.
        Position at Y = +/-wing_span/2.
-       Apply wing twist (0 deg, MVP fixed).
+       Apply wing twist (W06, user-editable washout at tip).
 
     4. **Sweep**: Offset tip X by (wing_span/2) * tan(wing_sweep * pi/180).
 
@@ -99,9 +91,13 @@ def build_wing(
     y_sign = -1.0 if side == "left" else 1.0
 
     # 5. Scale airfoil points to root and tip chords
-    root_pts = _scale_airfoil_2d(profile, root_chord, _WING_INCIDENCE_DEG)
+    #    W08: wing_incidence (user-editable, default 2.0 deg)
+    #    W06: wing_twist (user-editable, default 0.0 deg, washout at tip)
+    wing_incidence_deg = design.wing_incidence
+    wing_twist_deg = design.wing_twist
+    root_pts = _scale_airfoil_2d(profile, root_chord, wing_incidence_deg)
     tip_pts = _scale_airfoil_2d(
-        profile, tip_chord, _WING_INCIDENCE_DEG + _WING_TWIST_DEG,
+        profile, tip_chord, wing_incidence_deg + wing_twist_deg,
     )
 
     # 6. Loft: root at Y=0, tip at Y=+/-half_span with sweep offset only

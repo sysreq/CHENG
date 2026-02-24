@@ -103,6 +103,46 @@ def _check_v06(design: AircraftDesign, out: list[ValidationWarning]) -> None:
         )
 
 
+def _check_v07(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V07: fuselage section lengths don't sum to fuselage_length (>5% deviation)."""
+    section_sum = (
+        design.fuselage_nose_length
+        + design.fuselage_cabin_length
+        + design.fuselage_tail_length
+    )
+    if design.fuselage_length > 0:
+        deviation = abs(section_sum - design.fuselage_length) / design.fuselage_length
+        if deviation > 0.05:
+            out.append(
+                ValidationWarning(
+                    id="V07",
+                    message=(
+                        f"Section lengths sum ({section_sum:.0f} mm) differs from "
+                        f"fuselage length ({design.fuselage_length:.0f} mm) by "
+                        f"{deviation*100:.0f}% — sections will be scaled proportionally"
+                    ),
+                    fields=[
+                        "fuselage_nose_length",
+                        "fuselage_cabin_length",
+                        "fuselage_tail_length",
+                        "fuselage_length",
+                    ],
+                )
+            )
+
+
+def _check_v08(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V08: wall_thickness < 2 * nozzle_diameter — fuselage wall too thin."""
+    if design.wall_thickness < 2 * design.nozzle_diameter:
+        out.append(
+            ValidationWarning(
+                id="V08",
+                message="Fuselage wall too thin for solid perimeters",
+                fields=["wall_thickness", "nozzle_diameter"],
+            )
+        )
+
+
 # ---------------------------------------------------------------------------
 # 3D-printing warnings  (V16 - V23)
 # ---------------------------------------------------------------------------
@@ -221,6 +261,8 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
     _check_v04(design, warnings)
     _check_v05(design, warnings)
     _check_v06(design, warnings)
+    _check_v07(design, warnings)
+    _check_v08(design, warnings)
 
     # 3D printing
     _check_v16(design, warnings)

@@ -7,6 +7,7 @@ import React, { useCallback } from 'react';
 import { useDesignStore } from '../../store/designStore';
 import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
 import { ParamSlider, ParamSelect, DerivedField } from '../ui';
+import { PrintSettingsSection } from './PrintSettingsSection';
 import type { WingAirfoil } from '../../types/design';
 
 // ---------------------------------------------------------------------------
@@ -72,6 +73,24 @@ export function WingPanel(): React.JSX.Element {
     [setParam],
   );
 
+  const setIncidenceSlider = useCallback(
+    (v: number) => setParam('wingIncidence', v, 'slider'),
+    [setParam],
+  );
+  const setIncidenceInput = useCallback(
+    (v: number) => setParam('wingIncidence', v, 'text'),
+    [setParam],
+  );
+
+  const setTwistSlider = useCallback(
+    (v: number) => setParam('wingTwist', v, 'slider'),
+    [setParam],
+  );
+  const setTwistInput = useCallback(
+    (v: number) => setParam('wingTwist', v, 'text'),
+    [setParam],
+  );
+
   const setSkinSlider = useCallback(
     (v: number) => setParam('wingSkinThickness', v, 'slider'),
     [setParam],
@@ -116,6 +135,7 @@ export function WingPanel(): React.JSX.Element {
       {/* W04 — Wing Tip/Root Ratio */}
       <ParamSlider
         label="Tip/Root Chord Ratio"
+        unit="ratio"
         value={design.wingTipRootRatio}
         min={0.3}
         max={1.0}
@@ -124,6 +144,7 @@ export function WingPanel(): React.JSX.Element {
         onInputChange={setTipRootInput}
         hasWarning={fieldHasWarning(warnings, 'wingTipRootRatio')}
         warningText={warnText('wingTipRootRatio')}
+        title="1.0 = rectangular wing, lower values = more tapered toward the tip"
       />
 
       {/* W07 — Wing Dihedral */}
@@ -138,6 +159,33 @@ export function WingPanel(): React.JSX.Element {
         onInputChange={setDihedralInput}
         hasWarning={fieldHasWarning(warnings, 'wingDihedral')}
         warningText={warnText('wingDihedral')}
+      />
+
+      {/* W08 — Wing Incidence */}
+      <ParamSlider
+        label="Incidence"
+        unit="deg"
+        value={design.wingIncidence}
+        min={-5}
+        max={15}
+        step={0.5}
+        onSliderChange={setIncidenceSlider}
+        onInputChange={setIncidenceInput}
+        hasWarning={fieldHasWarning(warnings, 'wingIncidence')}
+      />
+
+      {/* W06 — Wing Twist (washout) */}
+      <ParamSlider
+        label="Twist (washout)"
+        unit="deg"
+        value={design.wingTwist}
+        min={-5}
+        max={5}
+        step={0.5}
+        onSliderChange={setTwistSlider}
+        onInputChange={setTwistInput}
+        hasWarning={fieldHasWarning(warnings, 'wingTwist')}
+        title="Negative = washout (tip nose-down), positive = washin"
       />
 
       {/* W20 — Wing Skin Thickness */}
@@ -195,6 +243,9 @@ export function WingPanel(): React.JSX.Element {
         decimals={1}
         suffix="from wing LE"
       />
+
+      {/* ── Per-Component Print Settings (#128) ────────────────────── */}
+      <PrintSettingsSection component="wing" />
     </div>
   );
 }

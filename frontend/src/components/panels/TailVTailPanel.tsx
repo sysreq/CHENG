@@ -8,6 +8,7 @@ import React, { useCallback } from 'react';
 import { useDesignStore } from '../../store/designStore';
 import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
 import { ParamSlider } from '../ui';
+import { PrintSettingsSection } from './PrintSettingsSection';
 
 export function TailVTailPanel(): React.JSX.Element {
   const design = useDesignStore((s) => s.design);
@@ -49,6 +50,15 @@ export function TailVTailPanel(): React.JSX.Element {
   );
   const setVTailIncidenceInput = useCallback(
     (v: number) => setParam('vTailIncidence', v, 'text'),
+    [setParam],
+  );
+
+  const setVTailSweepSlider = useCallback(
+    (v: number) => setParam('vTailSweep', v, 'slider'),
+    [setParam],
+  );
+  const setVTailSweepInput = useCallback(
+    (v: number) => setParam('vTailSweep', v, 'text'),
     [setParam],
   );
 
@@ -124,6 +134,19 @@ export function TailVTailPanel(): React.JSX.Element {
         hasWarning={fieldHasWarning(warnings, 'vTailIncidence')}
       />
 
+      {/* T15 — V-Tail Sweep */}
+      <ParamSlider
+        label="V-Tail Sweep"
+        unit="deg"
+        value={design.vTailSweep}
+        min={-10}
+        max={45}
+        step={1}
+        onSliderChange={setVTailSweepSlider}
+        onInputChange={setVTailSweepInput}
+        hasWarning={fieldHasWarning(warnings, 'vTailSweep')}
+      />
+
       {/* ── Shared ─────────────────────────────────────────────────── */}
       <div className="border-t border-zinc-700/50 mt-3 mb-2" />
 
@@ -140,6 +163,9 @@ export function TailVTailPanel(): React.JSX.Element {
         hasWarning={fieldHasWarning(warnings, 'tailArm')}
         warningText={warnText('tailArm')}
       />
+
+      {/* ── Per-Component Print Settings (#128) ────────────────────── */}
+      <PrintSettingsSection component="tail" />
     </div>
   );
 }

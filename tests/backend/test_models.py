@@ -83,6 +83,62 @@ class TestAircraftDesign:
         with pytest.raises(ValidationError):
             AircraftDesign(motor_config="Invalid")
 
+    def test_literal_support_strategy(self) -> None:
+        """Invalid support strategy should fail validation."""
+        with pytest.raises(ValidationError):
+            AircraftDesign(support_strategy="invalid")
+
+    def test_new_param_defaults(self) -> None:
+        """New v0.3 parameters should have correct defaults."""
+        d = AircraftDesign()
+        assert d.wing_incidence == 2.0
+        assert d.wing_twist == 0.0
+        assert d.v_tail_sweep == 0.0
+        assert d.fuselage_nose_length == 75
+        assert d.fuselage_cabin_length == 150
+        assert d.fuselage_tail_length == 75
+        assert d.wall_thickness == 1.5
+        assert d.support_strategy == "minimal"
+
+    def test_wing_incidence_range(self) -> None:
+        """Wing incidence outside -5 to 15 should fail."""
+        with pytest.raises(ValidationError):
+            AircraftDesign(wing_incidence=-10)
+        with pytest.raises(ValidationError):
+            AircraftDesign(wing_incidence=20)
+
+    def test_wing_twist_range(self) -> None:
+        """Wing twist outside -5 to 5 should fail."""
+        with pytest.raises(ValidationError):
+            AircraftDesign(wing_twist=-10)
+        with pytest.raises(ValidationError):
+            AircraftDesign(wing_twist=10)
+
+    def test_v_tail_sweep_range(self) -> None:
+        """V-tail sweep outside -10 to 45 should fail."""
+        with pytest.raises(ValidationError):
+            AircraftDesign(v_tail_sweep=-15)
+        with pytest.raises(ValidationError):
+            AircraftDesign(v_tail_sweep=50)
+
+    def test_wall_thickness_range(self) -> None:
+        """Wall thickness outside 0.8 to 4.0 should fail."""
+        with pytest.raises(ValidationError):
+            AircraftDesign(wall_thickness=0.5)
+        with pytest.raises(ValidationError):
+            AircraftDesign(wall_thickness=5.0)
+
+    def test_fuselage_section_lengths_custom(self) -> None:
+        """Custom section lengths should be accepted."""
+        d = AircraftDesign(
+            fuselage_nose_length=60,
+            fuselage_cabin_length=180,
+            fuselage_tail_length=60,
+        )
+        assert d.fuselage_nose_length == 60
+        assert d.fuselage_cabin_length == 180
+        assert d.fuselage_tail_length == 60
+
     def test_serialization_round_trip(self) -> None:
         """Serialize to dict and back should produce identical model."""
         original = AircraftDesign(id="round-trip", wing_span=1500)

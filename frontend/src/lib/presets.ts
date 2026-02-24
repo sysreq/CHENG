@@ -33,6 +33,7 @@ const VTAIL_DEFAULTS = {
   vTailSpan: 280,
   vTailChord: 90,
   vTailIncidence: 0,
+  vTailSweep: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -65,6 +66,8 @@ function createTrainerPreset(): AircraftDesign {
     wingTipRootRatio: 1.0,
     wingDihedral: 3,
     wingSkinThickness: 1.2,
+    wingIncidence: 2.0,
+    wingTwist: -1.0,
 
     // Tail (Conventional)
     hStabSpan: 400,
@@ -77,8 +80,19 @@ function createTrainerPreset(): AircraftDesign {
     // V-tail defaults
     ...VTAIL_DEFAULTS,
 
+    // Fuselage sections (sum = 400 = fuselageLength)
+    fuselageNoseLength: 100,
+    fuselageCabinLength: 200,
+    fuselageTailLength: 100,
+
+    // Fuselage wall
+    wallThickness: 1.6,
+
     // Print/Export
     ...PRINT_DEFAULTS,
+
+    // Support strategy
+    supportStrategy: 'minimal',
   };
 }
 
@@ -104,6 +118,8 @@ function createSportPreset(): AircraftDesign {
     wingTipRootRatio: 0.67,
     wingDihedral: 3,
     wingSkinThickness: 1.2,
+    wingIncidence: 2.0,
+    wingTwist: -0.5,
 
     // Tail (Conventional)
     hStabSpan: 350,
@@ -116,8 +132,19 @@ function createSportPreset(): AircraftDesign {
     // V-tail defaults
     ...VTAIL_DEFAULTS,
 
+    // Fuselage sections (sum = 300 = fuselageLength)
+    fuselageNoseLength: 75,
+    fuselageCabinLength: 150,
+    fuselageTailLength: 75,
+
+    // Fuselage wall
+    wallThickness: 1.5,
+
     // Print/Export
     ...PRINT_DEFAULTS,
+
+    // Support strategy
+    supportStrategy: 'minimal',
   };
 }
 
@@ -143,6 +170,8 @@ function createAerobaticPreset(): AircraftDesign {
     wingTipRootRatio: 1.0,
     wingDihedral: 0,
     wingSkinThickness: 1.2,
+    wingIncidence: 0.0,
+    wingTwist: 0.0,
 
     // Tail (Conventional)
     hStabSpan: 350,
@@ -155,8 +184,19 @@ function createAerobaticPreset(): AircraftDesign {
     // V-tail defaults
     ...VTAIL_DEFAULTS,
 
+    // Fuselage sections (sum = 280 = fuselageLength)
+    fuselageNoseLength: 70,
+    fuselageCabinLength: 140,
+    fuselageTailLength: 70,
+
+    // Fuselage wall
+    wallThickness: 1.5,
+
     // Print/Export
     ...PRINT_DEFAULTS,
+
+    // Support strategy
+    supportStrategy: 'none',
   };
 }
 

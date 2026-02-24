@@ -1,6 +1,6 @@
 // ============================================================================
-// CHENG — Export Dialog: Print/export settings + preview + ZIP download
-// Issue #28, #59, #119
+// CHENG — Export Dialog: Format selection + print/export settings + preview + ZIP download
+// Issues #28, #59, #119, #167, #170
 // ============================================================================
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
@@ -8,7 +8,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { useDesignStore } from '../store/designStore';
 import { fieldHasWarning, formatWarning, groupWarningsByCategory, WARNING_COLORS } from '../lib/validation';
 import { ParamSlider, ParamSelect, ParamToggle, DerivedField } from './ui';
-import type { JointType, ExportPreviewPart, ExportPreviewResponse } from '../types/design';
+import type { JointType, ExportPreviewPart, ExportPreviewResponse, ExportFormat } from '../types/design';
 
 // ---------------------------------------------------------------------------
 // Option Constants
@@ -19,6 +19,13 @@ const JOINT_TYPE_OPTIONS: readonly JointType[] = [
   'Dowel-Pin',
   'Flat-with-Alignment-Pins',
 ] as const;
+
+const EXPORT_FORMATS: { value: ExportFormat; label: string; description: string }[] = [
+  { value: 'stl', label: 'STL', description: 'Mesh for 3D printing (sectioned ZIP)' },
+  { value: 'step', label: 'STEP', description: 'CAD solid model for further editing' },
+  { value: 'dxf', label: 'DXF', description: '2D cross-section profiles' },
+  { value: 'svg', label: 'SVG', description: '2D vector outlines for laser cutting' },
+];
 
 // ---------------------------------------------------------------------------
 // Dialog step type
@@ -100,6 +107,50 @@ function componentLabel(component: string): string {
     case 'v_tail': return 'V-Tail';
     default: return component;
   }
+}
+
+/** Whether a format supports STL-style sectioning and preview. */
+function formatSupportsSectioning(format: ExportFormat): boolean {
+  return format === 'stl';
+}
+
+// ---------------------------------------------------------------------------
+// Format Selector — radio group at top of dialog
+// ---------------------------------------------------------------------------
+
+function FormatSelector({
+  value,
+  onChange,
+}: {
+  value: ExportFormat;
+  onChange: (format: ExportFormat) => void;
+}) {
+  return (
+    <div className="mb-4">
+      <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+        Export Format
+      </h4>
+      <div className="grid grid-cols-4 gap-1.5" role="radiogroup" aria-label="Export format">
+        {EXPORT_FORMATS.map((fmt) => (
+          <button
+            key={fmt.value}
+            role="radio"
+            aria-checked={value === fmt.value}
+            onClick={() => onChange(fmt.value)}
+            className={`px-2 py-2 text-center rounded border transition-colors
+              focus:outline-none focus:ring-1 focus:ring-blue-500
+              ${value === fmt.value
+                ? 'bg-blue-600/30 border-blue-500 text-blue-200'
+                : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-300'
+              }`}
+          >
+            <div className="text-xs font-semibold">{fmt.label}</div>
+            <div className="text-[9px] mt-0.5 leading-tight opacity-75">{fmt.description}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -427,6 +478,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
   const setParam = useDesignStore((s) => s.setParam);
 
   const [step, setStep] = useState<DialogStep>('settings');
+  const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('stl');
   const [isExporting, setIsExporting] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -434,6 +486,9 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
   const [previewData, setPreviewData] = useState<ExportPreviewResponse | null>(null);
 
   const { structural, print } = groupWarningsByCategory(warnings);
+
+  // Whether the selected format supports sectioning/preview
+  const hasSectioning = formatSupportsSectioning(selectedFormat);
 
   // PR08: Min feature thickness = 2 x nozzle diameter (read-only derived)
   const minFeatureThickness = design.nozzleDiameter * 2;
@@ -443,6 +498,23 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
     () => estimatePartCount(design.wingSpan, design.fuselageLength, design.wingChord, design.printBedX, design.printBedY, design.printBedZ),
     [design.wingSpan, design.fuselageLength, design.wingChord, design.printBedX, design.printBedY, design.printBedZ],
   );
+
+  // Dynamic dialog title based on format and step
+  const dialogTitle = useMemo(() => {
+    const formatLabel = EXPORT_FORMATS.find((f) => f.value === selectedFormat)?.label ?? 'Export';
+    if (step === 'preview') return `Export Preview (${formatLabel})`;
+    return `Export ${formatLabel}`;
+  }, [selectedFormat, step]);
+
+  const dialogDescription = useMemo(() => {
+    if (step === 'preview') {
+      return 'Review sectioned parts and their print bed fit before downloading.';
+    }
+    if (hasSectioning) {
+      return 'Configure print bed and sectioning settings before exporting.';
+    }
+    return `Export your design as ${selectedFormat.toUpperCase()} format.`;
+  }, [step, hasSectioning, selectedFormat]);
 
   // Reset state when dialog opens/closes
   useEffect(() => {
@@ -544,7 +616,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
       const res = await fetch('/api/export/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ design, format: 'stl' }),
+        body: JSON.stringify({ design, format: selectedFormat }),
       });
 
       if (!res.ok) {
@@ -561,19 +633,15 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
     } finally {
       setIsPreviewing(false);
     }
-  }, [design]);
+  }, [design, selectedFormat]);
 
   // ── Export handler ────────────────────────────────────────────────────
 
-  // Auto-close after success
-  useEffect(() => {
-    if (!exportSuccess) return;
-    const timer = setTimeout(() => {
-      setExportSuccess(false);
-      onOpenChange(false);
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [exportSuccess, onOpenChange]);
+  // #170: No auto-close — user must click Done
+  const handleDone = useCallback(() => {
+    setExportSuccess(false);
+    onOpenChange(false);
+  }, [onOpenChange]);
 
   const handleExport = useCallback(async () => {
     setIsExporting(true);
@@ -583,7 +651,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
       const res = await fetch('/api/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ design, format: 'stl' }),
+        body: JSON.stringify({ design, format: selectedFormat }),
       });
 
       if (!res.ok) {
@@ -596,7 +664,8 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${design.name.replace(/\s+/g, '_')}_export.zip`;
+      const ext = selectedFormat === 'stl' ? '' : `_${selectedFormat}`;
+      a.download = `${design.name.replace(/\s+/g, '_')}${ext}_export.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -609,7 +678,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
     } finally {
       setIsExporting(false);
     }
-  }, [design]);
+  }, [design, selectedFormat]);
 
   const handleBack = useCallback(() => {
     setStep('settings');
@@ -626,12 +695,10 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
             rounded-lg shadow-2xl z-50 p-6"
         >
           <Dialog.Title className="text-sm font-semibold text-zinc-100 mb-1">
-            {step === 'settings' ? 'Export STL' : 'Export Preview'}
+            {dialogTitle}
           </Dialog.Title>
           <Dialog.Description className="text-xs text-zinc-500 mb-4">
-            {step === 'settings'
-              ? 'Configure print bed and sectioning settings before exporting.'
-              : 'Review sectioned parts and their print bed fit before downloading.'}
+            {dialogDescription}
           </Dialog.Description>
 
           {/* ── STEP: PREVIEW ─────────────────────────────────────────── */}
@@ -647,8 +714,15 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
               {/* Export success */}
               {exportSuccess && (
                 <div className="mt-3 px-3 py-2 text-xs text-green-200 bg-green-900/40
-                  border border-green-700/50 rounded">
-                  Export complete! Download started.
+                  border border-green-700/50 rounded flex items-center justify-between">
+                  <span>Export complete! Download started.</span>
+                  <button
+                    onClick={handleDone}
+                    className="ml-3 px-3 py-1 text-xs font-medium text-zinc-100 bg-zinc-700
+                      rounded hover:bg-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+                  >
+                    Done
+                  </button>
                 </div>
               )}
 
@@ -665,157 +739,180 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
           {/* ── STEP: SETTINGS ────────────────────────────────────────── */}
           {step === 'settings' && (
             <>
-              {/* ── Print Bed ────────────────────────────────────────────── */}
-              <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-                Print Bed Size
-              </h4>
+              {/* ── Format Selector (#167) ────────────────────────────── */}
+              <FormatSelector value={selectedFormat} onChange={setSelectedFormat} />
 
-              <div className="grid grid-cols-3 gap-3 mb-3">
-                <div>
-                  <ParamSlider
-                    label="Bed X"
-                    unit="mm"
-                    value={design.printBedX}
-                    min={100}
-                    max={500}
-                    step={10}
-                    onSliderChange={setBedXSlider}
-                    onInputChange={setBedXInput}
-                    hasWarning={fieldHasWarning(warnings, 'printBedX')}
+              {/* ── STL-only: Print Bed + Sectioning + Print Settings ── */}
+              {hasSectioning && (
+                <>
+                  {/* ── Print Bed ────────────────────────────────────────── */}
+                  <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                    Print Bed Size
+                  </h4>
+
+                  <div className="grid grid-cols-3 gap-3 mb-3">
+                    <div>
+                      <ParamSlider
+                        label="Bed X"
+                        unit="mm"
+                        value={design.printBedX}
+                        min={100}
+                        max={500}
+                        step={10}
+                        onSliderChange={setBedXSlider}
+                        onInputChange={setBedXInput}
+                        hasWarning={fieldHasWarning(warnings, 'printBedX')}
+                      />
+                    </div>
+                    <div>
+                      <ParamSlider
+                        label="Bed Y"
+                        unit="mm"
+                        value={design.printBedY}
+                        min={100}
+                        max={500}
+                        step={10}
+                        onSliderChange={setBedYSlider}
+                        onInputChange={setBedYInput}
+                        hasWarning={fieldHasWarning(warnings, 'printBedY')}
+                      />
+                    </div>
+                    <div>
+                      <ParamSlider
+                        label="Bed Z"
+                        unit="mm"
+                        value={design.printBedZ}
+                        min={50}
+                        max={500}
+                        step={10}
+                        onSliderChange={setBedZSlider}
+                        onInputChange={setBedZInput}
+                        hasWarning={fieldHasWarning(warnings, 'printBedZ')}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Estimated parts */}
+                  <div className="mb-3 px-2 py-1.5 text-xs text-zinc-300 bg-zinc-800/50
+                    border border-zinc-700/50 rounded cursor-default">
+                    Estimated Parts: {estimatedParts} pieces
+                  </div>
+
+                  {/* Bed visualization */}
+                  <BedVisualization
+                    bedX={design.printBedX}
+                    bedY={design.printBedY}
+                    wingSpan={design.wingSpan}
+                    fuselageLength={design.fuselageLength}
+                    wingChord={design.wingChord}
                   />
-                </div>
-                <div>
-                  <ParamSlider
-                    label="Bed Y"
-                    unit="mm"
-                    value={design.printBedY}
-                    min={100}
-                    max={500}
-                    step={10}
-                    onSliderChange={setBedYSlider}
-                    onInputChange={setBedYInput}
-                    hasWarning={fieldHasWarning(warnings, 'printBedY')}
+
+                  {/* ── Sectioning ───────────────────────────────────────── */}
+                  <div className="border-t border-zinc-700/50 my-3" />
+                  <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                    Sectioning
+                  </h4>
+
+                  <ParamToggle
+                    label="Auto-Section Parts"
+                    checked={design.autoSection}
+                    onChange={setAutoSection}
+                    hasWarning={fieldHasWarning(warnings, 'autoSection')}
                   />
-                </div>
-                <div>
+
                   <ParamSlider
-                    label="Bed Z"
+                    label="Section Overlap"
                     unit="mm"
-                    value={design.printBedZ}
-                    min={50}
-                    max={500}
-                    step={10}
-                    onSliderChange={setBedZSlider}
-                    onInputChange={setBedZInput}
-                    hasWarning={fieldHasWarning(warnings, 'printBedZ')}
+                    value={design.sectionOverlap}
+                    min={5}
+                    max={30}
+                    step={1}
+                    onSliderChange={setOverlapSlider}
+                    onInputChange={setOverlapInput}
+                    hasWarning={fieldHasWarning(warnings, 'sectionOverlap')}
                   />
+
+                  <ParamSelect
+                    label="Joint Type"
+                    value={design.jointType}
+                    options={JOINT_TYPE_OPTIONS}
+                    onChange={setJointType}
+                    hasWarning={fieldHasWarning(warnings, 'jointType')}
+                  />
+
+                  <ParamSlider
+                    label="Joint Tolerance"
+                    unit="mm"
+                    value={design.jointTolerance}
+                    min={0.05}
+                    max={0.5}
+                    step={0.01}
+                    onSliderChange={setToleranceSlider}
+                    onInputChange={setToleranceInput}
+                    hasWarning={fieldHasWarning(warnings, 'jointTolerance')}
+                  />
+
+                  {/* ── Print Settings ───────────────────────────────────── */}
+                  <div className="border-t border-zinc-700/50 my-3" />
+                  <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                    Print Settings
+                  </h4>
+
+                  <ParamSlider
+                    label="Nozzle Diameter"
+                    unit="mm"
+                    value={design.nozzleDiameter}
+                    min={0.2}
+                    max={1.0}
+                    step={0.05}
+                    onSliderChange={setNozzleSlider}
+                    onInputChange={setNozzleInput}
+                    hasWarning={fieldHasWarning(warnings, 'nozzleDiameter')}
+                  />
+
+                  {/* PR08 — Min Feature Thickness (read-only derived) */}
+                  <DerivedField
+                    label="Min Feature Thickness"
+                    value={minFeatureThickness}
+                    unit="mm"
+                    decimals={2}
+                  />
+
+                  <ParamToggle
+                    label="Hollow Parts"
+                    checked={design.hollowParts}
+                    onChange={setHollowParts}
+                    hasWarning={fieldHasWarning(warnings, 'hollowParts')}
+                  />
+
+                  <ParamSlider
+                    label="TE Min Thickness"
+                    unit="mm"
+                    value={design.teMinThickness}
+                    min={0.4}
+                    max={2.0}
+                    step={0.1}
+                    onSliderChange={setTeMinSlider}
+                    onInputChange={setTeMinInput}
+                    hasWarning={fieldHasWarning(warnings, 'teMinThickness')}
+                  />
+                </>
+              )}
+
+              {/* Non-STL format info */}
+              {!hasSectioning && (
+                <div className="mb-3 px-3 py-2.5 text-xs text-zinc-300 bg-zinc-800/50
+                  border border-zinc-700/50 rounded">
+                  <p className="font-medium text-zinc-200 mb-1">
+                    {selectedFormat.toUpperCase()} Export
+                  </p>
+                  <p className="text-zinc-400 leading-relaxed">
+                    {selectedFormat === 'step' && 'Exports the full aircraft as a STEP solid model. No sectioning is applied. Useful for importing into CAD software for further editing.'}
+                    {selectedFormat === 'dxf' && 'Exports 2D cross-section profiles as DXF. Useful for laser cutting templates or CNC routing.'}
+                    {selectedFormat === 'svg' && 'Exports 2D vector outlines as SVG. Useful for documentation, laser cutting, or web display.'}
+                  </p>
                 </div>
-              </div>
-
-              {/* Estimated parts */}
-              <div className="mb-3 px-2 py-1.5 text-xs text-zinc-300 bg-zinc-800/50
-                border border-zinc-700/50 rounded cursor-default">
-                Estimated Parts: {estimatedParts} pieces
-              </div>
-
-              {/* Bed visualization */}
-              <BedVisualization
-                bedX={design.printBedX}
-                bedY={design.printBedY}
-                wingSpan={design.wingSpan}
-                fuselageLength={design.fuselageLength}
-                wingChord={design.wingChord}
-              />
-
-              {/* ── Sectioning ───────────────────────────────────────────── */}
-              <div className="border-t border-zinc-700/50 my-3" />
-              <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-                Sectioning
-              </h4>
-
-              <ParamToggle
-                label="Auto-Section Parts"
-                checked={design.autoSection}
-                onChange={setAutoSection}
-                hasWarning={fieldHasWarning(warnings, 'autoSection')}
-              />
-
-              <ParamSlider
-                label="Section Overlap"
-                unit="mm"
-                value={design.sectionOverlap}
-                min={5}
-                max={30}
-                step={1}
-                onSliderChange={setOverlapSlider}
-                onInputChange={setOverlapInput}
-                hasWarning={fieldHasWarning(warnings, 'sectionOverlap')}
-              />
-
-              <ParamSelect
-                label="Joint Type"
-                value={design.jointType}
-                options={JOINT_TYPE_OPTIONS}
-                onChange={setJointType}
-                hasWarning={fieldHasWarning(warnings, 'jointType')}
-              />
-
-              <ParamSlider
-                label="Joint Tolerance"
-                unit="mm"
-                value={design.jointTolerance}
-                min={0.05}
-                max={0.5}
-                step={0.01}
-                onSliderChange={setToleranceSlider}
-                onInputChange={setToleranceInput}
-                hasWarning={fieldHasWarning(warnings, 'jointTolerance')}
-              />
-
-              {/* ── Print Settings ───────────────────────────────────────── */}
-              <div className="border-t border-zinc-700/50 my-3" />
-              <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-                Print Settings
-              </h4>
-
-              <ParamSlider
-                label="Nozzle Diameter"
-                unit="mm"
-                value={design.nozzleDiameter}
-                min={0.2}
-                max={1.0}
-                step={0.05}
-                onSliderChange={setNozzleSlider}
-                onInputChange={setNozzleInput}
-                hasWarning={fieldHasWarning(warnings, 'nozzleDiameter')}
-              />
-
-              {/* PR08 — Min Feature Thickness (read-only derived) */}
-              <DerivedField
-                label="Min Feature Thickness"
-                value={minFeatureThickness}
-                unit="mm"
-                decimals={2}
-              />
-
-              <ParamToggle
-                label="Hollow Parts"
-                checked={design.hollowParts}
-                onChange={setHollowParts}
-                hasWarning={fieldHasWarning(warnings, 'hollowParts')}
-              />
-
-              <ParamSlider
-                label="TE Min Thickness"
-                unit="mm"
-                value={design.teMinThickness}
-                min={0.4}
-                max={2.0}
-                step={0.1}
-                onSliderChange={setTeMinSlider}
-                onInputChange={setTeMinInput}
-                hasWarning={fieldHasWarning(warnings, 'teMinThickness')}
-              />
+              )}
 
               {/* ── Validation Warnings ──────────────────────────────────── */}
               {warnings.length > 0 && (
@@ -863,11 +960,18 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
                 </>
               )}
 
-              {/* ── Export Success ──────────────────────────────────────────── */}
+              {/* ── Export Success (#170 — persistent, no auto-close) ────── */}
               {exportSuccess && (
                 <div className="mt-3 px-3 py-2 text-xs text-green-200 bg-green-900/40
-                  border border-green-700/50 rounded">
-                  Export complete! Download started. ({estimatedParts} parts)
+                  border border-green-700/50 rounded flex items-center justify-between">
+                  <span>Export complete! Download started.</span>
+                  <button
+                    onClick={handleDone}
+                    className="ml-3 px-3 py-1 text-xs font-medium text-zinc-100 bg-zinc-700
+                      rounded hover:bg-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+                  >
+                    Done
+                  </button>
                 </div>
               )}
 
@@ -889,36 +993,57 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
                       focus:outline-none focus:ring-1 focus:ring-zinc-600
                       disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {exportSuccess ? 'Done' : 'Cancel'}
+                    {exportSuccess ? 'Close' : 'Cancel'}
                   </button>
                 </Dialog.Close>
 
                 {!exportSuccess && (
-                  <button
-                    onClick={handlePreview}
-                    disabled={isPreviewing || isExporting}
-                    className="px-4 py-1.5 text-xs font-medium text-zinc-100 bg-blue-600
-                      rounded hover:bg-blue-500 focus:outline-none focus:ring-2
-                      focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900
-                      disabled:opacity-50 disabled:cursor-not-allowed
-                      inline-flex items-center gap-1.5"
-                  >
-                    {isPreviewing ? (
-                      <>
-                        <span className="generating-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                        Generating Preview...
-                      </>
-                    ) : (
-                      <>
-                        Export Preview
-                        {warnings.length > 0 && (
-                          <span className="text-[10px] text-blue-200">
-                            ({warnings.length} warnings)
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </button>
+                  hasSectioning ? (
+                    <button
+                      onClick={handlePreview}
+                      disabled={isPreviewing || isExporting}
+                      className="px-4 py-1.5 text-xs font-medium text-zinc-100 bg-blue-600
+                        rounded hover:bg-blue-500 focus:outline-none focus:ring-2
+                        focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                        inline-flex items-center gap-1.5"
+                    >
+                      {isPreviewing ? (
+                        <>
+                          <span className="generating-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                          Generating Preview...
+                        </>
+                      ) : (
+                        <>
+                          Export Preview
+                          {warnings.length > 0 && (
+                            <span className="text-[10px] text-blue-200">
+                              ({warnings.length} warnings)
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleExport}
+                      disabled={isExporting}
+                      className="px-4 py-1.5 text-xs font-medium text-zinc-100 bg-blue-600
+                        rounded hover:bg-blue-500 focus:outline-none focus:ring-2
+                        focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                        inline-flex items-center gap-1.5"
+                    >
+                      {isExporting ? (
+                        <>
+                          <span className="generating-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                          Exporting...
+                        </>
+                      ) : (
+                        `Download ${selectedFormat.toUpperCase()}`
+                      )}
+                    </button>
+                  )
                 )}
               </div>
             </>
