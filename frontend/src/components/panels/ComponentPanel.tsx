@@ -9,6 +9,7 @@ import { useDesignStore } from '../../store/designStore';
 import { WingPanel } from './WingPanel';
 import { TailConventionalPanel } from './TailConventionalPanel';
 import { TailVTailPanel } from './TailVTailPanel';
+import { FuselagePanel } from './FuselagePanel';
 
 /**
  * Routes to the correct detail panel based on:
@@ -44,18 +45,7 @@ export function ComponentPanel(): React.JSX.Element {
   }
 
   if (selectedComponent === 'fuselage') {
-    return (
-      <div className="p-4">
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-          Fuselage
-        </h3>
-        <p className="text-xs text-zinc-500">
-          Fuselage detail parameters coming soon.
-          <br />
-          Use the Global panel to set fuselage style and length.
-        </p>
-      </div>
-    );
+    return <FuselagePanel />;
   }
 
   // Unreachable, but TypeScript exhaustiveness

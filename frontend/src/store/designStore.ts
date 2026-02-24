@@ -9,6 +9,8 @@ import type {
   PresetName,
   ComponentSelection,
   ChangeSource,
+  PerComponentPrintSettings,
+  ComponentPrintSettings,
 } from '../types/design';
 import { createDesignFromPreset, DEFAULT_PRESET, PRESET_FACTORIES } from '../lib/presets';
 
@@ -64,6 +66,14 @@ export interface DesignStore {
   isGenerating: boolean;
   setMeshData: (mesh: MeshData) => void;
   setIsGenerating: (generating: boolean) => void;
+
+  // ── Per-Component Print Settings (#128) ────────────────────────
+  componentPrintSettings: PerComponentPrintSettings;
+  setComponentPrintSetting: (
+    component: 'wing' | 'tail' | 'fuselage',
+    settings: Partial<ComponentPrintSettings>,
+  ) => void;
+  clearComponentPrintSettings: (component: 'wing' | 'tail' | 'fuselage') => void;
 
   // ── Viewport Selection ──────────────────────────────────────────
   selectedComponent: ComponentSelection;
@@ -145,6 +155,22 @@ export const useDesignStore = create<DesignStore>()(
       isGenerating: false,
       setMeshData: (meshData) => set({ meshData, isGenerating: false }),
       setIsGenerating: (isGenerating) => set({ isGenerating }),
+
+      // ── Per-Component Print Settings (#128) ────────────────────────
+      componentPrintSettings: {},
+      setComponentPrintSetting: (component, settings) =>
+        set(
+          produce((state: DesignStore) => {
+            const existing = state.componentPrintSettings[component] ?? {};
+            state.componentPrintSettings[component] = { ...existing, ...settings };
+          }),
+        ),
+      clearComponentPrintSettings: (component) =>
+        set(
+          produce((state: DesignStore) => {
+            delete state.componentPrintSettings[component];
+          }),
+        ),
 
       // ── Viewport ──────────────────────────────────────────────────
       selectedComponent: null,

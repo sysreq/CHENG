@@ -33,6 +33,25 @@ export type JointType = 'Tongue-and-Groove' | 'Dowel-Pin' | 'Flat-with-Alignment
 /** Selectable component in the 3D viewport. */
 export type ComponentSelection = 'wing' | 'tail' | 'fuselage' | null;
 
+/** Infill density hint for per-component print settings. */
+export type InfillHint = 'low' | 'medium' | 'high';
+
+/** Support generation strategy for per-component print settings. */
+export type SupportStrategy = 'none' | 'minimal' | 'normal' | 'everywhere';
+
+/** Per-component print settings overrides. All fields optional (use global defaults when unset). */
+export interface ComponentPrintSettings {
+  /** Wall thickness override. @unit mm */
+  wallThickness?: number;
+  /** Infill density hint. */
+  infillHint?: InfillHint;
+  /** Support generation strategy. */
+  supportStrategy?: SupportStrategy;
+}
+
+/** Map of component name to its print settings overrides. */
+export type PerComponentPrintSettings = Partial<Record<'wing' | 'tail' | 'fuselage', ComponentPrintSettings>>;
+
 /** Source of a parameter change — controls debounce/throttle timing. */
 export type ChangeSource = 'slider' | 'text' | 'immediate';
 
