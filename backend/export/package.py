@@ -108,13 +108,9 @@ def _build_manifest(
             "filename": section.filename,
             "component": section.component,
             "side": section.side,
-            "section_number": section.section_num,
+            "section": section.section_num,
             "total_sections": section.total_sections,
-            "dimensions_mm": {
-                "x": section.dimensions_mm[0],
-                "y": section.dimensions_mm[1],
-                "z": section.dimensions_mm[2],
-            },
+            "dimensions_mm": list(section.dimensions_mm),
             "print_orientation": section.print_orientation,
             "assembly_order": section.assembly_order,
         })

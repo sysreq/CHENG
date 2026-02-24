@@ -89,12 +89,13 @@ def add_tongue_and_groove(
     cx = (bb.xmin + bb.xmax) / 2.0
     cz = (bb.zmin + bb.zmax) / 2.0
 
-    # Create tongue: a rectangular prism protruding from the +Y face of left
+    # Create tongue: a box protruding from the +Y face of left.
+    # Using XY workplane (identity axis mapping) for clarity.
+    tongue_center_y = bb.ymax + overlap / 2.0
     tongue = (
-        cq.Workplane("XZ")
-        .transformed(offset=(cx, bb.ymax, cz))
-        .rect(tongue_width, tongue_height)
-        .extrude(overlap)
+        cq.Workplane("XY")
+        .transformed(offset=(cx, tongue_center_y, cz))
+        .box(tongue_width, overlap, tongue_height)
     )
 
     # Apply fillet to tongue edges if possible
@@ -104,16 +105,15 @@ def add_tongue_and_groove(
     except Exception:
         pass  # Fillet can fail on very small features
 
-    # Create groove: a rectangular pocket in the -Y face of right
+    # Create groove: a box cut into the -Y face of right.
     bb_r = right.val().BoundingBox()
     cx_r = (bb_r.xmin + bb_r.xmax) / 2.0
     cz_r = (bb_r.zmin + bb_r.zmax) / 2.0
-
+    groove_center_y = bb_r.ymin + overlap / 2.0
     groove = (
-        cq.Workplane("XZ")
-        .transformed(offset=(cx_r, bb_r.ymin, cz_r))
-        .rect(groove_width, groove_height)
-        .extrude(-overlap)
+        cq.Workplane("XY")
+        .transformed(offset=(cx_r, groove_center_y, cz_r))
+        .box(groove_width, overlap, groove_height)
     )
 
     # Boolean operations: add tongue to left, cut groove from right
