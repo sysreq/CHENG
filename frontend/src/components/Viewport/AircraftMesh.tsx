@@ -11,8 +11,7 @@ import { Html } from '@react-three/drei';
 import { useDesignStore } from '@/store/designStore';
 import { createBufferGeometry } from '@/lib/meshParser';
 import type { MeshFrame } from '@/lib/meshParser';
-import type { ComponentSelection, SubElementSelection } from '@/types/design';
-import { COMPONENT_SUB_ELEMENTS } from '@/types/design';
+import type { ComponentSelection } from '@/types/design';
 
 const SELECTED_COLOR = '#FFD60A';
 const SUB_SELECTED_COLOR = '#FF6B35';

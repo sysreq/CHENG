@@ -51,7 +51,7 @@ function useHistoryEntries(): HistoryEntry[] {
     for (let i = futureStates.length - 1; i >= 0; i--) {
       entries.push({
         index: i,
-        action: futureStates[i].lastAction ?? 'Unknown action',
+        action: futureStates[i]?.lastAction ?? 'Unknown action',
         isCurrent: false,
         zone: 'future',
       });
@@ -69,7 +69,7 @@ function useHistoryEntries(): HistoryEntry[] {
     for (let i = pastStates.length - 1; i >= 0; i--) {
       entries.push({
         index: i,
-        action: pastStates[i].lastAction ?? 'Unknown action',
+        action: pastStates[i]?.lastAction ?? 'Unknown action',
         isCurrent: false,
         zone: 'past',
       });
