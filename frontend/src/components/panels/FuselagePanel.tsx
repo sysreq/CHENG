@@ -3,10 +3,10 @@
 // Issue #120
 // ============================================================================
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback } from 'react';
 import { useDesignStore } from '../../store/designStore';
 import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
-import { ParamSlider, ParamSelect, DerivedField } from '../ui';
+import { ParamSlider, ParamSelect } from '../ui';
 import { PrintSettingsSection } from './PrintSettingsSection';
 import type { FuselagePreset, MotorConfig, WingMountType } from '../../types/design';
 
@@ -33,52 +33,11 @@ const WING_MOUNT_OPTIONS: readonly WingMountType[] = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// Section Length Computation
-// Mirrors backend/geometry/fuselage.py zone ratios per preset
-// ---------------------------------------------------------------------------
-
-interface SectionBreakdown {
-  noseLength: number;
-  cabinLength: number;
-  tailConeLength: number;
-}
-
-function computeSectionBreakdown(
-  fuselagePreset: FuselagePreset,
-  fuselageLength: number,
-): SectionBreakdown {
-  switch (fuselagePreset) {
-    case 'Conventional':
-      // Nose 25%, Cabin 50%, Tail cone 25%
-      return {
-        noseLength: fuselageLength * 0.25,
-        cabinLength: fuselageLength * 0.50,
-        tailConeLength: fuselageLength * 0.25,
-      };
-    case 'Pod':
-      // Nose 15%, Cabin 60%, Tail cone 25%
-      return {
-        noseLength: fuselageLength * 0.15,
-        cabinLength: fuselageLength * 0.60,
-        tailConeLength: fuselageLength * 0.25,
-      };
-    case 'Blended-Wing-Body':
-      // BWB uses a single loft, approximate as 20/50/30
-      return {
-        noseLength: fuselageLength * 0.20,
-        cabinLength: fuselageLength * 0.50,
-        tailConeLength: fuselageLength * 0.30,
-      };
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function FuselagePanel(): React.JSX.Element {
   const design = useDesignStore((s) => s.design);
-  const derived = useDesignStore((s) => s.derived);
   const warnings = useDesignStore((s) => s.warnings);
   const setParam = useDesignStore((s) => s.setParam);
   const setSelectedComponent = useDesignStore((s) => s.setSelectedComponent);
@@ -111,11 +70,44 @@ export function FuselagePanel(): React.JSX.Element {
     [setParam],
   );
 
-  // ── Computed section breakdown ──────────────────────────────────────
+  // ── Section length sliders (F05/F06/F07) ────────────────────────────
 
-  const sections = useMemo(
-    () => computeSectionBreakdown(design.fuselagePreset, design.fuselageLength),
-    [design.fuselagePreset, design.fuselageLength],
+  const setNoseLengthSlider = useCallback(
+    (v: number) => setParam('fuselageNoseLength', v, 'slider'),
+    [setParam],
+  );
+  const setNoseLengthInput = useCallback(
+    (v: number) => setParam('fuselageNoseLength', v, 'text'),
+    [setParam],
+  );
+
+  const setCabinLengthSlider = useCallback(
+    (v: number) => setParam('fuselageCabinLength', v, 'slider'),
+    [setParam],
+  );
+  const setCabinLengthInput = useCallback(
+    (v: number) => setParam('fuselageCabinLength', v, 'text'),
+    [setParam],
+  );
+
+  const setTailLengthSlider = useCallback(
+    (v: number) => setParam('fuselageTailLength', v, 'slider'),
+    [setParam],
+  );
+  const setTailLengthInput = useCallback(
+    (v: number) => setParam('fuselageTailLength', v, 'text'),
+    [setParam],
+  );
+
+  // ── Wall thickness (F14) ──────────────────────────────────────────
+
+  const setWallThicknessSlider = useCallback(
+    (v: number) => setParam('wallThickness', v, 'slider'),
+    [setParam],
+  );
+  const setWallThicknessInput = useCallback(
+    (v: number) => setParam('wallThickness', v, 'text'),
+    [setParam],
   );
 
   // ── Navigate to Global panel ────────────────────────────────────────
@@ -174,37 +166,64 @@ export function FuselagePanel(): React.JSX.Element {
         hasWarning={fieldHasWarning(warnings, 'wingMountType')}
       />
 
-      {/* ── Computed Section Breakdown ──────────────────────────────── */}
+      {/* ── Section Lengths (F05/F06/F07) ─────────────────────────── */}
       <div className="border-t border-zinc-700/50 mt-4 mb-3" />
       <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">
-        Section Breakdown
+        Section Lengths
       </h4>
 
-      <DerivedField
+      <ParamSlider
         label="Nose Length"
-        value={sections.noseLength}
         unit="mm"
-        decimals={1}
+        value={design.fuselageNoseLength}
+        min={20}
+        max={1000}
+        step={5}
+        onSliderChange={setNoseLengthSlider}
+        onInputChange={setNoseLengthInput}
+        hasWarning={fieldHasWarning(warnings, 'fuselageNoseLength')}
       />
-      <DerivedField
+      <ParamSlider
         label="Cabin Length"
-        value={sections.cabinLength}
         unit="mm"
-        decimals={1}
+        value={design.fuselageCabinLength}
+        min={30}
+        max={1500}
+        step={5}
+        onSliderChange={setCabinLengthSlider}
+        onInputChange={setCabinLengthInput}
+        hasWarning={fieldHasWarning(warnings, 'fuselageCabinLength')}
       />
-      <DerivedField
+      <ParamSlider
         label="Tail Cone Length"
-        value={sections.tailConeLength}
         unit="mm"
-        decimals={1}
+        value={design.fuselageTailLength}
+        min={20}
+        max={1000}
+        step={5}
+        onSliderChange={setTailLengthSlider}
+        onInputChange={setTailLengthInput}
+        hasWarning={fieldHasWarning(warnings, 'fuselageTailLength')}
       />
 
-      {/* Wall thickness from backend derived values */}
-      <DerivedField
+      {/* Sum indicator */}
+      <div className="text-xs text-zinc-500 mt-1 mb-2">
+        Sum: {(design.fuselageNoseLength + design.fuselageCabinLength + design.fuselageTailLength).toFixed(0)} mm
+        {' / '}Total: {design.fuselageLength} mm
+      </div>
+
+      {/* F14 — Wall Thickness */}
+      <ParamSlider
         label="Wall Thickness"
-        value={derived?.wallThicknessMm ?? null}
         unit="mm"
-        decimals={1}
+        value={design.wallThickness}
+        min={0.8}
+        max={4.0}
+        step={0.1}
+        onSliderChange={setWallThicknessSlider}
+        onInputChange={setWallThicknessInput}
+        hasWarning={fieldHasWarning(warnings, 'wallThickness')}
+        warningText={warnText('wallThickness')}
       />
 
       {/* ── Per-Component Print Settings (#128) ────────────────────── */}

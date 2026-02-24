@@ -53,6 +53,15 @@ export function TailVTailPanel(): React.JSX.Element {
     [setParam],
   );
 
+  const setVTailSweepSlider = useCallback(
+    (v: number) => setParam('vTailSweep', v, 'slider'),
+    [setParam],
+  );
+  const setVTailSweepInput = useCallback(
+    (v: number) => setParam('vTailSweep', v, 'text'),
+    [setParam],
+  );
+
   // ── Tail Arm handler ──────────────────────────────────────────────
 
   const setTailArmSlider = useCallback(
@@ -123,6 +132,19 @@ export function TailVTailPanel(): React.JSX.Element {
         onSliderChange={setVTailIncidenceSlider}
         onInputChange={setVTailIncidenceInput}
         hasWarning={fieldHasWarning(warnings, 'vTailIncidence')}
+      />
+
+      {/* T15 — V-Tail Sweep */}
+      <ParamSlider
+        label="V-Tail Sweep"
+        unit="deg"
+        value={design.vTailSweep}
+        min={-10}
+        max={45}
+        step={1}
+        onSliderChange={setVTailSweepSlider}
+        onInputChange={setVTailSweepInput}
+        hasWarning={fieldHasWarning(warnings, 'vTailSweep')}
       />
 
       {/* ── Shared ─────────────────────────────────────────────────── */}

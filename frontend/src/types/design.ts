@@ -39,9 +39,6 @@ export type ComponentSelection = 'wing' | 'tail' | 'fuselage' | null;
 /** Infill density hint for per-component print settings. */
 export type InfillHint = 'low' | 'medium' | 'high';
 
-/** Support generation strategy for per-component print settings. */
-export type SupportStrategy = 'none' | 'minimal' | 'normal' | 'everywhere';
-
 /** Per-component print settings overrides. All fields optional (use global defaults when unset). */
 export interface ComponentPrintSettings {
   /** Wall thickness override. @unit mm */

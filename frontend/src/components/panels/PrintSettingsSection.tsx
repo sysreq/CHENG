@@ -19,8 +19,7 @@ const INFILL_OPTIONS: readonly InfillHint[] = ['low', 'medium', 'high'] as const
 const SUPPORT_OPTIONS: readonly SupportStrategy[] = [
   'none',
   'minimal',
-  'normal',
-  'everywhere',
+  'full',
 ] as const;
 
 const INFILL_LABELS: Record<InfillHint, string> = {
@@ -32,8 +31,7 @@ const INFILL_LABELS: Record<InfillHint, string> = {
 const SUPPORT_LABELS: Record<SupportStrategy, string> = {
   none: 'None',
   minimal: 'Minimal',
-  normal: 'Normal',
-  everywhere: 'Everywhere',
+  full: 'Full',
 };
 
 // ---------------------------------------------------------------------------
