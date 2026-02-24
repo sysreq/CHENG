@@ -239,36 +239,66 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const isCtrl = e.ctrlKey || e.metaKey;
-      if (!isCtrl) return;
+      // Skip if user is typing in an input, textarea, or contenteditable
+      const tag = (e.target as HTMLElement).tagName;
+      const isEditable =
+        tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable;
 
-      switch (e.key.toLowerCase()) {
-        case 'z':
-          e.preventDefault();
-          if (e.shiftKey) {
+      const isCtrl = e.ctrlKey || e.metaKey;
+
+      // Ctrl+key shortcuts
+      if (isCtrl) {
+        switch (e.key.toLowerCase()) {
+          case 'z':
+            e.preventDefault();
+            if (e.shiftKey) {
+              handleRedo();
+            } else {
+              handleUndo();
+            }
+            break;
+          case 'y':
+            e.preventDefault();
             handleRedo();
-          } else {
-            handleUndo();
-          }
-          break;
-        case 'y':
-          e.preventDefault();
-          handleRedo();
-          break;
-        case 'n':
-          e.preventDefault();
-          handleNew();
-          break;
-        case 's':
-          e.preventDefault();
-          handleSave();
-          break;
+            break;
+          case 'n':
+            e.preventDefault();
+            handleNew();
+            break;
+          case 's':
+            e.preventDefault();
+            handleSave();
+            break;
+        }
+        return;
+      }
+
+      // Single-key camera shortcuts (only when no input is focused and no modifiers)
+      if (!isEditable && !e.altKey && !e.shiftKey) {
+        switch (e.key.toLowerCase()) {
+          case 'f':
+            e.preventDefault();
+            handleViewFront();
+            break;
+          case 's':
+            e.preventDefault();
+            handleViewSide();
+            break;
+          case 't':
+            e.preventDefault();
+            handleViewTop();
+            break;
+          case 'd':
+            e.preventDefault();
+            handleViewPerspective();
+            break;
+        }
       }
     };
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleNew, handleSave, handleUndo, handleRedo]);
+  }, [handleNew, handleSave, handleUndo, handleRedo, handleViewFront, handleViewSide, handleViewTop, handleViewPerspective]);
 
   return (
     <>
@@ -362,6 +392,43 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
+
+        {/* ── View Preset Buttons (#133) ──────────────────────────── */}
+        <div className="h-5 w-px bg-zinc-700 mx-1" aria-hidden="true" />
+        <div className="flex items-center gap-0.5" role="group" aria-label="Camera view presets">
+          <button
+            onClick={handleViewFront}
+            className="w-7 h-7 flex items-center justify-center text-[10px] font-bold text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+            title="Front view (F)"
+            aria-label="Front view"
+          >
+            F
+          </button>
+          <button
+            onClick={handleViewSide}
+            className="w-7 h-7 flex items-center justify-center text-[10px] font-bold text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+            title="Side view (S)"
+            aria-label="Side view"
+          >
+            S
+          </button>
+          <button
+            onClick={handleViewTop}
+            className="w-7 h-7 flex items-center justify-center text-[10px] font-bold text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+            title="Top view (T)"
+            aria-label="Top view"
+          >
+            T
+          </button>
+          <button
+            onClick={handleViewPerspective}
+            className="w-7 h-7 flex items-center justify-center text-[10px] font-bold text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+            title="3D perspective view (D)"
+            aria-label="3D perspective view"
+          >
+            3D
+          </button>
+        </div>
 
         {/* ── Spacer ─────────────────────────────────────────────────── */}
         <div className="flex-1" />
