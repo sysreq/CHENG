@@ -34,15 +34,20 @@ Containerized web app for designing 3D-printable RC aircraft. Users adjust param
 - **Phase 0 (Scaffold):** Complete — project structure, models, types, stores, presets
 - **Phase 1 (Parallel):** Complete — 4 tracks merged (Backend API, Geometry Engine, Frontend Core, Frontend Panels)
 - **Phase 2 (Integration):** Complete — WebSocket, generate, export routes wired. 166 tests passing.
-- **Phase 3 (Polish):** Not started — Docker build, acceptance criteria, bug fixes
-- **App is functional:** Backend generates CadQuery geometry, sends binary mesh via WebSocket, frontend renders in Three.js
+- **Phase 3 (Polish):** Complete — 44 issues fixed (#39-#82). 228 backend + 42 frontend + 7 E2E tests.
+- **App is fully functional:** Geometry, preview, export, validation, Docker all working
 
 ## Dev Scripts
 - `startup.ps1` — Builds frontend + starts both servers. Use `-r` for backend `--reload`.
 - `shutdown.ps1` — Kills processes on ports 8000/5173.
 - Run: `powershell -ExecutionPolicy Bypass -File .\startup.ps1`
+- **Env vars:** `CHENG_DATA_DIR` (storage path, default `/data/designs`), `VITE_API_URL` (proxy target, default `http://localhost:8000`)
 
 ## CadQuery Gotchas
+- **XZ Workplane Axis:** local Y = global Z (vertical), local Z = global -Y (spanwise). Use `transformed(offset=(0, z, 0))` for vertical, NOT `(0, 0, z)`
+- **Dihedral:** Apply via `.rotate()` AFTER lofting, not translation. Rotate at root attachment point to avoid angling root face.
+- **Airfoil rotation:** `z_rot = -(dx * sin_r) + z * cos_r` — positive incidence = nose up
+- **Shell face selectors:** Use `solid.faces('<Y').shell(-t)` to leave root face open (right wing), `'>Y'` for left wing
 - **Loft:** Must use chained `.workplane(offset=delta).ellipse().loft()` — NOT `.add()` from separate Workplanes
 - **Splines:** Use `.spline(pts, periodic=False).close()` for loft cross-sections
 - **Shell:** `.shell(-thickness)` often fails on complex lofts — always try/except with fallback
@@ -51,8 +56,17 @@ Containerized web app for designing 3D-printable RC aircraft. Users adjust param
 ## Conventions
 - Python: snake_case, Pydantic models, type hints
 - TypeScript: strict mode, camelCase
+- **API naming:** `CamelModel` base class (Pydantic `alias_generator=to_camel`). Use `model_dump(by_alias=True)` for frontend. Backend storage stays snake_case.
+- **Validation:** Canonical module is `backend/validation.py` (V01-V06 structural, V16-V23 print). Never duplicate in engine.py.
 - Parameter IDs use subsystem prefixes: G (Global), W (Wing), T (Tail), F (Fuselage), P (Propulsion), PR (Print/Export), D (Derived)
 - Pydantic model uses flat structure with snake_case field names matching parameter names
+
+## Testing
+- **Backend:** `python -m pytest tests/backend/ -v` (NOT `backend/tests/`)
+- **Frontend Vitest:** `cd frontend && pnpm test`
+- **Playwright E2E:** `cd frontend && NODE_PATH=./node_modules npx playwright test` (requires app running via `startup.ps1`)
+- E2E targets `localhost:5173` locally (Vite dev), `localhost:8000` in Docker (set `PLAYWRIGHT_BASE_URL`)
+- WebSocket binary frame: header(12B) + vertices(N*12) + normals(N*12) + faces(M*12) + JSON trailer (componentRanges, derived, warnings)
 
 ## AI Collaboration Protocol (Gemini CLI)
 Use Gemini as a stateless "Staff Engineer" for deep context and validation.

@@ -10,20 +10,20 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
-from backend.geometry.engine import compute_derived_values, _compute_warnings
+from backend.geometry.engine import compute_derived_values
 from backend.models import (
     AircraftDesign,
     DerivedValues,
     GenerationResult,
-    ValidationWarning,
 )
+from backend.validation import compute_warnings
 
 logger = logging.getLogger("cheng.generate")
 
 router = APIRouter(prefix="/api", tags=["generate"])
 
 
-@router.post("/generate", response_model=GenerationResult)
+@router.post("/generate", response_model=GenerationResult, response_model_by_alias=True)
 async def generate(design: AircraftDesign) -> GenerationResult:
     """Compute derived values and validation warnings for a design.
 
@@ -34,7 +34,7 @@ async def generate(design: AircraftDesign) -> GenerationResult:
     try:
         derived_dict = compute_derived_values(design)
         derived = DerivedValues(**derived_dict)
-        warnings = _compute_warnings(design, derived_dict)
+        warnings = compute_warnings(design)
 
         return GenerationResult(derived=derived, warnings=warnings)
 

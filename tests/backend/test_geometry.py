@@ -217,16 +217,16 @@ class TestComputeDerivedValues:
         assert result["min_feature_thickness_mm"] == pytest.approx(0.8)
 
     def test_wall_thickness_conventional(self) -> None:
-        """Conventional fuselage wall thickness should be 1.6 mm."""
-        design = AircraftDesign(fuselage_preset="Conventional")
+        """Wall thickness reflects wing_skin_thickness for all presets."""
+        design = AircraftDesign(fuselage_preset="Conventional", wing_skin_thickness=1.2)
         result = compute_derived_values(design)
-        assert result["wall_thickness_mm"] == pytest.approx(1.6)
+        assert result["wall_thickness_mm"] == pytest.approx(1.2)
 
     def test_wall_thickness_pod(self) -> None:
-        """Pod fuselage wall thickness should be 1.6 mm."""
-        design = AircraftDesign(fuselage_preset="Pod")
+        """Wall thickness reflects wing_skin_thickness for all presets."""
+        design = AircraftDesign(fuselage_preset="Pod", wing_skin_thickness=1.5)
         result = compute_derived_values(design)
-        assert result["wall_thickness_mm"] == pytest.approx(1.6)
+        assert result["wall_thickness_mm"] == pytest.approx(1.5)
 
     def test_wall_thickness_bwb(self, bwb_design: AircraftDesign) -> None:
         """BWB wall thickness should use wing_skin_thickness."""
@@ -261,74 +261,115 @@ class TestComputeDerivedValues:
 
 
 class TestComputeWarnings:
-    """Tests for the warning computation in engine._compute_warnings()."""
+    """Tests for validation warnings via backend.validation.compute_warnings()."""
 
     def test_no_warnings_for_default(self, default_design: AircraftDesign) -> None:
         """Default design should produce few or no warnings."""
-        from backend.geometry.engine import _compute_warnings
+        from backend.validation import compute_warnings
 
-        derived = compute_derived_values(default_design)
-        warnings = _compute_warnings(default_design, derived)
-        # Default design is a reasonable trainer -- should be mostly clean
+        warnings = compute_warnings(default_design)
         assert isinstance(warnings, list)
 
-    def test_high_aspect_ratio_warning(self) -> None:
-        """Very high AR should trigger V02."""
-        from backend.geometry.engine import _compute_warnings
+    def test_v01_wingspan_vs_fuselage(self) -> None:
+        """V01: wingspan > 10 * fuselageLength."""
+        from backend.validation import compute_warnings
 
-        design = AircraftDesign(wing_span=3000, wing_chord=80)
-        derived = compute_derived_values(design)
-        warnings = _compute_warnings(design, derived)
+        design = AircraftDesign(wing_span=2000, fuselage_length=150)
+        warnings = compute_warnings(design)
         warning_ids = [w.id for w in warnings]
-        assert "V02" in warning_ids
+        assert "V01" in warning_ids
 
-    def test_low_aspect_ratio_warning(self) -> None:
-        """Very low AR should trigger V02."""
-        from backend.geometry.engine import _compute_warnings
+    def test_v02_aggressive_taper(self) -> None:
+        """V02: tipRootRatio < 0.3 -- model min is 0.3 so boundary is exact."""
+        from backend.validation import compute_warnings
 
-        design = AircraftDesign(wing_span=300, wing_chord=500)
-        derived = compute_derived_values(design)
-        warnings = _compute_warnings(design, derived)
+        # Model min is 0.3 so 0.3 should NOT trigger (not strictly less)
+        design = AircraftDesign(wing_tip_root_ratio=0.3)
+        warnings = compute_warnings(design)
         warning_ids = [w.id for w in warnings]
-        assert "V02" in warning_ids
+        assert "V02" not in warning_ids
 
-    def test_te_thickness_warning(self) -> None:
-        """TE thickness < 2*nozzle should trigger V20."""
-        from backend.geometry.engine import _compute_warnings
+    def test_v03_short_fuselage(self) -> None:
+        """V03: fuselageLength < wingChord."""
+        from backend.validation import compute_warnings
 
-        design = AircraftDesign(te_min_thickness=0.5, nozzle_diameter=0.4)
-        derived = compute_derived_values(design)
-        warnings = _compute_warnings(design, derived)
+        design = AircraftDesign(fuselage_length=150, wing_chord=200)
+        warnings = compute_warnings(design)
         warning_ids = [w.id for w in warnings]
-        assert "V20" in warning_ids
+        assert "V03" in warning_ids
 
-    def test_tight_tolerance_warning(self) -> None:
-        """Very tight joint tolerance should trigger V22."""
-        from backend.geometry.engine import _compute_warnings
+    def test_v04_short_tail_arm(self) -> None:
+        """V04: tailArm < 2 * MAC."""
+        from backend.validation import compute_warnings
 
-        design = AircraftDesign(joint_tolerance=0.05)
-        derived = compute_derived_values(design)
-        warnings = _compute_warnings(design, derived)
+        design = AircraftDesign(tail_arm=80, wing_chord=200)
+        warnings = compute_warnings(design)
         warning_ids = [w.id for w in warnings]
-        assert "V22" in warning_ids
+        assert "V04" in warning_ids
 
-    def test_high_dihedral_warning(self) -> None:
-        """High dihedral angle should trigger V05."""
-        from backend.geometry.engine import _compute_warnings
+    def test_v05_small_tip_chord(self) -> None:
+        """V05: wingChord * tipRootRatio < 30."""
+        from backend.validation import compute_warnings
 
-        design = AircraftDesign(wing_dihedral=12)
-        derived = compute_derived_values(design)
-        warnings = _compute_warnings(design, derived)
+        design = AircraftDesign(wing_chord=80, wing_tip_root_ratio=0.3)
+        warnings = compute_warnings(design)
         warning_ids = [w.id for w in warnings]
         assert "V05" in warning_ids
 
+    def test_v06_tail_past_fuselage(self) -> None:
+        """V06: tailArm > fuselageLength."""
+        from backend.validation import compute_warnings
+
+        design = AircraftDesign(tail_arm=500, fuselage_length=400)
+        warnings = compute_warnings(design)
+        warning_ids = [w.id for w in warnings]
+        assert "V06" in warning_ids
+
+    def test_v16_wall_too_thin(self) -> None:
+        """V16: skinThickness < 2 * nozzleDiameter."""
+        from backend.validation import compute_warnings
+
+        # skin=0.8 (model min), nozzle=0.6 -> 0.8 < 1.2 triggers V16
+        design = AircraftDesign(wing_skin_thickness=0.8, nozzle_diameter=0.6)
+        warnings = compute_warnings(design)
+        warning_ids = [w.id for w in warnings]
+        assert "V16" in warning_ids
+
+    def test_v17_wall_not_clean_multiple(self) -> None:
+        """V17: skinThickness % nozzleDiameter > 0.01."""
+        from backend.validation import compute_warnings
+
+        design = AircraftDesign(wing_skin_thickness=1.3, nozzle_diameter=0.4)
+        warnings = compute_warnings(design)
+        warning_ids = [w.id for w in warnings]
+        assert "V17" in warning_ids
+
+    def test_v22_loose_tolerance(self) -> None:
+        """V22: jointTolerance > 0.3."""
+        from backend.validation import compute_warnings
+
+        design = AircraftDesign(joint_tolerance=0.4)
+        warnings = compute_warnings(design)
+        warning_ids = [w.id for w in warnings]
+        assert "V22" in warning_ids
+
+    def test_v23_tight_tolerance(self) -> None:
+        """V23: jointTolerance < 0.05 -- but model min is 0.05, so edge case."""
+        from backend.validation import compute_warnings
+
+        # joint_tolerance min is 0.05 in model, so 0.05 should NOT trigger
+        design = AircraftDesign(joint_tolerance=0.05)
+        warnings = compute_warnings(design)
+        warning_ids = [w.id for w in warnings]
+        assert "V23" not in warning_ids
+
     def test_warning_structure(self) -> None:
         """Warnings should have proper structure."""
-        from backend.geometry.engine import _compute_warnings
+        from backend.validation import compute_warnings
 
-        design = AircraftDesign(wing_span=3000, wing_chord=80)
-        derived = compute_derived_values(design)
-        warnings = _compute_warnings(design, derived)
+        # Use a design that triggers at least one warning (V05: tip chord < 30)
+        design = AircraftDesign(wing_chord=80, wing_tip_root_ratio=0.3)
+        warnings = compute_warnings(design)
 
         for w in warnings:
             assert hasattr(w, "id")

@@ -6,7 +6,7 @@
 
 import React, { useCallback } from 'react';
 import { useDesignStore } from '../../store/designStore';
-import { fieldHasWarning } from '../../lib/validation';
+import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
 import { ParamSlider } from '../ui';
 
 export function TailConventionalPanel(): React.JSX.Element {
@@ -83,6 +83,9 @@ export function TailConventionalPanel(): React.JSX.Element {
     [setParam],
   );
 
+  const warnText = (field: string) =>
+    getFieldWarnings(warnings, field).map(formatWarning).join('\n') || undefined;
+
   return (
     <div className="p-3">
       <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
@@ -105,6 +108,7 @@ export function TailConventionalPanel(): React.JSX.Element {
         onSliderChange={setHStabSpanSlider}
         onInputChange={setHStabSpanInput}
         hasWarning={fieldHasWarning(warnings, 'hStabSpan')}
+        warningText={warnText('hStabSpan')}
       />
 
       {/* T03 — H-Stab Chord */}
@@ -118,6 +122,7 @@ export function TailConventionalPanel(): React.JSX.Element {
         onSliderChange={setHStabChordSlider}
         onInputChange={setHStabChordInput}
         hasWarning={fieldHasWarning(warnings, 'hStabChord')}
+        warningText={warnText('hStabChord')}
       />
 
       {/* T06 — H-Stab Incidence */}
@@ -179,6 +184,7 @@ export function TailConventionalPanel(): React.JSX.Element {
         onSliderChange={setTailArmSlider}
         onInputChange={setTailArmInput}
         hasWarning={fieldHasWarning(warnings, 'tailArm')}
+        warningText={warnText('tailArm')}
       />
     </div>
   );

@@ -5,7 +5,7 @@
 
 import React, { useCallback } from 'react';
 import { useDesignStore } from '../../store/designStore';
-import { fieldHasWarning } from '../../lib/validation';
+import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
 import { ParamSlider, ParamSelect, DerivedField } from '../ui';
 import type { WingAirfoil } from '../../types/design';
 
@@ -81,6 +81,9 @@ export function WingPanel(): React.JSX.Element {
     [setParam],
   );
 
+  const warnText = (field: string) =>
+    getFieldWarnings(warnings, field).map(formatWarning).join('\n') || undefined;
+
   return (
     <div className="p-3">
       <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
@@ -107,6 +110,7 @@ export function WingPanel(): React.JSX.Element {
         onSliderChange={setSweepSlider}
         onInputChange={setSweepInput}
         hasWarning={fieldHasWarning(warnings, 'wingSweep')}
+        warningText={warnText('wingSweep')}
       />
 
       {/* W04 — Wing Tip/Root Ratio */}
@@ -119,6 +123,7 @@ export function WingPanel(): React.JSX.Element {
         onSliderChange={setTipRootSlider}
         onInputChange={setTipRootInput}
         hasWarning={fieldHasWarning(warnings, 'wingTipRootRatio')}
+        warningText={warnText('wingTipRootRatio')}
       />
 
       {/* W07 — Wing Dihedral */}
@@ -132,6 +137,7 @@ export function WingPanel(): React.JSX.Element {
         onSliderChange={setDihedralSlider}
         onInputChange={setDihedralInput}
         hasWarning={fieldHasWarning(warnings, 'wingDihedral')}
+        warningText={warnText('wingDihedral')}
       />
 
       {/* W20 — Wing Skin Thickness */}
@@ -145,6 +151,7 @@ export function WingPanel(): React.JSX.Element {
         onSliderChange={setSkinSlider}
         onInputChange={setSkinInput}
         hasWarning={fieldHasWarning(warnings, 'wingSkinThickness')}
+        warningText={warnText('wingSkinThickness')}
       />
 
       {/* ── Derived Values ─────────────────────────────────────────── */}

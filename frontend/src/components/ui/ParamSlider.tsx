@@ -23,6 +23,8 @@ export interface ParamSliderProps {
   onInputChange: (value: number) => void;
   /** Whether the field has an associated warning */
   hasWarning?: boolean;
+  /** Warning tooltip text (shown on click of warning icon) */
+  warningText?: string;
   /** Optional tooltip/description */
   title?: string;
 }
@@ -45,6 +47,7 @@ export function ParamSlider({
   onSliderChange,
   onInputChange,
   hasWarning = false,
+  warningText,
   title,
 }: ParamSliderProps): React.JSX.Element {
   const id = useId();
@@ -52,6 +55,7 @@ export function ParamSlider({
   // Local string state for the number input — allows free typing
   const [localValue, setLocalValue] = useState<string>(String(value));
   const [isFocused, setIsFocused] = useState(false);
+  const [showWarningTooltip, setShowWarningTooltip] = useState(false);
 
   // Sync local value from prop when not focused (e.g. slider or preset change)
   useEffect(() => {
@@ -120,7 +124,24 @@ export function ParamSlider({
       <div className="flex items-center justify-between mb-1">
         <label htmlFor={id} className="text-xs font-medium text-zinc-300">
           {label}
-          {hasWarning && <span className="ml-1 text-amber-400" aria-label="has warning">!</span>}
+          {hasWarning && (
+            <span className="relative inline-block ml-1">
+              <button
+                type="button"
+                onClick={() => setShowWarningTooltip((v) => !v)}
+                className="cursor-pointer"
+                style={{ color: '#FFD60A' }}
+                aria-label="has warning"
+              >
+                {'\u26A0'}
+              </button>
+              {showWarningTooltip && warningText && (
+                <span className="absolute left-0 top-full mt-1 z-50 px-2 py-1 text-xs text-zinc-100 bg-zinc-800 border border-amber-500/50 rounded shadow-lg whitespace-nowrap">
+                  {warningText}
+                </span>
+              )}
+            </span>
+          )}
         </label>
         <span className="text-xs text-zinc-500">{unit}</span>
       </div>

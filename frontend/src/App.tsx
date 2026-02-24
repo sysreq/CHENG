@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useDesignSync } from '@/hooks/useDesignSync';
+import { useConnectionStore } from '@/store/connectionStore';
 import { Toolbar } from '@/components/Toolbar';
 import Scene from '@/components/Viewport/Scene';
 import { GlobalPanel } from '@/components/panels/GlobalPanel';
 import { ComponentPanel } from '@/components/panels/ComponentPanel';
 import ConnectionStatus from '@/components/ConnectionStatus';
+import DisconnectedBanner from '@/components/DisconnectedBanner';
 import { ExportDialog } from '@/components/ExportDialog';
 
 /**
@@ -25,6 +27,12 @@ export default function App() {
   useDesignSync(send);
 
   const [exportOpen, setExportOpen] = useState(false);
+  const isConnected = useConnectionStore((s) => s.state === 'connected');
+
+  // When disconnected, disable parameter panels (read-only mode)
+  const panelStyle = !isConnected
+    ? { opacity: 0.5, pointerEvents: 'none' as const }
+    : {};
 
   return (
     <div
@@ -47,6 +55,7 @@ export default function App() {
         }}
       >
         <Toolbar onOpenExport={() => setExportOpen(true)} />
+        <DisconnectedBanner />
         <div style={{ position: 'absolute', inset: 0, top: 'var(--toolbar-height)' }}>
           <Scene />
         </div>
@@ -60,6 +69,7 @@ export default function App() {
           backgroundColor: 'var(--color-bg-secondary)',
           borderLeft: '1px solid var(--color-border)',
           overflowY: 'auto',
+          ...panelStyle,
         }}
       >
         <GlobalPanel />
@@ -74,6 +84,7 @@ export default function App() {
           borderTop: '1px solid var(--color-border)',
           overflowY: 'auto',
           maxHeight: '280px',
+          ...panelStyle,
         }}
       >
         <ComponentPanel />

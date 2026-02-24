@@ -1,4 +1,7 @@
-"""Tests for validation rules — V01-V06 (structural) and V16-V23 (print)."""
+"""Tests for validation rules — V01-V06 (structural) and V16-V23 (print).
+
+All warning conditions are defined in docs/mvp_spec.md §9.2 and §9.3.
+"""
 
 from __future__ import annotations
 
@@ -14,108 +17,84 @@ def _warning_ids(design: AircraftDesign) -> set[str]:
 
 
 # ---------------------------------------------------------------------------
-# V01: wingspan > 2000 mm
+# V01: wingspan > 10 * fuselageLength
 # ---------------------------------------------------------------------------
 
 
 class TestV01:
-    def test_triggers_on_large_wingspan(self) -> None:
-        design = AircraftDesign(wing_span=2500)
+    def test_triggers_when_wingspan_far_exceeds_fuselage(self) -> None:
+        # 2000 > 10 * 150 = 1500
+        design = AircraftDesign(wing_span=2000, fuselage_length=150)
         assert "V01" in _warning_ids(design)
 
     def test_does_not_trigger_on_normal_wingspan(self) -> None:
-        design = AircraftDesign(wing_span=1200)
+        design = AircraftDesign(wing_span=1200, fuselage_length=300)
         assert "V01" not in _warning_ids(design)
 
     def test_boundary_does_not_trigger(self) -> None:
-        design = AircraftDesign(wing_span=2000)
+        # 10 * 200 = 2000, wingspan=2000 is NOT > 2000
+        design = AircraftDesign(wing_span=2000, fuselage_length=200)
         assert "V01" not in _warning_ids(design)
 
 
 # ---------------------------------------------------------------------------
-# V02: wing loading too high
+# V02: tipRootRatio < 0.3
 # ---------------------------------------------------------------------------
 
 
 class TestV02:
-    def test_triggers_on_thick_skin_small_area(self) -> None:
-        """Thick skin with large span/chord product should trigger high loading."""
-        design = AircraftDesign(
-            wing_span=3000,
-            wing_chord=500,
-            wing_skin_thickness=3.0,
-        )
-        ids = _warning_ids(design)
-        assert "V02" in ids
+    def test_boundary_does_not_trigger(self) -> None:
+        """Model min is 0.3, so the boundary value should not trigger."""
+        design = AircraftDesign(wing_tip_root_ratio=0.3)
+        assert "V02" not in _warning_ids(design)
 
-    def test_does_not_trigger_on_normal_design(self) -> None:
-        design = AircraftDesign()  # defaults
+    def test_does_not_trigger_on_normal_taper(self) -> None:
+        design = AircraftDesign(wing_tip_root_ratio=0.7)
         assert "V02" not in _warning_ids(design)
 
 
 # ---------------------------------------------------------------------------
-# V03: tail arm > fuselage length
+# V03: fuselageLength < wingChord
 # ---------------------------------------------------------------------------
 
 
 class TestV03:
-    def test_triggers_when_tail_exceeds_fuselage(self) -> None:
-        design = AircraftDesign(tail_arm=500, fuselage_length=300)
+    def test_triggers_when_fuselage_shorter_than_chord(self) -> None:
+        design = AircraftDesign(fuselage_length=150, wing_chord=200)
         assert "V03" in _warning_ids(design)
 
-    def test_does_not_trigger_when_tail_within_fuselage(self) -> None:
-        design = AircraftDesign(tail_arm=180, fuselage_length=300)
+    def test_does_not_trigger_when_fuselage_longer(self) -> None:
+        design = AircraftDesign(fuselage_length=300, wing_chord=180)
         assert "V03" not in _warning_ids(design)
 
     def test_equal_values_do_not_trigger(self) -> None:
-        design = AircraftDesign(tail_arm=300, fuselage_length=300)
+        design = AircraftDesign(fuselage_length=200, wing_chord=200)
         assert "V03" not in _warning_ids(design)
 
 
 # ---------------------------------------------------------------------------
-# V04: tail volume coefficient too low
+# V04: tailArm < 2 * MAC
 # ---------------------------------------------------------------------------
 
 
 class TestV04:
-    def test_triggers_on_small_tail(self) -> None:
-        """Very small h-stab with long wing should trigger."""
-        design = AircraftDesign(
-            wing_span=2000,
-            wing_chord=200,
-            h_stab_span=100,
-            h_stab_chord=30,
-            tail_arm=100,
-        )
+    def test_triggers_on_short_tail_arm(self) -> None:
+        # MAC for default chord=180, ratio=1.0 => MAC=180*2/3*(1+1+1)/(1+1)=180
+        # 2 * 180 = 360. tail_arm=80 < 360 => triggers
+        design = AircraftDesign(tail_arm=80, wing_chord=200)
         assert "V04" in _warning_ids(design)
 
-    def test_does_not_trigger_on_adequate_tail(self) -> None:
-        """A design with large enough tail surfaces should not trigger."""
+    def test_does_not_trigger_on_adequate_tail_arm(self) -> None:
+        # MAC for chord=100, ratio=1.0 => MAC=100. 2*100=200. tail_arm=500 >= 200
         design = AircraftDesign(
-            wing_span=1000,
-            wing_chord=180,
-            h_stab_span=400,
-            h_stab_chord=150,
-            tail_arm=300,
+            tail_arm=500,
+            wing_chord=100,
         )
         assert "V04" not in _warning_ids(design)
 
-    def test_v_tail_uses_projected_area(self) -> None:
-        """V-tail should use projected horizontal area."""
-        design = AircraftDesign(
-            tail_type="V-Tail",
-            wing_span=2000,
-            wing_chord=200,
-            v_tail_span=80,
-            v_tail_chord=30,
-            v_tail_dihedral=45,
-            tail_arm=100,
-        )
-        assert "V04" in _warning_ids(design)
-
 
 # ---------------------------------------------------------------------------
-# V05: tip chord too small
+# V05: wingChord * tipRootRatio < 30
 # ---------------------------------------------------------------------------
 
 
@@ -132,58 +111,94 @@ class TestV05:
 
 
 # ---------------------------------------------------------------------------
-# V06: aspect ratio extreme (< 4 or > 12)
+# V06: tailArm > fuselageLength
 # ---------------------------------------------------------------------------
 
 
 class TestV06:
-    def test_triggers_on_low_ar(self) -> None:
-        """Short span, wide chord = low AR."""
-        design = AircraftDesign(wing_span=300, wing_chord=500)
-        # AR = 300^2 / (0.5 * (500 + 500) * 300) = 90000/150000 = 0.6
+    def test_triggers_when_tail_exceeds_fuselage(self) -> None:
+        design = AircraftDesign(tail_arm=500, fuselage_length=400)
         assert "V06" in _warning_ids(design)
 
-    def test_triggers_on_high_ar(self) -> None:
-        """Long span, narrow chord = high AR."""
-        design = AircraftDesign(wing_span=3000, wing_chord=50)
-        # AR = 3000^2 / (0.5 * (50 + 50) * 3000) = 9000000/150000 = 60
-        assert "V06" in _warning_ids(design)
+    def test_does_not_trigger_when_within(self) -> None:
+        design = AircraftDesign(tail_arm=180, fuselage_length=300)
+        assert "V06" not in _warning_ids(design)
 
-    def test_does_not_trigger_on_normal_ar(self) -> None:
-        """Default design has normal AR (about 5.56)."""
-        design = AircraftDesign()
+    def test_equal_values_do_not_trigger(self) -> None:
+        design = AircraftDesign(tail_arm=300, fuselage_length=300)
         assert "V06" not in _warning_ids(design)
 
 
 # ---------------------------------------------------------------------------
-# V16: wall thickness < 1.2 mm
+# V16: skinThickness < 2 * nozzleDiameter
 # ---------------------------------------------------------------------------
 
 
 class TestV16:
     def test_triggers_on_thin_skin(self) -> None:
-        design = AircraftDesign(wing_skin_thickness=0.8)
+        # 0.8 < 2 * 0.6 = 1.2
+        design = AircraftDesign(wing_skin_thickness=0.8, nozzle_diameter=0.6)
         assert "V16" in _warning_ids(design)
 
     def test_does_not_trigger_on_adequate_skin(self) -> None:
-        design = AircraftDesign(wing_skin_thickness=1.2)
+        # 1.2 >= 2 * 0.4 = 0.8
+        design = AircraftDesign(wing_skin_thickness=1.2, nozzle_diameter=0.4)
         assert "V16" not in _warning_ids(design)
 
 
 # ---------------------------------------------------------------------------
-# V17: section exceeds print bed (when auto-section disabled)
+# V17: skinThickness % nozzleDiameter > 0.01
 # ---------------------------------------------------------------------------
 
 
 class TestV17:
+    def test_triggers_when_not_clean_multiple(self) -> None:
+        # 1.3 % 0.4 = 0.1 > 0.01
+        design = AircraftDesign(wing_skin_thickness=1.3, nozzle_diameter=0.4)
+        assert "V17" in _warning_ids(design)
+
+    def test_does_not_trigger_on_clean_multiple(self) -> None:
+        # 1.2 % 0.4 = 0.0
+        design = AircraftDesign(wing_skin_thickness=1.2, nozzle_diameter=0.4)
+        assert "V17" not in _warning_ids(design)
+
+    def test_does_not_trigger_on_exact_double(self) -> None:
+        # 0.8 % 0.4 = 0.0
+        design = AircraftDesign(wing_skin_thickness=0.8, nozzle_diameter=0.4)
+        assert "V17" not in _warning_ids(design)
+
+
+# ---------------------------------------------------------------------------
+# V18: skinThickness < 2 * nozzleDiameter (wing skin too thin for FDM)
+# ---------------------------------------------------------------------------
+
+
+class TestV18:
+    def test_triggers_on_thin_skin(self) -> None:
+        # 0.8 < 2 * 0.6 = 1.2
+        design = AircraftDesign(wing_skin_thickness=0.8, nozzle_diameter=0.6)
+        assert "V18" in _warning_ids(design)
+
+    def test_does_not_trigger_on_adequate_skin(self) -> None:
+        # 1.2 >= 2 * 0.4 = 0.8
+        design = AircraftDesign(wing_skin_thickness=1.2, nozzle_diameter=0.4)
+        assert "V18" not in _warning_ids(design)
+
+
+# ---------------------------------------------------------------------------
+# V20: part exceeds bed size AND auto-section disabled
+# ---------------------------------------------------------------------------
+
+
+class TestV20:
     def test_triggers_when_oversized_no_autosection(self) -> None:
         design = AircraftDesign(
-            wing_span=1000,  # half-span = 500mm
+            wing_span=1000,  # half-span = 500mm > 220mm bed
             auto_section=False,
             print_bed_x=220,
             print_bed_y=220,
         )
-        assert "V17" in _warning_ids(design)
+        assert "V20" in _warning_ids(design)
 
     def test_does_not_trigger_with_autosection(self) -> None:
         design = AircraftDesign(
@@ -191,7 +206,7 @@ class TestV17:
             auto_section=True,
             print_bed_x=220,
         )
-        assert "V17" not in _warning_ids(design)
+        assert "V20" not in _warning_ids(design)
 
     def test_does_not_trigger_when_fits(self) -> None:
         design = AircraftDesign(
@@ -201,78 +216,39 @@ class TestV17:
             print_bed_x=220,
             print_bed_y=220,
         )
-        assert "V17" not in _warning_ids(design)
-
-
-# ---------------------------------------------------------------------------
-# V18: overhang concern (high dihedral + thin skin)
-# ---------------------------------------------------------------------------
-
-
-class TestV18:
-    def test_triggers_on_high_dihedral_thin_skin(self) -> None:
-        design = AircraftDesign(wing_dihedral=10, wing_skin_thickness=1.2)
-        assert "V18" in _warning_ids(design)
-
-    def test_does_not_trigger_on_low_dihedral(self) -> None:
-        design = AircraftDesign(wing_dihedral=3, wing_skin_thickness=1.2)
-        assert "V18" not in _warning_ids(design)
-
-    def test_does_not_trigger_on_thick_skin(self) -> None:
-        design = AircraftDesign(wing_dihedral=10, wing_skin_thickness=2.0)
-        assert "V18" not in _warning_ids(design)
-
-
-# ---------------------------------------------------------------------------
-# V20: estimated part count > 20
-# ---------------------------------------------------------------------------
-
-
-class TestV20:
-    def test_triggers_on_large_plane_small_bed(self) -> None:
-        design = AircraftDesign(
-            wing_span=3000,
-            fuselage_length=2000,
-            auto_section=True,
-            print_bed_x=100,
-            print_bed_y=100,
-        )
-        assert "V20" in _warning_ids(design)
-
-    def test_does_not_trigger_on_normal_design(self) -> None:
-        design = AircraftDesign()  # defaults: 1000mm span, 220mm bed
         assert "V20" not in _warning_ids(design)
 
 
 # ---------------------------------------------------------------------------
-# V21: estimated print time > 48h
+# V21: jointOverlap < 10 AND wingspan > 800
 # ---------------------------------------------------------------------------
 
 
 class TestV21:
-    def test_triggers_on_huge_design(self) -> None:
+    def test_triggers_on_short_overlap_large_span(self) -> None:
         design = AircraftDesign(
-            wing_span=3000,
-            wing_chord=500,
-            fuselage_length=2000,
-            wing_skin_thickness=3.0,
+            section_overlap=5,  # min is 5 per model, < 10
+            wing_span=1000,     # > 800
         )
-        ids = _warning_ids(design)
-        assert "V21" in ids
+        assert "V21" in _warning_ids(design)
 
-    def test_does_not_trigger_on_normal_design(self) -> None:
-        design = AircraftDesign()
+    def test_does_not_trigger_on_adequate_overlap(self) -> None:
+        design = AircraftDesign(section_overlap=15, wing_span=1000)
+        assert "V21" not in _warning_ids(design)
+
+    def test_does_not_trigger_on_small_wingspan(self) -> None:
+        design = AircraftDesign(section_overlap=5, wing_span=600)
         assert "V21" not in _warning_ids(design)
 
 
 # ---------------------------------------------------------------------------
-# V22: joint tolerance too tight (< 0.1 mm)
+# V22: jointTolerance > 0.3
 # ---------------------------------------------------------------------------
 
 
 class TestV22:
-    def test_triggers_on_tight_tolerance(self) -> None:
-        design = AircraftDesign(joint_tolerance=0.05)
+    def test_triggers_on_loose_tolerance(self) -> None:
+        design = AircraftDesign(joint_tolerance=0.4)
         assert "V22" in _warning_ids(design)
 
     def test_does_not_trigger_on_normal_tolerance(self) -> None:
@@ -280,30 +256,24 @@ class TestV22:
         assert "V22" not in _warning_ids(design)
 
     def test_boundary_does_not_trigger(self) -> None:
-        design = AircraftDesign(joint_tolerance=0.1)
+        design = AircraftDesign(joint_tolerance=0.3)
         assert "V22" not in _warning_ids(design)
 
 
 # ---------------------------------------------------------------------------
-# V23: TE min thickness < 2 * nozzle_diameter
+# V23: jointTolerance < 0.05
 # ---------------------------------------------------------------------------
 
 
 class TestV23:
-    def test_triggers_when_te_below_threshold(self) -> None:
-        design = AircraftDesign(te_min_thickness=0.6, nozzle_diameter=0.4)
-        # 2 * 0.4 = 0.8 > 0.6 → should trigger
-        assert "V23" in _warning_ids(design)
-
-    def test_does_not_trigger_when_te_adequate(self) -> None:
-        design = AircraftDesign(te_min_thickness=0.8, nozzle_diameter=0.4)
-        # 2 * 0.4 = 0.8 = 0.8 → not below, should not trigger
+    def test_boundary_does_not_trigger(self) -> None:
+        """Model min is 0.05, so boundary should not trigger."""
+        design = AircraftDesign(joint_tolerance=0.05)
         assert "V23" not in _warning_ids(design)
 
-    def test_triggers_with_large_nozzle(self) -> None:
-        design = AircraftDesign(te_min_thickness=1.0, nozzle_diameter=0.6)
-        # 2 * 0.6 = 1.2 > 1.0 → should trigger
-        assert "V23" in _warning_ids(design)
+    def test_does_not_trigger_on_normal_tolerance(self) -> None:
+        design = AircraftDesign(joint_tolerance=0.15)
+        assert "V23" not in _warning_ids(design)
 
 
 # ---------------------------------------------------------------------------
@@ -317,11 +287,10 @@ class TestDefaultDesign:
         design = AircraftDesign()
         warnings = compute_warnings(design)
         ids = {w.id for w in warnings}
-        # The default design should not trigger any of the critical structural warnings
-        # V03 might trigger since default tail_arm(180) < fuselage_length(300) is fine
-        assert "V01" not in ids  # wingspan 1000 is fine
-        assert "V05" not in ids  # tip chord 180mm is fine
-        assert "V22" not in ids  # tolerance 0.15 is fine
+        # Default design should not trigger structural problems
+        assert "V01" not in ids
+        assert "V05" not in ids
+        assert "V22" not in ids
 
     def test_all_warnings_have_required_fields(self) -> None:
         """Every warning should have id, level, and message."""
@@ -332,7 +301,7 @@ class TestDefaultDesign:
             tail_arm=500,
             fuselage_length=200,
             wing_skin_thickness=0.8,
-            joint_tolerance=0.05,
+            joint_tolerance=0.4,
             te_min_thickness=0.4,
             nozzle_diameter=0.4,
         )

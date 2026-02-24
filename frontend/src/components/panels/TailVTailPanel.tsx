@@ -6,7 +6,7 @@
 
 import React, { useCallback } from 'react';
 import { useDesignStore } from '../../store/designStore';
-import { fieldHasWarning } from '../../lib/validation';
+import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
 import { ParamSlider } from '../ui';
 
 export function TailVTailPanel(): React.JSX.Element {
@@ -62,6 +62,9 @@ export function TailVTailPanel(): React.JSX.Element {
     (v: number) => setParam('tailArm', v, 'text'),
     [setParam],
   );
+
+  const warnText = (field: string) =>
+    getFieldWarnings(warnings, field).map(formatWarning).join('\n') || undefined;
 
   return (
     <div className="p-3">
@@ -135,6 +138,7 @@ export function TailVTailPanel(): React.JSX.Element {
         onSliderChange={setTailArmSlider}
         onInputChange={setTailArmInput}
         hasWarning={fieldHasWarning(warnings, 'tailArm')}
+        warningText={warnText('tailArm')}
       />
     </div>
   );

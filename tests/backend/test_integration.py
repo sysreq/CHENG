@@ -70,14 +70,14 @@ class TestGenerate:
         assert "derived" in data
         assert "warnings" in data
 
-        # Check derived values are present
+        # Check derived values are present (camelCase per API naming contract)
         derived = data["derived"]
-        assert "tip_chord_mm" in derived
-        assert "wing_area_cm2" in derived
-        assert "aspect_ratio" in derived
-        assert "mean_aero_chord_mm" in derived
-        assert "taper_ratio" in derived
-        assert "estimated_cg_mm" in derived
+        assert "tipChordMm" in derived
+        assert "wingAreaCm2" in derived
+        assert "aspectRatio" in derived
+        assert "meanAeroChordMm" in derived
+        assert "taperRatio" in derived
+        assert "estimatedCgMm" in derived
 
     @pytest.mark.anyio
     async def test_generate_with_trainer(self, trainer_design_dict: dict) -> None:
@@ -91,9 +91,9 @@ class TestGenerate:
         derived = resp.json()["derived"]
         # Trainer: 1200mm span, 200mm chord, taper 1.0
         # wing_area = 0.5 * (200 + 200) * 1200 / 100 = 2400 cm2
-        assert derived["wing_area_cm2"] == pytest.approx(2400.0, rel=0.01)
-        assert derived["aspect_ratio"] == pytest.approx(6.0, rel=0.01)
-        assert derived["taper_ratio"] == pytest.approx(1.0)
+        assert derived["wingAreaCm2"] == pytest.approx(2400.0, rel=0.01)
+        assert derived["aspectRatio"] == pytest.approx(6.0, rel=0.01)
+        assert derived["taperRatio"] == pytest.approx(1.0)
 
     @pytest.mark.anyio
     async def test_generate_warnings_are_list(
@@ -127,9 +127,9 @@ class TestGenerate:
         assert resp.status_code == 422
 
     @pytest.mark.anyio
-    async def test_generate_high_ar_triggers_warning(self) -> None:
-        """Extreme aspect ratio should produce a V02 warning."""
-        design = AircraftDesign(wing_span=3000, wing_chord=80).model_dump()
+    async def test_generate_extreme_design_triggers_warning(self) -> None:
+        """Extreme wingspan relative to fuselage should produce V01 warning."""
+        design = AircraftDesign(wing_span=3000, fuselage_length=200).model_dump()
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -138,7 +138,7 @@ class TestGenerate:
         assert resp.status_code == 200
         warnings = resp.json()["warnings"]
         warning_ids = [w["id"] for w in warnings]
-        assert "V02" in warning_ids
+        assert "V01" in warning_ids
 
 
 # ---------------------------------------------------------------------------

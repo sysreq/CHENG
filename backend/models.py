@@ -1,9 +1,21 @@
-"""Pydantic models — shared contract between all backend modules."""
+"""Pydantic models — shared contract between all backend modules.
+
+API Naming Contract:
+  - Backend models use snake_case field names (Python convention).
+  - Frontend expects camelCase (TypeScript convention).
+  - Models that are serialized to the frontend (DerivedValues, ValidationWarning,
+    GenerationResult, DesignSummary) use Pydantic alias_generator=to_camel so that
+    model.model_dump(by_alias=True) produces camelCase keys automatically.
+  - AircraftDesign also inherits CamelModel so REST responses (GET /api/designs/{id})
+    return camelCase keys. The frontend sends snake_case via serializeDesign() in
+    useWebSocket.ts, and Pydantic accepts both formats via populate_by_name=True.
+"""
 
 from __future__ import annotations
 
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 
 
 # ---------------------------------------------------------------------------
@@ -22,11 +34,25 @@ JointType = Literal["Tongue-and-Groove", "Dowel-Pin", "Flat-with-Alignment-Pins"
 
 
 # ---------------------------------------------------------------------------
+# Base model for camelCase serialization
+# ---------------------------------------------------------------------------
+
+class CamelModel(BaseModel):
+    """Base for models serialized to the frontend with camelCase keys."""
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+# ---------------------------------------------------------------------------
 # AircraftDesign — 33 user-configurable parameters
 # ---------------------------------------------------------------------------
 
-class AircraftDesign(BaseModel):
-    """Complete aircraft design parameters. Flat structure, snake_case fields."""
+class AircraftDesign(CamelModel):
+    """Complete aircraft design parameters. Flat structure, snake_case fields.
+
+    Inherits CamelModel so REST responses return camelCase for the frontend.
+    Backend code always uses snake_case field names (populate_by_name=True).
+    """
 
     # ── Meta ──────────────────────────────────────────────────────────
     version: str = "0.1.0"
@@ -83,7 +109,7 @@ class AircraftDesign(BaseModel):
 # Derived Values — computed by geometry engine, read-only
 # ---------------------------------------------------------------------------
 
-class DerivedValues(BaseModel):
+class DerivedValues(CamelModel):
     """Backend-computed values returned in WebSocket JSON trailer."""
 
     tip_chord_mm: float
@@ -100,7 +126,7 @@ class DerivedValues(BaseModel):
 # Validation Warning
 # ---------------------------------------------------------------------------
 
-class ValidationWarning(BaseModel):
+class ValidationWarning(CamelModel):
     """Non-blocking validation warning."""
 
     id: str  # V01-V06, V16-V23
@@ -113,21 +139,21 @@ class ValidationWarning(BaseModel):
 # REST Request/Response Types
 # ---------------------------------------------------------------------------
 
-class ExportRequest(BaseModel):
+class ExportRequest(CamelModel):
     """Request body for POST /api/export."""
 
     design: AircraftDesign
     format: Literal["stl"] = "stl"
 
 
-class GenerationResult(BaseModel):
+class GenerationResult(CamelModel):
     """Response from POST /api/generate."""
 
     derived: DerivedValues
     warnings: list[ValidationWarning] = Field(default_factory=list)
 
 
-class DesignSummary(BaseModel):
+class DesignSummary(CamelModel):
     """Summary for design listing (GET /api/designs)."""
 
     id: str

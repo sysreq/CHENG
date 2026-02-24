@@ -4,7 +4,11 @@ services:
     ports: ["8000:8000"]
     volumes:
       - ./backend:/app/backend
+      - ./airfoils:/app/airfoils
       - cheng-data:/data
+    environment:
+      CHENG_DATA_DIR: /data/designs
+      CHENG_LOG_LEVEL: info
     command: >
       uvicorn backend.main:app
       --host 0.0.0.0 --port 8000
@@ -15,8 +19,12 @@ services:
     working_dir: /app
     volumes:
       - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
     ports: ["5173:5173"]
-    command: sh -c "corepack enable && pnpm dev --host"
+    environment:
+      VITE_API_URL: http://backend:8000
+    command: sh -c "corepack enable && pnpm install --frozen-lockfile && pnpm dev --host"
 
 volumes:
   cheng-data:
+  frontend-node-modules:

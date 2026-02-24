@@ -24,18 +24,41 @@ logger = logging.getLogger("cheng")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Preload CadQuery on startup — first import takes ~2-4 s.
-
-    Running a trivial box operation warms up the OpenCascade kernel so the
-    first real /api/generate request doesn't pay the cold-start penalty.
+    """Startup tasks:
+    1. Pre-warm CadQuery/OpenCascade kernel (first import takes ~2-4 s)
+    2. Ensure /data/tmp directory exists for export temp files
     """
+    # 1. CadQuery warm-up with graceful degradation
     try:
         import cadquery as cq
 
         cq.Workplane("XY").box(1, 1, 1)  # warm up OpenCascade kernel
         logger.info("CadQuery preloaded successfully")
     except ImportError:
-        logger.warning("CadQuery not available — geometry endpoints will not work")
+        logger.warning(
+            "CadQuery not installed — geometry and export endpoints will return errors. "
+            "Install with: pip install cadquery"
+        )
+    except Exception as exc:
+        logger.warning("CadQuery warm-up failed: %s — geometry may be slow on first request", exc)
+
+    # 2. Ensure export tmp directory exists (needed outside Docker)
+    tmp_dir = Path("/data/tmp")
+    try:
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("Export tmp directory ready: %s", tmp_dir)
+    except OSError:
+        # On Windows or non-Docker, /data/tmp may not be writable.
+        # Fall back to system temp — the export module handles this via EXPORT_TMP_DIR.
+        logger.info("Cannot create /data/tmp — export will use module default")
+
+    # 3. Ensure designs storage directory exists
+    designs_dir = Path("/data/designs")
+    try:
+        designs_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        logger.info("Cannot create /data/designs — using default storage path")
+
     yield
 
 

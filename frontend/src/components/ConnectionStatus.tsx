@@ -1,6 +1,6 @@
 // ============================================================================
 // CHENG — Connection Status Indicator
-// Green/Yellow/Red dot with label
+// Green/Yellow/Red dot with label + disconnection banner
 // ============================================================================
 
 import { useConnectionStore } from '@/store/connectionStore';
@@ -11,6 +11,11 @@ const STATE_CONFIG: Record<
   ConnectionState,
   { color: string; label: string; pulse: boolean }
 > = {
+  connecting: {
+    color: 'var(--color-warning)',
+    label: 'Connecting...',
+    pulse: true,
+  },
   connected: {
     color: 'var(--color-success)',
     label: 'Connected',
@@ -26,15 +31,22 @@ const STATE_CONFIG: Record<
     label: 'Disconnected',
     pulse: false,
   },
+  error: {
+    color: 'var(--color-error)',
+    label: 'Connection Error',
+    pulse: false,
+  },
 };
 
 /**
  * Connection status indicator shown in the bottom-right corner of the status bar.
  *
  * Displays a colored dot and label:
+ * - Yellow pulsing dot + "Connecting..." — initial connection
  * - Green dot + "Connected" — full functionality
  * - Yellow pulsing dot + "Reconnecting..." — retrying connection
- * - Red dot + "Disconnected" — no connection
+ * - Red dot + "Disconnected" — no connection, max retries reached
+ * - Red dot + "Connection Error" — WebSocket error
  */
 export default function ConnectionStatus() {
   const state = useConnectionStore((s) => s.state);

@@ -222,12 +222,10 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
 
     min_feature_thickness_mm = 2.0 * design.nozzle_diameter
 
-    wall_thickness_map: dict[str, float] = {
-        "Conventional": 1.6,
-        "Pod": 1.6,
-        "Blended-Wing-Body": design.wing_skin_thickness,
-    }
-    wall_thickness_mm = wall_thickness_map.get(design.fuselage_preset, 1.6)
+    # Wall thickness reports wing_skin_thickness for all presets, since that's
+    # the user-controllable value used by the wing geometry builder and checked
+    # by print warnings V16/V17/V18. Fuselage wall is fixed at 1.6mm internally.
+    wall_thickness_mm = design.wing_skin_thickness
 
     return {
         "tip_chord_mm": tip_chord_mm,

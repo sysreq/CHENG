@@ -6,7 +6,7 @@
 import React, { useCallback } from 'react';
 import { useDesignStore } from '../../store/designStore';
 import { PRESET_DESCRIPTIONS } from '../../lib/presets';
-import { fieldHasWarning } from '../../lib/validation';
+import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
 import { ParamSlider, ParamSelect } from '../ui';
 import type {
   PresetName,
@@ -132,6 +132,9 @@ export function GlobalPanel(): React.JSX.Element {
     [setParam],
   );
 
+  const warnText = (field: string) =>
+    getFieldWarnings(warnings, field).map(formatWarning).join('\n') || undefined;
+
   return (
     <div className="p-3">
       {/* ── Preset Selector ─────────────────────────────────────────── */}
@@ -217,6 +220,7 @@ export function GlobalPanel(): React.JSX.Element {
         onSliderChange={setWingSpanSlider}
         onInputChange={setWingSpanInput}
         hasWarning={fieldHasWarning(warnings, 'wingSpan')}
+        warningText={warnText('wingSpan')}
       />
 
       {/* G05 — Wing Chord */}
@@ -230,6 +234,7 @@ export function GlobalPanel(): React.JSX.Element {
         onSliderChange={setWingChordSlider}
         onInputChange={setWingChordInput}
         hasWarning={fieldHasWarning(warnings, 'wingChord')}
+        warningText={warnText('wingChord')}
       />
 
       {/* F13 — Wing Mount Type */}
@@ -252,6 +257,7 @@ export function GlobalPanel(): React.JSX.Element {
         onSliderChange={setFuselageLengthSlider}
         onInputChange={setFuselageLengthInput}
         hasWarning={fieldHasWarning(warnings, 'fuselageLength')}
+        warningText={warnText('fuselageLength')}
       />
 
       {/* G06 — Tail Type */}

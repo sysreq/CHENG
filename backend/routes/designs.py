@@ -6,6 +6,7 @@ swap in a temporary directory.
 
 from __future__ import annotations
 
+import os
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -26,7 +27,9 @@ def _get_storage() -> StorageBackend:
     """FastAPI dependency returning the active StorageBackend."""
     global _default_storage  # noqa: PLW0603
     if _default_storage is None:
-        _default_storage = LocalStorage()
+        _default_storage = LocalStorage(
+            base_path=os.environ.get("CHENG_DATA_DIR", "/data/designs")
+        )
     return _default_storage
 
 
@@ -41,7 +44,7 @@ def set_storage(storage: StorageBackend) -> None:
 # ---------------------------------------------------------------------------
 
 
-@router.get("", response_model=list[DesignSummary])
+@router.get("", response_model=list[DesignSummary], response_model_by_alias=True)
 async def list_designs(storage: StorageBackend = Depends(_get_storage)) -> list[DesignSummary]:
     """Return summaries of all saved designs, sorted newest first."""
     raw = storage.list_designs()
@@ -64,7 +67,7 @@ async def save_design(
     return {"id": design.id}
 
 
-@router.get("/{design_id}", response_model=AircraftDesign)
+@router.get("/{design_id}", response_model=AircraftDesign, response_model_by_alias=True)
 async def load_design(
     design_id: str,
     storage: StorageBackend = Depends(_get_storage),

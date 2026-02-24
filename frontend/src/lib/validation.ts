@@ -24,19 +24,21 @@ export const WARNING_COLORS = {
 // ---------------------------------------------------------------------------
 
 export const WARNING_DESCRIPTIONS: Record<string, string> = {
-  V01: 'Wing aspect ratio too high — risk of flutter',
-  V02: 'Wing loading exceeds recommendation',
-  V03: 'CG position outside safe range',
-  V04: 'Tail volume coefficient too low',
-  V05: 'Control surface authority insufficient',
-  V06: 'Structural stress margin low',
-  V16: 'Part exceeds print bed — auto-section recommended',
-  V17: 'Wall thickness below minimum printable',
-  V18: 'Overhang angle exceeds printer capability',
-  V20: 'Joint overlap too small for reliable bonding',
-  V21: 'Trailing edge below min thickness',
-  V22: 'Nozzle diameter incompatible with feature size',
-  V23: 'Hollow sections may need internal supports',
+  // Structural / geometric (V01-V06) — spec §9.2
+  V01: 'Very high aspect ratio relative to fuselage',
+  V02: 'Aggressive taper — tip stall risk',
+  V03: 'Fuselage shorter than wing chord',
+  V04: 'Short tail arm — may lack pitch stability',
+  V05: 'Extremely small tip chord',
+  V06: 'Tail arm exceeds fuselage — tail extends past the body',
+  // 3D printing (V16-V23) — spec §9.3
+  V16: 'Wall too thin for solid perimeters',
+  V17: 'Wall not clean multiple of nozzle diameter',
+  V18: 'Wing skin too thin for reliable FDM',
+  V20: 'Enable auto-sectioning or reduce dimensions',
+  V21: 'Joint overlap too short for this span',
+  V22: 'Parts may be loose',
+  V23: 'Parts may not fit',
 };
 
 // ---------------------------------------------------------------------------
