@@ -281,6 +281,65 @@ class TestV23:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# V07: fuselage section lengths sum deviates from fuselage_length
+# ---------------------------------------------------------------------------
+
+
+class TestV07:
+    def test_triggers_on_large_deviation(self) -> None:
+        """Section lengths summing to 200 vs fuselage_length=300 is >5% deviation."""
+        design = AircraftDesign(
+            fuselage_length=300,
+            fuselage_nose_length=50,
+            fuselage_cabin_length=100,
+            fuselage_tail_length=50,  # sum = 200, deviation = 33%
+        )
+        assert "V07" in _warning_ids(design)
+
+    def test_does_not_trigger_on_matching_sum(self) -> None:
+        """Section lengths summing exactly to fuselage_length should not trigger."""
+        design = AircraftDesign(
+            fuselage_length=300,
+            fuselage_nose_length=75,
+            fuselage_cabin_length=150,
+            fuselage_tail_length=75,  # sum = 300
+        )
+        assert "V07" not in _warning_ids(design)
+
+    def test_does_not_trigger_on_small_deviation(self) -> None:
+        """5% or less deviation should not trigger."""
+        design = AircraftDesign(
+            fuselage_length=300,
+            fuselage_nose_length=75,
+            fuselage_cabin_length=150,
+            fuselage_tail_length=80,  # sum = 305, deviation = 1.67%
+        )
+        assert "V07" not in _warning_ids(design)
+
+
+# ---------------------------------------------------------------------------
+# V08: wall_thickness < 2 * nozzle_diameter
+# ---------------------------------------------------------------------------
+
+
+class TestV08:
+    def test_triggers_on_thin_wall(self) -> None:
+        """Wall 0.8mm < 2 * 0.4mm nozzle should not trigger (0.8 == 0.8)."""
+        # Actually 0.8 is not < 0.8, so we need a thinner wall
+        design = AircraftDesign(wall_thickness=0.8, nozzle_diameter=0.6)
+        assert "V08" in _warning_ids(design)
+
+    def test_does_not_trigger_on_adequate_wall(self) -> None:
+        design = AircraftDesign(wall_thickness=1.5, nozzle_diameter=0.4)
+        assert "V08" not in _warning_ids(design)
+
+
+# ---------------------------------------------------------------------------
+# Integration: default design should have minimal warnings
+# ---------------------------------------------------------------------------
+
+
 class TestDefaultDesign:
     def test_default_has_few_warnings(self) -> None:
         """Default design parameters should produce a flyable, printable design."""

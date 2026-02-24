@@ -148,8 +148,7 @@ def _cut_wing_saddle(
     # Pocket depth extends slightly into the fuselage on each side.
     # Limit depth to less than fuselage wall thickness to avoid penetrating
     # the shell and exposing the hollow interior (#86).
-    # Fuselage wall is hardcoded at 1.6mm internally (see fuselage.py).
-    fuselage_wall_t = 1.6
+    fuselage_wall_t = design.wall_thickness
     pocket_half_y = min(design.wing_chord * 0.05, fuselage_wall_t * 0.8)
     # Pocket height approximates the root airfoil thickness (~12% of chord)
     pocket_height = root_chord * 0.14
@@ -186,7 +185,7 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
     5. taper_ratio           = tip_chord / wing_chord  (= wing_tip_root_ratio in MVP)
     6. estimated_cg_mm       = 0.25 * mean_aero_chord_mm
     7. min_feature_thickness_mm = 2 * nozzle_diameter
-    8. wall_thickness_mm     = 1.6 (Conventional/Pod) or wing_skin_thickness (BWB)
+    8. wall_thickness_mm     = design.wall_thickness (user-editable, F14)
 
     Args:
         design: Complete aircraft design parameters.
@@ -226,10 +225,8 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
 
     min_feature_thickness_mm = 2.0 * design.nozzle_diameter
 
-    # Wall thickness reports wing_skin_thickness for all presets, since that's
-    # the user-controllable value used by the wing geometry builder and checked
-    # by print warnings V16/V17/V18. Fuselage wall is fixed at 1.6mm internally.
-    wall_thickness_mm = design.wing_skin_thickness
+    # Wall thickness reports the user-controllable fuselage wall_thickness (F14).
+    wall_thickness_mm = design.wall_thickness
 
     return {
         "tip_chord_mm": tip_chord_mm,

@@ -18,11 +18,15 @@ enableMapSet();
 const PRESET_COMPARE_KEYS: (keyof AircraftDesign)[] = [
   'fuselagePreset', 'engineCount', 'motorConfig', 'wingSpan', 'wingChord',
   'wingMountType', 'fuselageLength', 'tailType', 'wingAirfoil', 'wingSweep',
-  'wingTipRootRatio', 'wingDihedral', 'wingSkinThickness', 'hStabSpan',
-  'hStabChord', 'hStabIncidence', 'vStabHeight', 'vStabRootChord', 'tailArm',
-  'vTailDihedral', 'vTailSpan', 'vTailChord', 'vTailIncidence',
+  'wingTipRootRatio', 'wingDihedral', 'wingSkinThickness',
+  'wingIncidence', 'wingTwist',
+  'hStabSpan', 'hStabChord', 'hStabIncidence', 'vStabHeight', 'vStabRootChord', 'tailArm',
+  'vTailDihedral', 'vTailSpan', 'vTailChord', 'vTailIncidence', 'vTailSweep',
+  'fuselageNoseLength', 'fuselageCabinLength', 'fuselageTailLength',
+  'wallThickness',
   'printBedX', 'printBedY', 'printBedZ', 'autoSection', 'sectionOverlap',
   'jointType', 'jointTolerance', 'nozzleDiameter', 'hollowParts', 'teMinThickness',
+  'supportStrategy',
 ];
 
 function detectPreset(design: AircraftDesign): PresetName {

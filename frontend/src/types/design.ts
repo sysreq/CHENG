@@ -30,6 +30,9 @@ export type WingAirfoil =
 /** Joint mechanism for sectioned parts. */
 export type JointType = 'Tongue-and-Groove' | 'Dowel-Pin' | 'Flat-with-Alignment-Pins';
 
+/** 3D print support generation strategy. */
+export type SupportStrategy = 'none' | 'minimal' | 'full';
+
 /** Selectable component in the 3D viewport. */
 export type ComponentSelection = 'wing' | 'tail' | 'fuselage' | null;
 
@@ -82,6 +85,10 @@ export interface AircraftDesign {
   wingDihedral: number;
   /** Wing skin wall thickness. @unit mm @min 0.8 @max 3.0 @default 1.2 */
   wingSkinThickness: number;
+  /** Wing incidence angle. Positive = nose up. @unit deg @min -5 @max 15 @default 2.0 */
+  wingIncidence: number;
+  /** Wing twist (washout at tip). @unit deg @min -5 @max 5 @default 0.0 */
+  wingTwist: number;
 
   // ── Tail (Conventional / T-Tail / Cruciform) ──────────────────────
   /** H-stab span. @unit mm @min 100 @max 1200 @default 350 */
@@ -104,10 +111,24 @@ export interface AircraftDesign {
   vTailChord: number;
   /** V-tail incidence. @unit deg @min -3 @max 3 @default 0 */
   vTailIncidence: number;
+  /** V-tail sweep angle. Only for V-Tail type. @unit deg @min -10 @max 45 @default 0 */
+  vTailSweep: number;
 
   // ── Shared Tail ───────────────────────────────────────────────────
   /** Wing AC to tail AC distance. @unit mm @min 80 @max 1500 @default 180 */
   tailArm: number;
+
+  // ── Fuselage Section Lengths ──────────────────────────────────────
+  /** Fuselage nose section length. @unit mm @min 20 @max 1000 @default 75 */
+  fuselageNoseLength: number;
+  /** Fuselage cabin section length. @unit mm @min 30 @max 1500 @default 150 */
+  fuselageCabinLength: number;
+  /** Fuselage tail section length. @unit mm @min 20 @max 1000 @default 75 */
+  fuselageTailLength: number;
+
+  // ── Fuselage Wall Thickness ───────────────────────────────────────
+  /** Fuselage wall thickness. @unit mm @min 0.8 @max 4.0 @default 1.5 */
+  wallThickness: number;
 
   // ── Export / Print ────────────────────────────────────────────────
   /** Printer bed X. @unit mm @min 100 @max 500 @default 220 */
@@ -130,6 +151,8 @@ export interface AircraftDesign {
   hollowParts: boolean;
   /** Trailing edge min thickness. @unit mm @min 0.4 @max 2.0 @default 0.8 */
   teMinThickness: number;
+  /** 3D print support strategy. @default "minimal" */
+  supportStrategy: SupportStrategy;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,8 +183,8 @@ export interface DerivedValues {
 // ValidationWarning
 // ---------------------------------------------------------------------------
 
-/** Structural warning IDs (V01-V06). */
-export type StructuralWarningId = 'V01' | 'V02' | 'V03' | 'V04' | 'V05' | 'V06';
+/** Structural warning IDs (V01-V08). */
+export type StructuralWarningId = 'V01' | 'V02' | 'V03' | 'V04' | 'V05' | 'V06' | 'V07' | 'V08';
 /** Print warning IDs (V16-V23). */
 export type PrintWarningId = 'V16' | 'V17' | 'V18' | 'V20' | 'V21' | 'V22' | 'V23';
 /** All warning IDs. */

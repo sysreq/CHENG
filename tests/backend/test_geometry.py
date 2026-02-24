@@ -217,21 +217,21 @@ class TestComputeDerivedValues:
         assert result["min_feature_thickness_mm"] == pytest.approx(0.8)
 
     def test_wall_thickness_conventional(self) -> None:
-        """Wall thickness reflects wing_skin_thickness for all presets."""
-        design = AircraftDesign(fuselage_preset="Conventional", wing_skin_thickness=1.2)
+        """Wall thickness reflects design.wall_thickness (F14)."""
+        design = AircraftDesign(fuselage_preset="Conventional", wall_thickness=1.6)
         result = compute_derived_values(design)
-        assert result["wall_thickness_mm"] == pytest.approx(1.2)
+        assert result["wall_thickness_mm"] == pytest.approx(1.6)
 
     def test_wall_thickness_pod(self) -> None:
-        """Wall thickness reflects wing_skin_thickness for all presets."""
-        design = AircraftDesign(fuselage_preset="Pod", wing_skin_thickness=1.5)
+        """Wall thickness reflects design.wall_thickness (F14)."""
+        design = AircraftDesign(fuselage_preset="Pod", wall_thickness=2.0)
         result = compute_derived_values(design)
-        assert result["wall_thickness_mm"] == pytest.approx(1.5)
+        assert result["wall_thickness_mm"] == pytest.approx(2.0)
 
     def test_wall_thickness_bwb(self, bwb_design: AircraftDesign) -> None:
-        """BWB wall thickness should use wing_skin_thickness."""
+        """BWB wall thickness should use design.wall_thickness (F14)."""
         result = compute_derived_values(bwb_design)
-        assert result["wall_thickness_mm"] == pytest.approx(bwb_design.wing_skin_thickness)
+        assert result["wall_thickness_mm"] == pytest.approx(bwb_design.wall_thickness)
 
     def test_positive_values(self, trainer_design: AircraftDesign) -> None:
         """All derived values should be positive for a valid design."""

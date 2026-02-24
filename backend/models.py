@@ -31,6 +31,7 @@ WingAirfoil = Literal[
     "Clark-Y", "Eppler-193", "Eppler-387", "Selig-1223", "AG-25",
 ]
 JointType = Literal["Tongue-and-Groove", "Dowel-Pin", "Flat-with-Alignment-Pins"]
+SupportStrategy = Literal["none", "minimal", "full"]
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +45,7 @@ class CamelModel(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# AircraftDesign — 33 user-configurable parameters
+# AircraftDesign — 39 user-configurable parameters
 # ---------------------------------------------------------------------------
 
 class AircraftDesign(CamelModel):
@@ -75,6 +76,8 @@ class AircraftDesign(CamelModel):
     wing_tip_root_ratio: float = Field(default=1.0, ge=0.3, le=1.0)
     wing_dihedral: float = Field(default=3, ge=-10, le=15)
     wing_skin_thickness: float = Field(default=1.2, ge=0.8, le=3.0)
+    wing_incidence: float = Field(default=2.0, ge=-5, le=15)
+    wing_twist: float = Field(default=0.0, ge=-5, le=5)
 
     # ── Tail (Conventional / T-Tail / Cruciform) ──────────────────────
     h_stab_span: float = Field(default=350, ge=100, le=1200)
@@ -88,9 +91,18 @@ class AircraftDesign(CamelModel):
     v_tail_span: float = Field(default=280, ge=80, le=600)
     v_tail_chord: float = Field(default=90, ge=30, le=200)
     v_tail_incidence: float = Field(default=0, ge=-3, le=3)
+    v_tail_sweep: float = Field(default=0, ge=-10, le=45)
 
     # ── Shared Tail ───────────────────────────────────────────────────
     tail_arm: float = Field(default=180, ge=80, le=1500)
+
+    # ── Fuselage Section Lengths ──────────────────────────────────────
+    fuselage_nose_length: float = Field(default=75, ge=20, le=1000)
+    fuselage_cabin_length: float = Field(default=150, ge=30, le=1500)
+    fuselage_tail_length: float = Field(default=75, ge=20, le=1000)
+
+    # ── Fuselage Wall Thickness ───────────────────────────────────────
+    wall_thickness: float = Field(default=1.5, ge=0.8, le=4.0)
 
     # ── Export / Print ────────────────────────────────────────────────
     print_bed_x: float = Field(default=220, ge=100, le=500)
@@ -103,6 +115,7 @@ class AircraftDesign(CamelModel):
     nozzle_diameter: float = Field(default=0.4, ge=0.2, le=1.0)
     hollow_parts: bool = True
     te_min_thickness: float = Field(default=0.8, ge=0.4, le=2.0)
+    support_strategy: SupportStrategy = "minimal"
 
 
 # ---------------------------------------------------------------------------
