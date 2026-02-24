@@ -40,15 +40,13 @@ function createSubGeometry(
   sub.setAttribute('position', posAttr);
   sub.setAttribute('normal', normAttr);
 
-  // Slice the index buffer for this component's face range
+  // Use a subarray view of the index buffer for this component's face range (zero-copy)
   const fullIndex = fullGeom.getIndex();
   if (fullIndex) {
     const start = startFace * 3;
     const count = (endFace - startFace) * 3;
-    sub.setIndex(new THREE.BufferAttribute(
-      fullIndex.array.slice(start, start + count) as Uint32Array,
-      1,
-    ));
+    const indexView = (fullIndex.array as Uint32Array).subarray(start, start + count);
+    sub.setIndex(new THREE.Uint32BufferAttribute(indexView, 1));
   }
 
   sub.computeBoundingBox();
@@ -68,6 +66,7 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
   const meshData = useDesignStore((state) => state.meshData);
   const selectedComponent = useDesignStore((state) => state.selectedComponent);
   const setSelectedComponent = useDesignStore((state) => state.setSelectedComponent);
+  const setMeshOffset = useDesignStore((state) => state.setMeshOffset);
 
   // Build full geometry when meshData changes
   useEffect(() => {
@@ -102,7 +101,9 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
       const bbox = newGeometry.boundingBox;
       const center = new THREE.Vector3();
       bbox.getCenter(center);
-      newGeometry.translate(-center.x, -center.y, -bbox.min.z);
+      const offset: [number, number, number] = [-center.x, -center.y, -bbox.min.z];
+      newGeometry.translate(offset[0], offset[1], offset[2]);
+      setMeshOffset(offset);
     }
 
     setFullGeometry((prev) => {
@@ -118,7 +119,7 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [meshData, onLoaded]);
+  }, [meshData, onLoaded, setMeshOffset]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -146,6 +147,17 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
 
     return result;
   }, [fullGeometry, meshData?.componentRanges]);
+
+  // Dispose component geometries when they change or on unmount (#91)
+  useEffect(() => {
+    return () => {
+      if (componentGeometries) {
+        Object.values(componentGeometries).forEach((geom) => {
+          if (geom) geom.dispose();
+        });
+      }
+    };
+  }, [componentGeometries]);
 
   const handleComponentClick = useCallback(
     (component: ComponentSelection) => (e: ThreeEvent<MouseEvent>) => {

@@ -223,8 +223,8 @@ export function createBufferGeometry(frame: MeshFrame): THREE.BufferGeometry {
     new THREE.BufferAttribute(frame.normals, 3),
   );
 
-  // Set face indices
-  geometry.setIndex(new THREE.BufferAttribute(frame.faces, 1));
+  // Set face indices (Uint32BufferAttribute for 32-bit index support)
+  geometry.setIndex(new THREE.Uint32BufferAttribute(frame.faces, 1));
 
   // Compute bounding volumes for frustum culling
   geometry.computeBoundingBox();

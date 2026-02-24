@@ -10,9 +10,29 @@ import type {
   ComponentSelection,
   ChangeSource,
 } from '../types/design';
-import { createDesignFromPreset, DEFAULT_PRESET } from '../lib/presets';
+import { createDesignFromPreset, DEFAULT_PRESET, PRESET_FACTORIES } from '../lib/presets';
 
 enableMapSet();
+
+/** Keys to compare when detecting if a design matches a preset. Excludes meta fields. */
+const PRESET_COMPARE_KEYS: (keyof AircraftDesign)[] = [
+  'fuselagePreset', 'engineCount', 'motorConfig', 'wingSpan', 'wingChord',
+  'wingMountType', 'fuselageLength', 'tailType', 'wingAirfoil', 'wingSweep',
+  'wingTipRootRatio', 'wingDihedral', 'wingSkinThickness', 'hStabSpan',
+  'hStabChord', 'hStabIncidence', 'vStabHeight', 'vStabRootChord', 'tailArm',
+  'vTailDihedral', 'vTailSpan', 'vTailChord', 'vTailIncidence',
+  'printBedX', 'printBedY', 'printBedZ', 'autoSection', 'sectionOverlap',
+  'jointType', 'jointTolerance', 'nozzleDiameter', 'hollowParts', 'teMinThickness',
+];
+
+function detectPreset(design: AircraftDesign): PresetName {
+  for (const [name, factory] of Object.entries(PRESET_FACTORIES)) {
+    const ref = factory();
+    const match = PRESET_COMPARE_KEYS.every((k) => design[k] === ref[k]);
+    if (match) return name as PresetName;
+  }
+  return 'Custom';
+}
 
 // ---------------------------------------------------------------------------
 // Store Interface
@@ -49,6 +69,14 @@ export interface DesignStore {
   selectedComponent: ComponentSelection;
   setSelectedComponent: (component: ComponentSelection) => void;
 
+  // ── Mesh centering offset (applied in AircraftMesh) ───────────
+  meshOffset: [number, number, number];
+  setMeshOffset: (offset: [number, number, number]) => void;
+
+  // ── Camera view preset trigger ────────────────────────────────
+  cameraPresetTick: { preset: 'front' | 'side' | 'top' | 'perspective'; tick: number };
+  setCameraPreset: (preset: 'front' | 'side' | 'top' | 'perspective') => void;
+
   // ── File Operations ─────────────────────────────────────────────
   designId: string | null;
   designName: string;
@@ -80,7 +108,8 @@ export const useDesignStore = create<DesignStore>()(
       activePreset: DEFAULT_PRESET,
       lastChangeSource: 'immediate' as ChangeSource,
 
-      setParam: (key, value, source = 'immediate') =>
+      setParam: (key, value, source = 'immediate') => {
+        if (get().design[key] === value) return;
         set(
           produce((state: DesignStore) => {
             (state.design[key] as AircraftDesign[typeof key]) = value;
@@ -88,7 +117,8 @@ export const useDesignStore = create<DesignStore>()(
             state.lastChangeSource = source;
             state.isDirty = true;
           }),
-        ),
+        );
+      },
 
       loadPreset: (name) =>
         set(
@@ -120,6 +150,15 @@ export const useDesignStore = create<DesignStore>()(
       selectedComponent: null,
       setSelectedComponent: (component) =>
         set({ selectedComponent: component }),
+
+      meshOffset: [0, 0, 0] as [number, number, number],
+      setMeshOffset: (offset) => set({ meshOffset: offset }),
+
+      cameraPresetTick: { preset: 'perspective' as const, tick: 0 },
+      setCameraPreset: (preset) =>
+        set((state) => ({
+          cameraPresetTick: { preset, tick: state.cameraPresetTick.tick + 1 },
+        })),
 
       // ── File Operations ───────────────────────────────────────────
       designId: null,
@@ -166,7 +205,7 @@ export const useDesignStore = create<DesignStore>()(
             design: data,
             designId: id,
             designName: data.name,
-            activePreset: 'Custom',
+            activePreset: detectPreset(data),
             lastChangeSource: 'immediate' as ChangeSource,
             isDirty: false,
             isLoading: false,

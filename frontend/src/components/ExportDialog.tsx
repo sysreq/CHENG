@@ -40,19 +40,25 @@ interface ExportDialogProps {
 function estimatePartCount(
   wingSpan: number,
   fuselageLength: number,
+  wingChord: number,
   bedX: number,
   bedY: number,
+  bedZ: number,
 ): number {
   let parts = 0;
 
   // Wing: spans across Y axis (two halves), each half may be sectioned
   const halfSpan = wingSpan / 2;
   const wingSections = Math.max(1, Math.ceil(halfSpan / bedY));
-  parts += wingSections * 2; // both wing halves
+  // Wing chord may exceed bed Z height (printed upright)
+  const wingZSections = Math.max(1, Math.ceil(wingChord / bedZ));
+  parts += wingSections * wingZSections * 2; // both wing halves
 
-  // Fuselage: runs along X axis
+  // Fuselage: runs along X axis, height check against Z
+  const fuselageHeight = wingChord * 0.45; // derived from backend formula
   const fuselageSections = Math.max(1, Math.ceil(fuselageLength / bedX));
-  parts += fuselageSections;
+  const fuselageZSections = Math.max(1, Math.ceil(fuselageHeight / bedZ));
+  parts += fuselageSections * fuselageZSections;
 
   // Tail: usually fits within bed, estimate 2 pieces (h-stab + v-stab)
   parts += 2;
@@ -79,8 +85,8 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
 
   // Estimated parts count
   const estimatedParts = useMemo(
-    () => estimatePartCount(design.wingSpan, design.fuselageLength, design.printBedX, design.printBedY),
-    [design.wingSpan, design.fuselageLength, design.printBedX, design.printBedY],
+    () => estimatePartCount(design.wingSpan, design.fuselageLength, design.wingChord, design.printBedX, design.printBedY, design.printBedZ),
+    [design.wingSpan, design.fuselageLength, design.wingChord, design.printBedX, design.printBedY, design.printBedZ],
   );
 
   // ── Number input handlers ──────────────────────────────────────────

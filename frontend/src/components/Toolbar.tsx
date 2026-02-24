@@ -112,6 +112,10 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
             handleUndo();
           }
           break;
+        case 'y':
+          e.preventDefault();
+          handleRedo();
+          break;
         case 'n':
           e.preventDefault();
           handleNew();
@@ -179,7 +183,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
 
             <DropdownMenu.Item className={MENU_ITEM_CLASS} onSelect={handleRedo}>
               Redo
-              <span className={MENU_SHORTCUT_CLASS}>Ctrl+Shift+Z</span>
+              <span className={MENU_SHORTCUT_CLASS}>Ctrl+Y</span>
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>

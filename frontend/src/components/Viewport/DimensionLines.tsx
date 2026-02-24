@@ -29,6 +29,7 @@ export default function DimensionLines() {
   const fuselageLength = useDesignStore((s) => s.design.fuselageLength);
   const wingSweep = useDesignStore((s) => s.design.wingSweep);
   const meshData = useDesignStore((s) => s.meshData);
+  const meshOffset = useDesignStore((s) => s.meshOffset);
 
   // Offset outside the aircraft bounding box for leader lines
   const offset = useMemo(() => {
@@ -43,8 +44,11 @@ export default function DimensionLines() {
 
   const halfSpan = wingSpan / 2;
 
+  // Apply the same centering offset that AircraftMesh applies to geometry (#92)
+  const [ox, oy, oz] = meshOffset;
+
   return (
-    <group rotation={[-Math.PI / 2, 0, Math.PI / 2]}>
+    <group rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[ox, oy, oz]}>
       {/* Wingspan line — horizontal across full span */}
       <Line
         points={[[0, -halfSpan, 0], [0, halfSpan, 0]]}
@@ -81,8 +85,12 @@ export default function DimensionLines() {
 }
 
 function SweepArc({ sweep, halfSpan }: { sweep: number; halfSpan: number }) {
+  const wingChord = useDesignStore((s) => s.design.wingChord);
+  // Fuselage half-width derived from chord (same formula as backend: chord * 0.45 / 2)
+  const fuselageHalfWidth = wingChord * 0.45 / 2;
+
   // Draw a small arc at the wing root showing sweep angle
-  const arcRadius = Math.min(halfSpan * 0.3, 80);
+  const arcRadius = Math.min(fuselageHalfWidth + 20, 80);
   const sweepRad = (sweep * Math.PI) / 180;
 
   const arcPoints = useMemo(() => {
@@ -96,8 +104,8 @@ function SweepArc({ sweep, halfSpan }: { sweep: number; halfSpan: number }) {
     return pts;
   }, [arcRadius, sweepRad]);
 
-  // Position the arc at the wing root quarter-chord
-  const wingX = halfSpan * 0.3; // approximate wing mount X
+  // Position the arc at the wing root (fuselage half-width)
+  const wingX = fuselageHalfWidth;
 
   return (
     <group position={[wingX, 0, 0]}>
