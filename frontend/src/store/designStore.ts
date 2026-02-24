@@ -44,11 +44,54 @@ function detectPreset(design: AircraftDesign): PresetName {
 // Store Interface
 // ---------------------------------------------------------------------------
 
+/** Human-readable parameter labels for history display. */
+const PARAM_LABELS: Partial<Record<keyof AircraftDesign, string>> = {
+  wingSpan: 'Wingspan',
+  wingChord: 'Wing Chord',
+  fuselageLength: 'Fuselage Length',
+  tailType: 'Tail Type',
+  wingAirfoil: 'Airfoil',
+  wingSweep: 'Wing Sweep',
+  wingTipRootRatio: 'Taper Ratio',
+  wingDihedral: 'Dihedral',
+  wingSkinThickness: 'Skin Thickness',
+  wingIncidence: 'Wing Incidence',
+  wingTwist: 'Wing Twist',
+  hStabSpan: 'H-Stab Span',
+  hStabChord: 'H-Stab Chord',
+  vStabHeight: 'V-Stab Height',
+  vStabRootChord: 'V-Stab Root Chord',
+  hStabIncidence: 'H-Stab Incidence',
+  tailArm: 'Tail Arm',
+  vTailDihedral: 'V-Tail Dihedral',
+  vTailSpan: 'V-Tail Span',
+  vTailChord: 'V-Tail Chord',
+  vTailIncidence: 'V-Tail Incidence',
+  vTailSweep: 'V-Tail Sweep',
+  fuselageNoseLength: 'Nose Length',
+  fuselageCabinLength: 'Cabin Length',
+  fuselageTailLength: 'Tail Length',
+  wallThickness: 'Wall Thickness',
+  fuselagePreset: 'Fuselage Style',
+  wingMountType: 'Wing Mount',
+  motorConfig: 'Motor Config',
+  engineCount: 'Engine Count',
+  printBedX: 'Bed X',
+  printBedY: 'Bed Y',
+  printBedZ: 'Bed Z',
+  sectionOverlap: 'Section Overlap',
+  jointTolerance: 'Joint Tolerance',
+  nozzleDiameter: 'Nozzle Diameter',
+  teMinThickness: 'TE Min Thickness',
+};
+
 export interface DesignStore {
   // ── Design Parameters (undo/redo tracked) ───────────────────────
   design: AircraftDesign;
   activePreset: PresetName;
   lastChangeSource: ChangeSource;
+  /** Human-readable description of the last action (for history panel). */
+  lastAction: string;
 
   setParam: <K extends keyof AircraftDesign>(
     key: K,
@@ -106,7 +149,7 @@ export interface DesignStore {
 }
 
 /** Subset of state tracked by Zundo for undo/redo. */
-export type UndoableState = Pick<DesignStore, 'design' | 'activePreset'>;
+export type UndoableState = Pick<DesignStore, 'design' | 'activePreset' | 'lastAction'>;
 
 // ---------------------------------------------------------------------------
 // Store Implementation
@@ -121,14 +164,17 @@ export const useDesignStore = create<DesignStore>()(
       design: initialDesign,
       activePreset: DEFAULT_PRESET,
       lastChangeSource: 'immediate' as ChangeSource,
+      lastAction: 'Initial state',
 
       setParam: (key, value, source = 'immediate') => {
         if (get().design[key] === value) return;
+        const label = PARAM_LABELS[key] ?? String(key);
         set(
           produce((state: DesignStore) => {
             (state.design[key] as AircraftDesign[typeof key]) = value;
             state.activePreset = 'Custom';
             state.lastChangeSource = source;
+            state.lastAction = `Set ${label} to ${String(value)}`;
             state.isDirty = true;
           }),
         );
@@ -138,12 +184,12 @@ export const useDesignStore = create<DesignStore>()(
         set(
           produce((state: DesignStore) => {
             const preset = createDesignFromPreset(name);
-            // Preserve meta fields
             preset.id = state.design.id;
             preset.name = state.design.name;
             state.design = preset;
             state.activePreset = name;
             state.lastChangeSource = 'immediate';
+            state.lastAction = `Loaded ${name} preset`;
             state.isDirty = true;
           }),
         ),
@@ -215,6 +261,7 @@ export const useDesignStore = create<DesignStore>()(
           design: fresh,
           activePreset: DEFAULT_PRESET,
           lastChangeSource: 'immediate' as ChangeSource,
+          lastAction: 'New design',
           designId: null,
           designName: 'Untitled Aircraft',
           isDirty: false,
@@ -281,6 +328,7 @@ export const useDesignStore = create<DesignStore>()(
       partialize: (state): UndoableState => ({
         design: state.design,
         activePreset: state.activePreset,
+        lastAction: state.lastAction,
       }),
       limit: 50,
     },

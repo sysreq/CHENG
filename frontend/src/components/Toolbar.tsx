@@ -8,6 +8,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useDesignStore } from '../store/designStore';
 import { getWarningCountBadge } from '../lib/validation';
+import { HistoryPanel } from './HistoryPanel';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -173,6 +174,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
   const setCameraPreset = useDesignStore((s) => s.setCameraPreset);
 
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState(designName);
   const [saveFlash, setSaveFlash] = useState(false);
@@ -355,6 +357,15 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
                 Redo
                 <span className={MENU_SHORTCUT_CLASS}>Ctrl+Y</span>
               </DropdownMenu.Item>
+
+              <DropdownMenu.Separator className={MENU_SEPARATOR_CLASS} />
+
+              <DropdownMenu.Item
+                className={MENU_ITEM_CLASS}
+                onSelect={() => setHistoryOpen((v) => !v)}
+              >
+                {historyOpen ? 'Hide History' : 'Show History'}
+              </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
@@ -505,6 +516,13 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
           Export STL
         </button>
       </div>
+
+      {/* History Panel (#136) — only rendered when open to avoid subscription overhead */}
+      {historyOpen && (
+        <div style={{ position: 'relative' }}>
+          <HistoryPanel open onClose={() => setHistoryOpen(false)} />
+        </div>
+      )}
 
       {/* Load Design Dialog (#93) */}
       <LoadDesignDialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen} />
