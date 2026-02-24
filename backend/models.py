@@ -1,0 +1,135 @@
+"""Pydantic models — shared contract between all backend modules."""
+
+from __future__ import annotations
+
+from typing import Literal
+from pydantic import BaseModel, Field
+
+
+# ---------------------------------------------------------------------------
+# Enum / Literal Types
+# ---------------------------------------------------------------------------
+
+FuselagePreset = Literal["Pod", "Conventional", "Blended-Wing-Body"]
+MotorConfig = Literal["Tractor", "Pusher"]
+WingMountType = Literal["High-Wing", "Mid-Wing", "Low-Wing", "Shoulder-Wing"]
+TailType = Literal["Conventional", "T-Tail", "V-Tail", "Cruciform"]
+WingAirfoil = Literal[
+    "Flat-Plate", "NACA-0012", "NACA-2412", "NACA-4412", "NACA-6412",
+    "Clark-Y", "Eppler-193", "Eppler-387", "Selig-1223", "AG-25",
+]
+JointType = Literal["Tongue-and-Groove", "Dowel-Pin", "Flat-with-Alignment-Pins"]
+
+
+# ---------------------------------------------------------------------------
+# AircraftDesign — 33 user-configurable parameters
+# ---------------------------------------------------------------------------
+
+class AircraftDesign(BaseModel):
+    """Complete aircraft design parameters. Flat structure, snake_case fields."""
+
+    # ── Meta ──────────────────────────────────────────────────────────
+    version: str = "0.1.0"
+    id: str = ""
+    name: str = "Untitled Aircraft"
+
+    # ── Global / Fuselage ─────────────────────────────────────────────
+    fuselage_preset: FuselagePreset = "Conventional"
+    engine_count: int = Field(default=1, ge=0, le=4)
+    motor_config: MotorConfig = "Tractor"
+    wing_span: float = Field(default=1000, ge=300, le=3000)
+    wing_chord: float = Field(default=180, ge=50, le=500)
+    wing_mount_type: WingMountType = "High-Wing"
+    fuselage_length: float = Field(default=300, ge=150, le=2000)
+    tail_type: TailType = "Conventional"
+
+    # ── Wing ──────────────────────────────────────────────────────────
+    wing_airfoil: WingAirfoil = "Clark-Y"
+    wing_sweep: float = Field(default=0, ge=-10, le=45)
+    wing_tip_root_ratio: float = Field(default=1.0, ge=0.3, le=1.0)
+    wing_dihedral: float = Field(default=3, ge=-10, le=15)
+    wing_skin_thickness: float = Field(default=1.2, ge=0.8, le=3.0)
+
+    # ── Tail (Conventional / T-Tail / Cruciform) ──────────────────────
+    h_stab_span: float = Field(default=350, ge=100, le=1200)
+    h_stab_chord: float = Field(default=100, ge=30, le=250)
+    h_stab_incidence: float = Field(default=-1, ge=-5, le=5)
+    v_stab_height: float = Field(default=100, ge=30, le=400)
+    v_stab_root_chord: float = Field(default=110, ge=30, le=300)
+
+    # ── Tail (V-Tail) ────────────────────────────────────────────────
+    v_tail_dihedral: float = Field(default=35, ge=20, le=60)
+    v_tail_span: float = Field(default=280, ge=80, le=600)
+    v_tail_chord: float = Field(default=90, ge=30, le=200)
+    v_tail_incidence: float = Field(default=0, ge=-3, le=3)
+
+    # ── Shared Tail ───────────────────────────────────────────────────
+    tail_arm: float = Field(default=180, ge=80, le=1500)
+
+    # ── Export / Print ────────────────────────────────────────────────
+    print_bed_x: float = Field(default=220, ge=100, le=500)
+    print_bed_y: float = Field(default=220, ge=100, le=500)
+    print_bed_z: float = Field(default=250, ge=50, le=500)
+    auto_section: bool = True
+    section_overlap: float = Field(default=15, ge=5, le=30)
+    joint_type: JointType = "Tongue-and-Groove"
+    joint_tolerance: float = Field(default=0.15, ge=0.05, le=0.5)
+    nozzle_diameter: float = Field(default=0.4, ge=0.2, le=1.0)
+    hollow_parts: bool = True
+    te_min_thickness: float = Field(default=0.8, ge=0.4, le=2.0)
+
+
+# ---------------------------------------------------------------------------
+# Derived Values — computed by geometry engine, read-only
+# ---------------------------------------------------------------------------
+
+class DerivedValues(BaseModel):
+    """Backend-computed values returned in WebSocket JSON trailer."""
+
+    wing_tip_chord_mm: float
+    wing_area_cm2: float
+    aspect_ratio: float
+    mean_aero_chord_mm: float
+    taper_ratio: float
+    estimated_cg_mm: float
+    min_feature_thickness_mm: float
+    wall_thickness_mm: float
+
+
+# ---------------------------------------------------------------------------
+# Validation Warning
+# ---------------------------------------------------------------------------
+
+class ValidationWarning(BaseModel):
+    """Non-blocking validation warning."""
+
+    id: str  # V01-V06, V16-V23
+    level: Literal["warn"] = "warn"
+    message: str
+    fields: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# REST Request/Response Types
+# ---------------------------------------------------------------------------
+
+class ExportRequest(BaseModel):
+    """Request body for POST /api/export."""
+
+    design: AircraftDesign
+    format: Literal["stl"] = "stl"
+
+
+class GenerationResult(BaseModel):
+    """Response from POST /api/generate."""
+
+    derived: DerivedValues
+    warnings: list[ValidationWarning] = Field(default_factory=list)
+
+
+class DesignSummary(BaseModel):
+    """Summary for design listing (GET /api/designs)."""
+
+    id: str
+    name: str
+    modified_at: str
