@@ -167,7 +167,13 @@ export const useDesignStore = create<DesignStore>()(
         });
         if (!res.ok) throw new Error(`Failed to save: ${res.status}`);
         const saved = (await res.json()) as { id: string };
-        set({ designId: saved.id, isDirty: false });
+        set(
+          produce((state: DesignStore) => {
+            state.designId = saved.id;
+            state.design.id = saved.id;
+            state.isDirty = false;
+          }),
+        );
         return saved.id;
       },
     }),

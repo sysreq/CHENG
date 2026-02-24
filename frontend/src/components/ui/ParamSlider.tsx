@@ -2,7 +2,7 @@
 // CHENG — Reusable Slider + Number Input for Design Parameters
 // ============================================================================
 
-import React, { useCallback, useId } from 'react';
+import React, { useState, useCallback, useEffect, useId } from 'react';
 
 export interface ParamSliderProps {
   /** Display label */
@@ -30,6 +30,10 @@ export interface ParamSliderProps {
 /**
  * Combined slider + number input control for a design parameter.
  * Slider on top, number input below, label and unit displayed.
+ *
+ * The number input uses local state so users can type freely without
+ * clamping on every keystroke. Clamping + send happens on blur or Enter.
+ * Out-of-range values show a red border as visual feedback.
  */
 export function ParamSlider({
   label,
@@ -45,6 +49,22 @@ export function ParamSlider({
 }: ParamSliderProps): React.JSX.Element {
   const id = useId();
 
+  // Local string state for the number input — allows free typing
+  const [localValue, setLocalValue] = useState<string>(String(value));
+  const [isFocused, setIsFocused] = useState(false);
+
+  // Sync local value from prop when not focused (e.g. slider or preset change)
+  useEffect(() => {
+    if (!isFocused) {
+      setLocalValue(String(value));
+    }
+  }, [value, isFocused]);
+
+  // Check if current local value is out of range (for red border)
+  const parsed = parseFloat(localValue);
+  const isOutOfRange =
+    isFocused && !Number.isNaN(parsed) && (parsed < min || parsed > max);
+
   const handleSliderChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       onSliderChange(parseFloat(e.target.value));
@@ -52,20 +72,48 @@ export function ParamSlider({
     [onSliderChange],
   );
 
+  // On each keystroke: update local display only, no clamping or sending
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const raw = e.target.value;
-      const parsed = parseFloat(raw);
-      if (!Number.isNaN(parsed)) {
-        // Clamp to range
-        const clamped = Math.min(max, Math.max(min, parsed));
-        onInputChange(clamped);
+      setLocalValue(e.target.value);
+    },
+    [],
+  );
+
+  // On blur or Enter: clamp and send to backend
+  const commitValue = useCallback(() => {
+    const val = parseFloat(localValue);
+    if (Number.isNaN(val)) {
+      // Revert to current prop value
+      setLocalValue(String(value));
+    } else {
+      const clamped = Math.min(max, Math.max(min, val));
+      setLocalValue(String(clamped));
+      onInputChange(clamped);
+    }
+    setIsFocused(false);
+  }, [localValue, value, min, max, onInputChange]);
+
+  const handleFocus = useCallback(() => {
+    setIsFocused(true);
+  }, []);
+
+  const handleBlur = useCallback(() => {
+    commitValue();
+  }, [commitValue]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        commitValue();
+        (e.target as HTMLInputElement).blur();
       }
     },
-    [onInputChange, min, max],
+    [commitValue],
   );
 
   const warningRing = hasWarning ? 'ring-1 ring-amber-500/50' : '';
+  const outOfRangeBorder = isOutOfRange ? 'border-red-500' : 'border-zinc-700';
 
   return (
     <div className="mb-3" title={title}>
@@ -97,10 +145,13 @@ export function ParamSlider({
         min={min}
         max={max}
         step={step}
-        value={value}
+        value={localValue}
         onChange={handleInputChange}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
         className={`mt-1 w-full px-2 py-1 text-xs text-zinc-100 bg-zinc-800
-          border border-zinc-700 rounded focus:outline-none focus:border-blue-500
+          border ${outOfRangeBorder} rounded focus:outline-none focus:border-blue-500
           [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none
           [&::-webkit-inner-spin-button]:appearance-none ${warningRing}`}
       />

@@ -83,8 +83,10 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
     // 3. Trigger the zoom only once on initial load.
     // Subsequent design changes update the mesh but DON'T move the camera.
     if (!hasInitialZoomed.current && onLoaded) {
-      hasInitialZoomed.current = true;
-      const timer = setTimeout(onLoaded, 100);
+      const timer = setTimeout(() => {
+        hasInitialZoomed.current = true;
+        onLoaded();
+      }, 100);
       return () => clearTimeout(timer);
     }
   }, [meshData, onLoaded]);
