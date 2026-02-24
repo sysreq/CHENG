@@ -8,6 +8,7 @@ import React, { useCallback } from 'react';
 import { useDesignStore } from '../../store/designStore';
 import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
 import { ParamSlider } from '../ui';
+import { PrintSettingsSection } from './PrintSettingsSection';
 
 export function TailVTailPanel(): React.JSX.Element {
   const design = useDesignStore((s) => s.design);
@@ -140,6 +141,9 @@ export function TailVTailPanel(): React.JSX.Element {
         hasWarning={fieldHasWarning(warnings, 'tailArm')}
         warningText={warnText('tailArm')}
       />
+
+      {/* ── Per-Component Print Settings (#128) ────────────────────── */}
+      <PrintSettingsSection component="tail" />
     </div>
   );
 }

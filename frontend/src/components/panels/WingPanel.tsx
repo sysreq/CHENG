@@ -7,6 +7,7 @@ import React, { useCallback } from 'react';
 import { useDesignStore } from '../../store/designStore';
 import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
 import { ParamSlider, ParamSelect, DerivedField } from '../ui';
+import { PrintSettingsSection } from './PrintSettingsSection';
 import type { WingAirfoil } from '../../types/design';
 
 // ---------------------------------------------------------------------------
@@ -195,6 +196,9 @@ export function WingPanel(): React.JSX.Element {
         decimals={1}
         suffix="from wing LE"
       />
+
+      {/* ── Per-Component Print Settings (#128) ────────────────────── */}
+      <PrintSettingsSection component="wing" />
     </div>
   );
 }
