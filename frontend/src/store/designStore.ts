@@ -91,6 +91,9 @@ export interface DesignStore {
   cameraPresetTick: { preset: 'front' | 'side' | 'top' | 'perspective'; tick: number };
   setCameraPreset: (preset: 'front' | 'side' | 'top' | 'perspective') => void;
 
+  // ── Custom Preset Loading ──────────────────────────────────────
+  loadCustomPresetDesign: (design: AircraftDesign) => void;
+
   // ── File Operations ─────────────────────────────────────────────
   designId: string | null;
   designName: string;
@@ -173,6 +176,20 @@ export const useDesignStore = create<DesignStore>()(
         set(
           produce((state: DesignStore) => {
             delete state.componentPrintSettings[component];
+          }),
+        ),
+
+      // ── Custom Preset Loading ──────────────────────────────────────
+      loadCustomPresetDesign: (design: AircraftDesign) =>
+        set(
+          produce((state: DesignStore) => {
+            // Preserve current meta fields (id, name stay from current design)
+            const currentId = state.design.id;
+            const currentName = state.design.name;
+            state.design = { ...design, id: currentId, name: currentName };
+            state.activePreset = 'Custom';
+            state.lastChangeSource = 'immediate';
+            state.isDirty = true;
           }),
         ),
 
