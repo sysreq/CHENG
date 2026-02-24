@@ -260,10 +260,13 @@ export interface DesignSummary {
   modifiedAt: string;
 }
 
+/** Supported export formats. */
+export type ExportFormat = 'stl' | 'step' | 'dxf' | 'svg';
+
 /** Request body for POST /api/export. */
 export interface ExportRequest {
   design: AircraftDesign;
-  format: 'stl';
+  format: ExportFormat;
 }
 
 /** Metadata for a single sectioned part in the export preview. */

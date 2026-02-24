@@ -23,6 +23,10 @@ export default function Annotations({ onResetCamera }: AnnotationsProps) {
             <span>Wing Area: {derived.wingAreaCm2.toFixed(1)} cm2</span>
             <span>AR: {derived.aspectRatio.toFixed(2)}</span>
             <span>MAC: {derived.meanAeroChordMm.toFixed(1)} mm</span>
+            <span>CG: {derived.estimatedCgMm.toFixed(1)} mm from LE</span>
+            {derived.meanAeroChordMm > 0 && (
+              <span>SM: {((derived.estimatedCgMm / derived.meanAeroChordMm) * 100).toFixed(1)}% MAC</span>
+            )}
           </>
         )}
       </div>

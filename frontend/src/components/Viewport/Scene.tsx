@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Bounds, useBounds } from '@react-three/drei';
+import { Bounds, useBounds, Html } from '@react-three/drei';
 import AircraftMesh from './AircraftMesh';
 import Controls from './Controls';
 import Annotations from './Annotations';
@@ -69,6 +69,32 @@ function GeneratingOverlay() {
   );
 }
 
+const AXIS_LABEL_STYLE: React.CSSProperties = {
+  fontSize: 10,
+  fontFamily: 'monospace',
+  fontWeight: 700,
+  whiteSpace: 'nowrap' as const,
+  pointerEvents: 'none' as const,
+  userSelect: 'none' as const,
+};
+
+/** Text labels for axes helper endpoints (#173). */
+function AxesLabels({ size }: { size: number }) {
+  return (
+    <>
+      <Html position={[size + 8, 0, 0]} center style={{ pointerEvents: 'none' }}>
+        <span style={{ ...AXIS_LABEL_STYLE, color: '#ff4444' }}>X</span>
+      </Html>
+      <Html position={[0, size + 8, 0]} center style={{ pointerEvents: 'none' }}>
+        <span style={{ ...AXIS_LABEL_STYLE, color: '#44ff44' }}>Y</span>
+      </Html>
+      <Html position={[0, 0, size + 8]} center style={{ pointerEvents: 'none' }}>
+        <span style={{ ...AXIS_LABEL_STYLE, color: '#4444ff' }}>Z</span>
+      </Html>
+    </>
+  );
+}
+
 export default function Scene() {
   const [readyTick, setReadyTick] = useState(0);
 
@@ -89,13 +115,13 @@ export default function Scene() {
 
         <gridHelper args={[2000, 40, '#555555', '#3a3a3a']} />
         <axesHelper args={[100]} />
+        <AxesLabels size={100} />
 
-        <Bounds fit observe margin={1.2}>
+        <Bounds fit observe margin={1.5}>
           <AircraftMesh onLoaded={handleMeshLoaded} />
+          <DimensionLines />
           {readyTick > 0 && <BoundsWatcher readyTick={readyTick} />}
         </Bounds>
-
-        <DimensionLines />
         <Controls />
       </Canvas>
 
