@@ -116,6 +116,7 @@ export function WingPanel(): React.JSX.Element {
       {/* W04 — Wing Tip/Root Ratio */}
       <ParamSlider
         label="Tip/Root Chord Ratio"
+        unit="ratio"
         value={design.wingTipRootRatio}
         min={0.3}
         max={1.0}
@@ -124,6 +125,7 @@ export function WingPanel(): React.JSX.Element {
         onInputChange={setTipRootInput}
         hasWarning={fieldHasWarning(warnings, 'wingTipRootRatio')}
         warningText={warnText('wingTipRootRatio')}
+        title="1.0 = rectangular wing, lower values = more tapered toward the tip"
       />
 
       {/* W07 — Wing Dihedral */}

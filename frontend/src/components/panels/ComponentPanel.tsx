@@ -49,11 +49,33 @@ export function ComponentPanel(): React.JSX.Element {
         <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
           Fuselage
         </h3>
-        <p className="text-xs text-zinc-500">
-          Fuselage detail parameters coming soon.
-          <br />
-          Use the Global panel to set fuselage style and length.
+        <p className="text-xs text-zinc-500 mb-3">
+          Fuselage geometry is controlled by the Global panel parameters:
+          Fuselage Preset, Fuselage Length, Wing Chord (affects cross-section).
         </p>
+        <button
+          onClick={() => {
+            // Scroll the sidebar to the Global Panel fuselage section
+            const sidebar = document.querySelector('.app-sidebar');
+            const fuselageSection = sidebar?.querySelector('[data-section="fuselage"]');
+            if (fuselageSection) {
+              fuselageSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              // Brief highlight effect
+              fuselageSection.classList.add('ring-1', 'ring-blue-500/50');
+              setTimeout(() => fuselageSection.classList.remove('ring-1', 'ring-blue-500/50'), 2000);
+            } else if (sidebar) {
+              // Fallback: scroll sidebar to top where Global Panel starts
+              sidebar.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
+          className="px-3 py-1.5 text-xs font-medium text-blue-200 bg-blue-600/20
+            border border-blue-500/30 rounded hover:bg-blue-600/30
+            focus:outline-none focus:ring-1 focus:ring-blue-500
+            inline-flex items-center gap-1.5"
+        >
+          <span aria-hidden="true">&rarr;</span>
+          Configure in Global Panel
+        </button>
       </div>
     );
   }

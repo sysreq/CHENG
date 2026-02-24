@@ -221,6 +221,7 @@ export function GlobalPanel(): React.JSX.Element {
       </h3>
 
       {/* G01 — Fuselage Preset */}
+      <div data-section="fuselage" />
       <ParamSelect
         label="Fuselage Style"
         value={design.fuselagePreset}

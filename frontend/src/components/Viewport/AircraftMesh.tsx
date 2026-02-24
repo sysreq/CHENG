@@ -5,7 +5,8 @@
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
-import { ThreeEvent } from '@react-three/fiber';
+import { ThreeEvent, useThree } from '@react-three/fiber';
+import { Html } from '@react-three/drei';
 import { useDesignStore } from '@/store/designStore';
 import { createBufferGeometry } from '@/lib/meshParser';
 import type { MeshFrame } from '@/lib/meshParser';
@@ -13,6 +14,8 @@ import type { ComponentSelection } from '@/types/design';
 
 const SELECTED_COLOR = '#FFD60A';
 const UNSELECTED_COLOR = '#6B6B70';
+const HOVER_EMISSIVE = '#222244';
+const HOVER_EMISSIVE_INTENSITY = 0.3;
 
 /** Default color per component when nothing is selected. */
 const COMPONENT_COLORS: Record<string, string> = {
@@ -159,12 +162,34 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
     };
   }, [componentGeometries]);
 
+  // Hover state for component highlighting (#168)
+  const [hoveredComponent, setHoveredComponent] = useState<ComponentSelection>(null);
+  const { gl } = useThree();
+
   const handleComponentClick = useCallback(
     (component: ComponentSelection) => (e: ThreeEvent<MouseEvent>) => {
       e.stopPropagation();
       setSelectedComponent(selectedComponent === component ? null : component);
     },
     [selectedComponent, setSelectedComponent],
+  );
+
+  const handlePointerEnter = useCallback(
+    (component: ComponentSelection) => (e: ThreeEvent<PointerEvent>) => {
+      e.stopPropagation();
+      setHoveredComponent(component);
+      gl.domElement.style.cursor = 'pointer';
+    },
+    [gl],
+  );
+
+  const handlePointerLeave = useCallback(
+    (_component: ComponentSelection) => (e: ThreeEvent<PointerEvent>) => {
+      e.stopPropagation();
+      setHoveredComponent(null);
+      gl.domElement.style.cursor = 'auto';
+    },
+    [gl],
   );
 
   const handleMissClick = useCallback(() => {
@@ -182,12 +207,20 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
 
   // If we have per-component ranges, render separate meshes
   if (componentGeometries) {
+    /** Human-readable label for tooltip. */
+    const componentLabels: Record<string, string> = {
+      fuselage: 'Fuselage',
+      wing: 'Wing',
+      tail: 'Tail',
+    };
+
     return (
       <group ref={groupRef} rotation={[-Math.PI / 2, 0, Math.PI / 2]} onPointerMissed={handleMissClick}>
         {(['fuselage', 'wing', 'tail'] as const).map((key) => {
           const geom = componentGeometries[key];
           if (!geom) return null;
 
+          const isHovered = hoveredComponent === key;
           let color: string;
           if (selectedComponent === null) {
             // Nothing selected — show component-specific colors
@@ -199,18 +232,48 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
           }
 
           return (
-            <mesh
-              key={key}
-              geometry={geom}
-              onClick={handleComponentClick(key)}
-            >
-              <meshStandardMaterial
-                color={color}
-                metalness={0.1}
-                roughness={0.7}
-                side={THREE.DoubleSide}
-              />
-            </mesh>
+            <group key={key}>
+              <mesh
+                geometry={geom}
+                onClick={handleComponentClick(key)}
+                onPointerEnter={handlePointerEnter(key)}
+                onPointerLeave={handlePointerLeave(key)}
+              >
+                <meshStandardMaterial
+                  color={color}
+                  emissive={isHovered ? HOVER_EMISSIVE : '#000000'}
+                  emissiveIntensity={isHovered ? HOVER_EMISSIVE_INTENSITY : 0}
+                  metalness={0.1}
+                  roughness={0.7}
+                  side={THREE.DoubleSide}
+                />
+              </mesh>
+              {/* Tooltip on hover — rendered at component bounding sphere center */}
+              {isHovered && geom.boundingSphere && (
+                <Html
+                  position={[
+                    geom.boundingSphere.center.x,
+                    geom.boundingSphere.center.y + geom.boundingSphere.radius * 0.8,
+                    geom.boundingSphere.center.z,
+                  ]}
+                  center
+                  style={{ pointerEvents: 'none' }}
+                >
+                  <div style={{
+                    fontSize: 10,
+                    fontFamily: 'monospace',
+                    color: '#fff',
+                    backgroundColor: 'rgba(30, 30, 34, 0.9)',
+                    padding: '2px 8px',
+                    borderRadius: 3,
+                    whiteSpace: 'nowrap',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                  }}>
+                    {componentLabels[key] ?? key}
+                  </div>
+                </Html>
+              )}
+            </group>
           );
         })}
       </group>
