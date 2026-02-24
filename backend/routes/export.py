@@ -7,6 +7,7 @@ Temp file on /data/tmp is deleted after streaming (spec section 8.5).
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
 from backend.geometry.engine import assemble_aircraft, _cadquery_limiter
-from backend.export.section import auto_section, create_section_parts
+from backend.export.section import auto_section, create_section_parts, SectionPart
 from backend.export.joints import add_tongue_and_groove
 from backend.export.package import build_zip, EXPORT_TMP_DIR
 from backend.models import (
@@ -29,6 +30,117 @@ from backend.models import (
 logger = logging.getLogger("cheng.export")
 
 router = APIRouter(prefix="/api", tags=["export"])
+
+# ---------------------------------------------------------------------------
+# Assembly cache -- avoid running CadQuery twice for preview + download
+# ---------------------------------------------------------------------------
+
+_assembly_cache: dict[str, dict] = {}
+_MAX_CACHE = 4
+
+
+def _design_cache_key(design: AircraftDesign) -> str:
+    """Compute a hash key for caching assembled components."""
+    return hashlib.md5(design.model_dump_json().encode()).hexdigest()
+
+
+def _get_or_assemble(design: AircraftDesign) -> dict:
+    """Return cached assembled components or run assemble_aircraft."""
+    key = _design_cache_key(design)
+    if key in _assembly_cache:
+        logger.debug("Assembly cache hit for key %s", key[:8])
+        return _assembly_cache[key]
+
+    components = assemble_aircraft(design)
+
+    # Evict oldest entry if cache is full
+    if len(_assembly_cache) >= _MAX_CACHE:
+        _assembly_cache.pop(next(iter(_assembly_cache)))
+
+    _assembly_cache[key] = components
+    return components
+
+
+def clear_assembly_cache() -> None:
+    """Clear the assembly cache (useful for testing)."""
+    _assembly_cache.clear()
+
+
+# ---------------------------------------------------------------------------
+# Shared sectioning logic
+# ---------------------------------------------------------------------------
+
+
+def _generate_sections(design: AircraftDesign) -> list[SectionPart]:
+    """Assemble aircraft and auto-section all components for the print bed.
+
+    This is the shared traversal logic used by both preview and export.
+    Returns a list of SectionPart objects (with solids) ready for further
+    processing (joints for export, metadata extraction for preview).
+    """
+    components = _get_or_assemble(design)
+
+    all_sections: list[SectionPart] = []
+    assembly_order = 1
+
+    for comp_name, solid in components.items():
+        # Determine side from component name
+        if "left" in comp_name:
+            side = "left"
+        elif "right" in comp_name:
+            side = "right"
+        else:
+            side = "center"
+
+        # Determine component category
+        comp_category = comp_name.split("_")[0]
+        if comp_category in ("h", "v"):
+            comp_category = comp_name.replace("_left", "").replace("_right", "")
+
+        pieces = auto_section(
+            solid,
+            bed_x=design.print_bed_x,
+            bed_y=design.print_bed_y,
+            bed_z=design.print_bed_z,
+        )
+
+        section_parts = create_section_parts(
+            comp_category,
+            side,
+            pieces,
+            start_assembly_order=assembly_order,
+        )
+
+        all_sections.extend(section_parts)
+        assembly_order += len(section_parts)
+
+    return all_sections
+
+
+# ---------------------------------------------------------------------------
+# Bed fit check -- rotation-aware
+# ---------------------------------------------------------------------------
+
+
+def _fits_on_bed(
+    dimensions_mm: tuple[float, float, float],
+    bed_x: float,
+    bed_y: float,
+    bed_z: float,
+) -> bool:
+    """Check if a part fits on the print bed, considering 90-degree rotation.
+
+    The part can be rotated on the XY plane (swapping X and Y dimensions),
+    but Z (height) is always fixed against bed_z.
+    """
+    dx, dy, dz = dimensions_mm
+    fits_xy = (dx <= bed_x and dy <= bed_y) or (dx <= bed_y and dy <= bed_x)
+    return fits_xy and dz <= bed_z
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
 
 
 @router.post("/export")
@@ -97,61 +209,36 @@ async def export_preview(request: ExportRequest) -> ExportPreviewResponse:
     )
 
 
+# ---------------------------------------------------------------------------
+# Blocking pipelines (run in thread pool)
+# ---------------------------------------------------------------------------
+
+
 def _preview_blocking(design: AircraftDesign) -> list[ExportPreviewPart]:
     """Synchronous preview pipeline: assemble + section only (no joints/ZIP)."""
-    components = assemble_aircraft(design)
+    section_parts = _generate_sections(design)
 
     all_parts: list[ExportPreviewPart] = []
-    assembly_order = 1
-
-    for comp_name, solid in components.items():
-        if "left" in comp_name:
-            side = "left"
-        elif "right" in comp_name:
-            side = "right"
-        else:
-            side = "center"
-
-        comp_category = comp_name.split("_")[0]
-        if comp_category in ("h", "v"):
-            comp_category = comp_name.replace("_left", "").replace("_right", "")
-
-        pieces = auto_section(
-            solid,
-            bed_x=design.print_bed_x,
-            bed_y=design.print_bed_y,
-            bed_z=design.print_bed_z,
+    for sp in section_parts:
+        fits = _fits_on_bed(
+            sp.dimensions_mm,
+            design.print_bed_x,
+            design.print_bed_y,
+            design.print_bed_z,
         )
-
-        section_parts = create_section_parts(
-            comp_category,
-            side,
-            pieces,
-            start_assembly_order=assembly_order,
+        all_parts.append(
+            ExportPreviewPart(
+                filename=sp.filename,
+                component=sp.component,
+                side=sp.side,
+                section_num=sp.section_num,
+                total_sections=sp.total_sections,
+                dimensions_mm=sp.dimensions_mm,
+                print_orientation=sp.print_orientation,
+                assembly_order=sp.assembly_order,
+                fits_bed=fits,
+            )
         )
-
-        for sp in section_parts:
-            dx, dy, dz = sp.dimensions_mm
-            fits = (
-                dx <= design.print_bed_x
-                and dy <= design.print_bed_y
-                and dz <= design.print_bed_z
-            )
-            all_parts.append(
-                ExportPreviewPart(
-                    filename=sp.filename,
-                    component=sp.component,
-                    side=sp.side,
-                    section_num=sp.section_num,
-                    total_sections=sp.total_sections,
-                    dimensions_mm=sp.dimensions_mm,
-                    print_orientation=sp.print_orientation,
-                    assembly_order=sp.assembly_order,
-                    fits_bed=fits,
-                )
-            )
-
-        assembly_order += len(section_parts)
 
     return all_parts
 
@@ -159,69 +246,45 @@ def _preview_blocking(design: AircraftDesign) -> list[ExportPreviewPart]:
 def _export_blocking(design: AircraftDesign) -> Path:
     """Synchronous export pipeline -- runs in thread pool.
 
-    1. Assemble aircraft components
-    2. Auto-section each component for print bed
-    3. Add tongue-and-groove joints between adjacent sections
-    4. Build ZIP with tessellated STLs + manifest
+    1. Assemble aircraft components + auto-section (shared with preview)
+    2. Add tongue-and-groove joints between adjacent sections
+    3. Build ZIP with tessellated STLs + manifest
     """
-    # 1. Assemble
-    components = assemble_aircraft(design)
+    # 1. Shared assemble + section
+    all_sections = _generate_sections(design)
 
-    # 2. Auto-section each component
-    all_sections = []
-    assembly_order = 1
+    # 2. Add joints between adjacent sections (grouped by component+side)
+    # Group sections by (component, side) to find adjacent pairs
+    from collections import defaultdict
+    groups: dict[tuple[str, str], list[int]] = defaultdict(list)
+    for idx, sp in enumerate(all_sections):
+        groups[(sp.component, sp.side)].append(idx)
 
-    for comp_name, solid in components.items():
-        # Determine side from component name
-        if "left" in comp_name:
-            side = "left"
-        elif "right" in comp_name:
-            side = "right"
-        else:
-            side = "center"
-
-        # Determine component category
-        comp_category = comp_name.split("_")[0]
-        if comp_category in ("h", "v"):
-            comp_category = comp_name.replace("_left", "").replace("_right", "")
-
-        pieces = auto_section(
-            solid,
-            bed_x=design.print_bed_x,
-            bed_y=design.print_bed_y,
-            bed_z=design.print_bed_z,
-        )
-
-        section_parts = create_section_parts(
-            comp_category,
-            side,
-            pieces,
-            start_assembly_order=assembly_order,
-        )
-
-        # 3. Add joints between adjacent sections
-        for i in range(len(section_parts) - 1):
+    for (_comp, _side), indices in groups.items():
+        # Sections within a group are already in order by section_num
+        sorted_indices = sorted(indices, key=lambda i: all_sections[i].section_num)
+        for j in range(len(sorted_indices) - 1):
+            i_left = sorted_indices[j]
+            i_right = sorted_indices[j + 1]
             try:
                 left_solid, right_solid = add_tongue_and_groove(
-                    section_parts[i].solid,
-                    section_parts[i + 1].solid,
+                    all_sections[i_left].solid,
+                    all_sections[i_right].solid,
                     overlap=design.section_overlap,
                     tolerance=design.joint_tolerance,
                     nozzle_diameter=design.nozzle_diameter,
                 )
-                section_parts[i].solid = left_solid
-                section_parts[i + 1].solid = right_solid
+                all_sections[i_left].solid = left_solid
+                all_sections[i_right].solid = right_solid
             except Exception as exc:
                 logger.warning(
-                    "Joint creation failed for %s sections %d-%d: %s",
-                    comp_name,
-                    i,
-                    i + 1,
+                    "Joint creation failed for %s_%s sections %d-%d: %s",
+                    _comp,
+                    _side,
+                    all_sections[i_left].section_num,
+                    all_sections[i_right].section_num,
                     exc,
                 )
 
-        all_sections.extend(section_parts)
-        assembly_order += len(section_parts)
-
-    # 4. Build ZIP
+    # 3. Build ZIP
     return build_zip(all_sections, design)
