@@ -49,12 +49,7 @@ export default function Scene() {
         <gridHelper args={[2000, 40, '#555555', '#3a3a3a']} />
         <axesHelper args={[100]} />
 
-        <Bounds 
-          key={readyTick > 0 ? 'active-bounds' : 'initial-bounds'} 
-          fit 
-          observe 
-          margin={1.2}
-        >
+        <Bounds fit observe margin={1.2}>
           <AircraftMesh onLoaded={handleMeshLoaded} />
           {readyTick > 0 && <BoundsWatcher readyTick={readyTick} />}
         </Bounds>

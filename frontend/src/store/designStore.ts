@@ -51,6 +51,10 @@ export interface DesignStore {
   designId: string | null;
   designName: string;
   isDirty: boolean;
+  isSaving: boolean;
+  isLoading: boolean;
+  fileError: string | null;
+  clearFileError: () => void;
   setDesignName: (name: string) => void;
   newDesign: () => void;
   loadDesign: (id: string) => Promise<void>;
@@ -117,6 +121,11 @@ export const useDesignStore = create<DesignStore>()(
       designId: null,
       designName: 'Untitled Aircraft',
       isDirty: false,
+      isSaving: false,
+      isLoading: false,
+      fileError: null,
+
+      clearFileError: () => set({ fileError: null }),
 
       setDesignName: (name) =>
         set(
@@ -132,6 +141,7 @@ export const useDesignStore = create<DesignStore>()(
         set({
           design: fresh,
           activePreset: DEFAULT_PRESET,
+          lastChangeSource: 'immediate' as ChangeSource,
           designId: null,
           designName: 'Untitled Aircraft',
           isDirty: false,
@@ -143,38 +153,54 @@ export const useDesignStore = create<DesignStore>()(
       },
 
       loadDesign: async (id: string) => {
-        const res = await fetch(`/api/designs/${id}`);
-        if (!res.ok) throw new Error(`Failed to load design: ${res.status}`);
-        const data = (await res.json()) as AircraftDesign;
-        set({
-          design: data,
-          designId: id,
-          designName: data.name,
-          activePreset: 'Custom',
-          isDirty: false,
-          derived: null,
-          warnings: [],
-          meshData: null,
-        });
+        set({ isLoading: true, fileError: null });
+        try {
+          const res = await fetch(`/api/designs/${id}`);
+          if (!res.ok) throw new Error(`Failed to load design: ${res.status}`);
+          const data = (await res.json()) as AircraftDesign;
+          set({
+            design: data,
+            designId: id,
+            designName: data.name,
+            activePreset: 'Custom',
+            lastChangeSource: 'immediate' as ChangeSource,
+            isDirty: false,
+            isLoading: false,
+            derived: null,
+            warnings: [],
+            meshData: null,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Failed to load design';
+          set({ isLoading: false, fileError: msg });
+        }
       },
 
       saveDesign: async () => {
-        const { design } = get();
-        const res = await fetch('/api/designs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(design),
-        });
-        if (!res.ok) throw new Error(`Failed to save: ${res.status}`);
-        const saved = (await res.json()) as { id: string };
-        set(
-          produce((state: DesignStore) => {
-            state.designId = saved.id;
-            state.design.id = saved.id;
-            state.isDirty = false;
-          }),
-        );
-        return saved.id;
+        set({ isSaving: true, fileError: null });
+        try {
+          const { design } = get();
+          const res = await fetch('/api/designs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(design),
+          });
+          if (!res.ok) throw new Error(`Failed to save: ${res.status}`);
+          const saved = (await res.json()) as { id: string };
+          set(
+            produce((state: DesignStore) => {
+              state.designId = saved.id;
+              state.design.id = saved.id;
+              state.isDirty = false;
+              state.isSaving = false;
+            }),
+          );
+          return saved.id;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Failed to save design';
+          set({ isSaving: false, fileError: msg });
+          throw err;
+        }
       },
     }),
     {

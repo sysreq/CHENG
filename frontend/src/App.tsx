@@ -9,12 +9,16 @@ import ConnectionStatus from '@/components/ConnectionStatus';
 import { ExportDialog } from '@/components/ExportDialog';
 
 /**
- * Root application layout.
+ * Root application layout per UX spec Section 2.1:
  *
- * CSS Grid with three areas:
- * - Left sidebar (320px): GlobalPanel + ComponentPanel
- * - Center: 3D viewport (flex)
- * - Bottom bar: Toolbar + ConnectionStatus
+ * +---------------------------+-------------------+
+ * |                           |  GLOBAL           |
+ * |         VIEWPORT          |  PARAMETERS       |
+ * |                           |  PANEL (right)    |
+ * +---------------------------+-------------------+
+ * |  COMPONENT DETAIL PANEL   |                   |
+ * |  (bottom-left)            |   STATUS BAR      |
+ * +---------------------------+-------------------+
  */
 export default function App() {
   const { send } = useWebSocket();
@@ -26,32 +30,16 @@ export default function App() {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'var(--sidebar-width) 1fr',
-        gridTemplateRows: '1fr var(--statusbar-height)',
+        gridTemplateColumns: '1fr var(--sidebar-width)',
+        gridTemplateRows: '1fr auto var(--statusbar-height)',
         height: '100vh',
         overflow: 'hidden',
       }}
     >
-      {/* Left Sidebar — panels */}
-      <aside
-        style={{
-          gridColumn: '1',
-          gridRow: '1',
-          backgroundColor: 'var(--color-bg-secondary)',
-          borderRight: '1px solid var(--color-border)',
-          overflowY: 'auto',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        <GlobalPanel />
-        <ComponentPanel />
-      </aside>
-
       {/* Center — 3D Viewport */}
       <main
         style={{
-          gridColumn: '2',
+          gridColumn: '1',
           gridRow: '1',
           position: 'relative',
           overflow: 'hidden',
@@ -64,11 +52,38 @@ export default function App() {
         </div>
       </main>
 
+      {/* Right Sidebar — Global Parameters */}
+      <aside
+        style={{
+          gridColumn: '2',
+          gridRow: '1 / 3',
+          backgroundColor: 'var(--color-bg-secondary)',
+          borderLeft: '1px solid var(--color-border)',
+          overflowY: 'auto',
+        }}
+      >
+        <GlobalPanel />
+      </aside>
+
+      {/* Bottom-Left — Component Detail Panel */}
+      <section
+        style={{
+          gridColumn: '1',
+          gridRow: '2',
+          backgroundColor: 'var(--color-bg-secondary)',
+          borderTop: '1px solid var(--color-border)',
+          overflowY: 'auto',
+          maxHeight: '280px',
+        }}
+      >
+        <ComponentPanel />
+      </section>
+
       {/* Bottom Bar — status */}
       <footer
         style={{
           gridColumn: '1 / -1',
-          gridRow: '2',
+          gridRow: '3',
           backgroundColor: 'var(--color-bg-tertiary)',
           borderTop: '1px solid var(--color-border)',
           display: 'flex',

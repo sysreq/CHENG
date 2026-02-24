@@ -2,7 +2,7 @@
 // CHENG — Aircraft Mesh Component
 // ============================================================================
 
-import { useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { useDesignStore } from '@/store/designStore';
 import { createBufferGeometry } from '@/lib/meshParser';
@@ -23,8 +23,10 @@ interface AircraftMeshProps {
 
 export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const geometryRef = useRef<THREE.BufferGeometry | null>(null);
-  
+  // Keep current geometry in state so React re-renders when it changes,
+  // avoiding the race where the mesh renders a disposed ref.
+  const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
+
   // Guard to ensure we only AUTO-ZOOM on the very first load
   const hasInitialZoomed = useRef<boolean>(false);
 
@@ -35,10 +37,10 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
   useEffect(() => {
     // 1. If no data, cleanup and exit
     if (!meshData) {
-      if (geometryRef.current) {
-        geometryRef.current.dispose();
-        geometryRef.current = null;
-      }
+      setGeometry((prev) => {
+        if (prev) prev.dispose();
+        return null;
+      });
       return;
     }
 
@@ -58,10 +60,6 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
       validation: [],
     };
 
-    if (geometryRef.current) {
-      geometryRef.current.dispose();
-    }
-
     const newGeometry = createBufferGeometry(frame);
     newGeometry.computeBoundingBox();
 
@@ -73,7 +71,11 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
       newGeometry.translate(-center.x, -center.y, -bbox.min.z);
     }
 
-    geometryRef.current = newGeometry;
+    // Atomically swap: set new geometry first, then dispose old
+    setGeometry((prev) => {
+      if (prev) prev.dispose();
+      return newGeometry;
+    });
 
     if (meshRef.current) {
       meshRef.current.geometry = newGeometry;
@@ -93,9 +95,10 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
 
   useEffect(() => {
     return () => {
-      if (geometryRef.current) {
-        geometryRef.current.dispose();
-      }
+      setGeometry((prev) => {
+        if (prev) prev.dispose();
+        return null;
+      });
     };
   }, []);
 
@@ -126,7 +129,7 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
     <mesh
       ref={meshRef}
       onClick={handleClick}
-      geometry={geometryRef.current ?? undefined}
+      geometry={geometry ?? undefined}
       rotation={[-Math.PI / 2, 0, Math.PI / 2]}
     >
       <meshStandardMaterial
