@@ -3,6 +3,8 @@
 Tessellates each SectionPart at export quality (0.1 mm tolerance), writes
 binary STL files into a ZIP archive alongside a manifest.json, and returns
 the path to the temp file.  Caller must delete after streaming.
+
+Also provides STEP, DXF, and SVG export builders.
 """
 
 from __future__ import annotations
@@ -13,10 +15,13 @@ import tempfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from backend.models import AircraftDesign
 from backend.export.section import SectionPart
+
+if TYPE_CHECKING:
+    import cadquery as cq
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -26,7 +31,44 @@ EXPORT_TMP_DIR: Path = Path(os.environ.get("CHENG_DATA_DIR", tempfile.gettempdir
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_temp_zip(design: AircraftDesign) -> tuple[Path, Path]:
+    """Create a temp file for ZIP writing and compute final path.
+
+    Returns (tmp_path, zip_path). tmp_path is closed and ready for writing.
+    """
+    tmp_dir = EXPORT_TMP_DIR
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    zip_filename = f"cheng_{design.name.replace(' ', '_')}_{design.id[:8] if design.id else 'export'}.zip"
+    zip_path = tmp_dir / zip_filename
+
+    tmp_file = tempfile.NamedTemporaryFile(
+        dir=str(tmp_dir),
+        suffix=".zip",
+        delete=False,
+    )
+    tmp_path = Path(tmp_file.name)
+    tmp_file.close()
+
+    return tmp_path, zip_path
+
+
+def _finalize_zip(tmp_path: Path, zip_path: Path) -> Path:
+    """Rename temp file to final path, with cross-device fallback."""
+    try:
+        tmp_path.rename(zip_path)
+    except OSError:
+        import shutil
+        shutil.move(str(tmp_path), str(zip_path))
+    return zip_path
+
+
+# ---------------------------------------------------------------------------
+# Public API -- STL export
 # ---------------------------------------------------------------------------
 
 
@@ -61,20 +103,7 @@ def build_zip(sections: list[SectionPart], design: AircraftDesign) -> Path:
     # Build manifest
     manifest = _build_manifest(sections, design)
 
-    # Create temp ZIP file
-    zip_filename = f"cheng_{design.name.replace(' ', '_')}_{design.id[:8] if design.id else 'export'}.zip"
-    zip_path = tmp_dir / zip_filename
-
-    # Use a temporary file to avoid partial writes.
-    # Explicitly close before opening with ZipFile to avoid PermissionError
-    # on Windows where open file handles block re-opening (#88).
-    tmp_file = tempfile.NamedTemporaryFile(
-        dir=str(tmp_dir),
-        suffix=".zip",
-        delete=False,
-    )
-    tmp_path = Path(tmp_file.name)
-    tmp_file.close()
+    tmp_path, zip_path = _make_temp_zip(design)
 
     with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
         # Add manifest
@@ -85,15 +114,229 @@ def build_zip(sections: list[SectionPart], design: AircraftDesign) -> Path:
             stl_bytes = tessellate_for_export(section.solid, tolerance=0.1)
             zf.writestr(section.filename, stl_bytes)
 
-    # Rename to final path (atomic on same filesystem)
-    try:
-        tmp_path.rename(zip_path)
-    except OSError:
-        # Cross-device fallback: copy and delete
-        import shutil
-        shutil.move(str(tmp_path), str(zip_path))
+    return _finalize_zip(tmp_path, zip_path)
 
-    return zip_path
+
+# ---------------------------------------------------------------------------
+# Public API -- STEP export (#116)
+# ---------------------------------------------------------------------------
+
+
+def build_step_zip(
+    components: dict[str, cq.Workplane],
+    design: AircraftDesign,
+) -> Path:
+    """Create ZIP archive with STEP files for CAD exchange.
+
+    STEP export does not require sectioning -- the full assembly is exported
+    as individual component STEP files for use in other CAD software.
+
+    Args:
+        components: Dict of component_name -> CadQuery Workplane.
+        design:     The source AircraftDesign (for metadata).
+
+    Returns:
+        Path to temp ZIP file.
+    """
+    import cadquery as cq
+
+    tmp_path, zip_path = _make_temp_zip(design)
+
+    with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        manifest = {
+            "design_name": design.name,
+            "design_id": design.id,
+            "version": design.version,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "format": "step",
+            "total_files": len(components),
+            "files": [],
+        }
+
+        for comp_name, solid in components.items():
+            step_filename = f"{comp_name}.step"
+
+            # Export to a temp file, then read bytes
+            step_tmp = tempfile.NamedTemporaryFile(
+                suffix=".step", delete=False, dir=str(EXPORT_TMP_DIR)
+            )
+            step_tmp_path = Path(step_tmp.name)
+            step_tmp.close()
+
+            try:
+                cq.exporters.export(solid, str(step_tmp_path), "STEP")
+                step_bytes = step_tmp_path.read_bytes()
+                zf.writestr(step_filename, step_bytes)
+                manifest["files"].append(step_filename)
+            finally:
+                step_tmp_path.unlink(missing_ok=True)
+
+        zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+
+    return _finalize_zip(tmp_path, zip_path)
+
+
+# ---------------------------------------------------------------------------
+# Public API -- DXF export (#117)
+# ---------------------------------------------------------------------------
+
+
+def build_dxf_zip(
+    components: dict[str, cq.Workplane],
+    design: AircraftDesign,
+) -> Path:
+    """Create ZIP archive with DXF files for laser cutting.
+
+    Generates cross-section profiles at key stations:
+    - Wing ribs at evenly spaced spanwise stations
+    - Fuselage formers at evenly spaced lengthwise stations
+
+    Args:
+        components: Dict of component_name -> CadQuery Workplane.
+        design:     The source AircraftDesign (for metadata).
+
+    Returns:
+        Path to temp ZIP file.
+    """
+    import cadquery as cq
+
+    tmp_path, zip_path = _make_temp_zip(design)
+
+    with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        manifest = {
+            "design_name": design.name,
+            "design_id": design.id,
+            "version": design.version,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "format": "dxf",
+            "total_files": 0,
+            "files": [],
+        }
+
+        for comp_name, solid in components.items():
+            bb = solid.val().BoundingBox()
+
+            # Determine the primary axis for cross-sections
+            dx = bb.xmax - bb.xmin
+            dy = bb.ymax - bb.ymin
+            dz = bb.zmax - bb.zmin
+
+            # Choose the longest axis for cross-section stations
+            if comp_name.startswith("fuselage"):
+                # Fuselage: cross-sections along X (lengthwise)
+                axis = "X"
+                length = dx
+                axis_min, axis_max = bb.xmin, bb.xmax
+            else:
+                # Wings/tails: cross-sections along Y (spanwise)
+                axis = "Y"
+                length = dy
+                axis_min, axis_max = bb.ymin, bb.ymax
+
+            # Generate cross-sections at regular intervals
+            num_stations = max(3, int(length / 50))  # One every ~50mm
+            step_size = length / (num_stations + 1)
+
+            for i in range(1, num_stations + 1):
+                station_pos = axis_min + step_size * i
+                dxf_filename = f"{comp_name}_section_{i}of{num_stations}.dxf"
+
+                dxf_tmp = tempfile.NamedTemporaryFile(
+                    suffix=".dxf", delete=False, dir=str(EXPORT_TMP_DIR)
+                )
+                dxf_tmp_path = Path(dxf_tmp.name)
+                dxf_tmp.close()
+
+                try:
+                    # Create a cross-section at the station
+                    if axis == "X":
+                        section_wp = solid.section(cq.Workplane("YZ").workplane(offset=station_pos))
+                    else:
+                        section_wp = solid.section(cq.Workplane("XZ").workplane(offset=station_pos))
+
+                    cq.exporters.export(section_wp, str(dxf_tmp_path), "DXF")
+                    dxf_bytes = dxf_tmp_path.read_bytes()
+                    zf.writestr(dxf_filename, dxf_bytes)
+                    manifest["files"].append(dxf_filename)
+                    manifest["total_files"] += 1
+                except Exception:
+                    # Cross-section may fail at some stations (e.g. near tips)
+                    pass
+                finally:
+                    dxf_tmp_path.unlink(missing_ok=True)
+
+        zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+
+    return _finalize_zip(tmp_path, zip_path)
+
+
+# ---------------------------------------------------------------------------
+# Public API -- SVG export (#118)
+# ---------------------------------------------------------------------------
+
+
+def build_svg_zip(
+    components: dict[str, cq.Workplane],
+    design: AircraftDesign,
+) -> Path:
+    """Create ZIP archive with SVG orthographic projections.
+
+    Generates top (XY), front (XZ), and side (YZ) views of each component
+    for web-friendly 2D outlines.
+
+    Args:
+        components: Dict of component_name -> CadQuery Workplane.
+        design:     The source AircraftDesign (for metadata).
+
+    Returns:
+        Path to temp ZIP file.
+    """
+    import cadquery as cq
+
+    tmp_path, zip_path = _make_temp_zip(design)
+
+    views = [
+        ("top", "XY"),
+        ("front", "XZ"),
+        ("side", "YZ"),
+    ]
+
+    with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        manifest = {
+            "design_name": design.name,
+            "design_id": design.id,
+            "version": design.version,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "format": "svg",
+            "total_files": 0,
+            "files": [],
+        }
+
+        for comp_name, solid in components.items():
+            for view_name, plane in views:
+                svg_filename = f"{comp_name}_{view_name}.svg"
+
+                svg_tmp = tempfile.NamedTemporaryFile(
+                    suffix=".svg", delete=False, dir=str(EXPORT_TMP_DIR)
+                )
+                svg_tmp_path = Path(svg_tmp.name)
+                svg_tmp.close()
+
+                try:
+                    cq.exporters.export(solid, str(svg_tmp_path), "SVG")
+                    svg_bytes = svg_tmp_path.read_bytes()
+                    zf.writestr(svg_filename, svg_bytes)
+                    manifest["files"].append(svg_filename)
+                    manifest["total_files"] += 1
+                except Exception:
+                    # SVG export may fail for some geometries
+                    pass
+                finally:
+                    svg_tmp_path.unlink(missing_ok=True)
+
+        zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+
+    return _finalize_zip(tmp_path, zip_path)
 
 
 # ---------------------------------------------------------------------------

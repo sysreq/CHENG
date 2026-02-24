@@ -6,7 +6,7 @@ fits within the usable print volume (bed dimensions minus joint margin).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 _JOINT_MARGIN_MM: float = 20.0   # Margin per axis for joint features
 _SPLIT_OFFSET_MM: float = 10.0   # Offset when midpoint hits internal features
 _MAX_RECURSION: int = 20         # Safety limit to prevent infinite recursion
+
+_AXIS_NAMES = {0: "X", 1: "Y", 2: "Z"}
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +50,16 @@ class SectionPart:
     dimensions_mm: tuple[float, float, float]  # bounding box (x, y, z) after sectioning
     print_orientation: str    # "trailing-edge down", "flat", "leading-edge down"
     assembly_order: int       # 1-based global assembly order hint
+    split_axis: str = "Y"    # axis along which this section was split ("X", "Y", or "Z")
+
+    def recompute_dimensions(self) -> None:
+        """Recompute dimensions_mm from the current solid's bounding box.
+
+        Call this after modifying the solid (e.g. adding joint features)
+        to ensure dimensions_mm reflects the actual part size.
+        """
+        dims = _get_dimensions(self.solid)
+        self.dimensions_mm = (round(dims[0], 1), round(dims[1], 1), round(dims[2], 1))
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +93,23 @@ def auto_section(
     Raises:
         ValueError: If bed dimensions minus margin <= 0.
         RuntimeError: If splitting fails after 20 recursion levels.
+    """
+    results = auto_section_with_axis(solid, bed_x, bed_y, bed_z)
+    return [item[0] for item in results]
+
+
+def auto_section_with_axis(
+    solid: cq.Workplane,
+    bed_x: float,
+    bed_y: float,
+    bed_z: float,
+) -> list[tuple[cq.Workplane, str]]:
+    """Like auto_section but also returns the split axis for each section.
+
+    Returns:
+        List of (solid, split_axis) tuples. split_axis is "X", "Y", or "Z"
+        indicating which axis the section was cut along. For unsplit solids,
+        the axis defaults to "Y".
     """
     import cadquery as cq  # noqa: F811
 
@@ -194,8 +223,13 @@ def _recursive_section(
     usable_y: float,
     usable_z: float,
     depth: int,
-) -> list[cq.Workplane]:
-    """Recursively split solid until all pieces fit the usable volume."""
+    last_split_axis: str = "Y",
+) -> list[tuple[cq.Workplane, str]]:
+    """Recursively split solid until all pieces fit the usable volume.
+
+    Returns list of (solid, split_axis) tuples where split_axis is the axis
+    along which the most recent split was performed ("X", "Y", or "Z").
+    """
     if depth > _MAX_RECURSION:
         raise RuntimeError(
             f"Auto-sectioning exceeded {_MAX_RECURSION} recursion levels. "
@@ -209,10 +243,11 @@ def _recursive_section(
     # Check if it fits
     overshoot = [dims[i] - usable[i] for i in range(3)]
     if all(o <= 0 for o in overshoot):
-        return [solid]
+        return [(solid, last_split_axis)]
 
     # Find axis with largest overshoot
     axis = overshoot.index(max(overshoot))
+    axis_name = _AXIS_NAMES[axis]
     bb = _get_bounding_box(solid)
 
     # Axis min/max
@@ -246,12 +281,12 @@ def _recursive_section(
             )
 
     # Recurse on each half
-    result: list[cq.Workplane] = []
+    result: list[tuple[cq.Workplane, str]] = []
     result.extend(
-        _recursive_section(cq_mod, lower, usable_x, usable_y, usable_z, depth + 1)
+        _recursive_section(cq_mod, lower, usable_x, usable_y, usable_z, depth + 1, axis_name)
     )
     result.extend(
-        _recursive_section(cq_mod, upper, usable_x, usable_y, usable_z, depth + 1)
+        _recursive_section(cq_mod, upper, usable_x, usable_y, usable_z, depth + 1, axis_name)
     )
 
     return result
@@ -262,6 +297,7 @@ def create_section_parts(
     side: str,
     sections: list[cq.Workplane],
     start_assembly_order: int = 1,
+    split_axes: list[str] | None = None,
 ) -> list[SectionPart]:
     """Create SectionPart metadata objects for a list of sectioned solids.
 
@@ -272,12 +308,17 @@ def create_section_parts(
         side: Side name (e.g. "left", "right", "center").
         sections: List of sectioned CadQuery solids.
         start_assembly_order: Starting assembly order number.
+        split_axes: Optional list of split axis labels ("X", "Y", "Z") per section.
+            If not provided, defaults to "Y" for all sections.
 
     Returns:
         List of SectionPart objects with metadata.
     """
     total = len(sections)
     parts: list[SectionPart] = []
+
+    if split_axes is None:
+        split_axes = ["Y"] * total
 
     for i, solid in enumerate(sections, start=1):
         dims = _get_dimensions(solid)
@@ -301,6 +342,7 @@ def create_section_parts(
             dimensions_mm=(round(dims[0], 1), round(dims[1], 1), round(dims[2], 1)),
             print_orientation=orientation,
             assembly_order=start_assembly_order + i - 1,
+            split_axis=split_axes[i - 1] if i - 1 < len(split_axes) else "Y",
         ))
 
     return parts
