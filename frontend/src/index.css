@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   CHENG — Dark Theme Custom Properties
+   ============================================================================ */
+
+:root {
+  /* Surface colors */
+  --color-bg-primary: #1e1e22;
+  --color-bg-secondary: #2a2a2e;
+  --color-bg-tertiary: #35353a;
+  --color-bg-elevated: #3e3e44;
+
+  /* Text colors */
+  --color-text-primary: #e4e4e8;
+  --color-text-secondary: #a0a0a8;
+  --color-text-muted: #6e6e78;
+
+  /* Accent colors */
+  --color-accent: #4a9eff;
+  --color-accent-hover: #6bb3ff;
+  --color-accent-muted: #4a9eff33;
+
+  /* Status colors */
+  --color-success: #4caf50;
+  --color-warning: #ffb74d;
+  --color-error: #ef5350;
+
+  /* Component highlight colors */
+  --color-wing: #5c9ce6;
+  --color-fuselage: #8b8b8b;
+  --color-tail: #e6a65c;
+
+  /* Panel dimensions */
+  --sidebar-width: 320px;
+  --toolbar-height: 48px;
+  --statusbar-height: 32px;
+
+  /* Borders */
+  --color-border: #404048;
+}
+
+/* ============================================================================
+   Base Styles
+   ============================================================================ */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-bg-elevated);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
