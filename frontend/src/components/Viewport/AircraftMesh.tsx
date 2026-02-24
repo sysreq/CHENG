@@ -1,6 +1,7 @@
 // ============================================================================
 // CHENG — Aircraft Mesh Component
 // Renders per-component mesh groups with click-to-select highlighting.
+// Supports sub-element cycling within selected components (#138).
 // ============================================================================
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
@@ -10,9 +11,11 @@ import { Html } from '@react-three/drei';
 import { useDesignStore } from '@/store/designStore';
 import { createBufferGeometry } from '@/lib/meshParser';
 import type { MeshFrame } from '@/lib/meshParser';
-import type { ComponentSelection } from '@/types/design';
+import type { ComponentSelection, SubElementSelection } from '@/types/design';
+import { COMPONENT_SUB_ELEMENTS } from '@/types/design';
 
 const SELECTED_COLOR = '#FFD60A';
+const SUB_SELECTED_COLOR = '#FF6B35';
 const UNSELECTED_COLOR = '#6B6B70';
 const HOVER_EMISSIVE = '#222244';
 const HOVER_EMISSIVE_INTENSITY = 0.3;
@@ -24,6 +27,17 @@ const COMPONENT_COLORS: Record<string, string> = {
   tail: '#e6a65c',
 };
 const DEFAULT_COLOR = '#a0a0a8';
+
+/** Human-readable labels for sub-elements. */
+const SUB_ELEMENT_LABELS: Record<string, string> = {
+  'left-panel': 'Left Panel',
+  'right-panel': 'Right Panel',
+  'h-stab': 'Horizontal Stabilizer',
+  'v-stab': 'Vertical Stabilizer',
+  'nose': 'Nose Section',
+  'cabin': 'Cabin Section',
+  'tail-cone': 'Tail Cone',
+};
 
 interface AircraftMeshProps {
   onLoaded?: () => void;
@@ -68,7 +82,9 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
 
   const meshData = useDesignStore((state) => state.meshData);
   const selectedComponent = useDesignStore((state) => state.selectedComponent);
+  const selectedSubElement = useDesignStore((state) => state.selectedSubElement);
   const setSelectedComponent = useDesignStore((state) => state.setSelectedComponent);
+  const cycleSubElement = useDesignStore((state) => state.cycleSubElement);
   const setMeshOffset = useDesignStore((state) => state.setMeshOffset);
 
   // Build full geometry when meshData changes
@@ -169,9 +185,14 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
   const handleComponentClick = useCallback(
     (component: ComponentSelection) => (e: ThreeEvent<MouseEvent>) => {
       e.stopPropagation();
-      setSelectedComponent(selectedComponent === component ? null : component);
+      if (selectedComponent === component) {
+        // Already selected — cycle through sub-elements (#138)
+        cycleSubElement();
+      } else {
+        setSelectedComponent(component);
+      }
     },
-    [selectedComponent, setSelectedComponent],
+    [selectedComponent, setSelectedComponent, cycleSubElement],
   );
 
   const handlePointerEnter = useCallback(
@@ -221,14 +242,22 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
           if (!geom) return null;
 
           const isHovered = hoveredComponent === key;
+          const isSelected = selectedComponent === key;
+          const hasSubSelection = isSelected && selectedSubElement !== null;
+
           let color: string;
           if (selectedComponent === null) {
-            // Nothing selected — show component-specific colors
             color = COMPONENT_COLORS[key] ?? DEFAULT_COLOR;
-          } else if (selectedComponent === key) {
-            color = SELECTED_COLOR;
+          } else if (isSelected) {
+            color = hasSubSelection ? SUB_SELECTED_COLOR : SELECTED_COLOR;
           } else {
             color = UNSELECTED_COLOR;
+          }
+
+          // Build tooltip text
+          let tooltipText = componentLabels[key] ?? key;
+          if (isSelected && selectedSubElement) {
+            tooltipText += ` > ${SUB_ELEMENT_LABELS[selectedSubElement] ?? selectedSubElement}`;
           }
 
           return (
@@ -246,6 +275,17 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
                   metalness={0.1}
                   roughness={0.7}
                   side={THREE.DoubleSide}
+                />
+              </mesh>
+              {/* Sub-selection outline effect — wireframe overlay when sub-element is active */}
+              <mesh geometry={geom} visible={hasSubSelection}>
+                <meshBasicMaterial
+                  color="#FF6B35"
+                  wireframe
+                  transparent
+                  opacity={0.15}
+                  side={THREE.DoubleSide}
+                  depthWrite={false}
                 />
               </mesh>
               {/* Tooltip on hover — rendered at component bounding sphere center */}
@@ -269,7 +309,7 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
                     whiteSpace: 'nowrap',
                     border: '1px solid rgba(255,255,255,0.15)',
                   }}>
-                    {componentLabels[key] ?? key}
+                    {tooltipText}
                   </div>
                 </Html>
               )}

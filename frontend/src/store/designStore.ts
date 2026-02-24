@@ -8,10 +8,12 @@ import type {
   MeshData,
   PresetName,
   ComponentSelection,
+  SubElementSelection,
   ChangeSource,
   PerComponentPrintSettings,
   ComponentPrintSettings,
 } from '../types/design';
+import { COMPONENT_SUB_ELEMENTS } from '../types/design';
 import { createDesignFromPreset, DEFAULT_PRESET, PRESET_FACTORIES } from '../lib/presets';
 
 enableMapSet();
@@ -44,11 +46,54 @@ function detectPreset(design: AircraftDesign): PresetName {
 // Store Interface
 // ---------------------------------------------------------------------------
 
+/** Human-readable parameter labels for history display. */
+const PARAM_LABELS: Partial<Record<keyof AircraftDesign, string>> = {
+  wingSpan: 'Wingspan',
+  wingChord: 'Wing Chord',
+  fuselageLength: 'Fuselage Length',
+  tailType: 'Tail Type',
+  wingAirfoil: 'Airfoil',
+  wingSweep: 'Wing Sweep',
+  wingTipRootRatio: 'Taper Ratio',
+  wingDihedral: 'Dihedral',
+  wingSkinThickness: 'Skin Thickness',
+  wingIncidence: 'Wing Incidence',
+  wingTwist: 'Wing Twist',
+  hStabSpan: 'H-Stab Span',
+  hStabChord: 'H-Stab Chord',
+  vStabHeight: 'V-Stab Height',
+  vStabRootChord: 'V-Stab Root Chord',
+  hStabIncidence: 'H-Stab Incidence',
+  tailArm: 'Tail Arm',
+  vTailDihedral: 'V-Tail Dihedral',
+  vTailSpan: 'V-Tail Span',
+  vTailChord: 'V-Tail Chord',
+  vTailIncidence: 'V-Tail Incidence',
+  vTailSweep: 'V-Tail Sweep',
+  fuselageNoseLength: 'Nose Length',
+  fuselageCabinLength: 'Cabin Length',
+  fuselageTailLength: 'Tail Length',
+  wallThickness: 'Wall Thickness',
+  fuselagePreset: 'Fuselage Style',
+  wingMountType: 'Wing Mount',
+  motorConfig: 'Motor Config',
+  engineCount: 'Engine Count',
+  printBedX: 'Bed X',
+  printBedY: 'Bed Y',
+  printBedZ: 'Bed Z',
+  sectionOverlap: 'Section Overlap',
+  jointTolerance: 'Joint Tolerance',
+  nozzleDiameter: 'Nozzle Diameter',
+  teMinThickness: 'TE Min Thickness',
+};
+
 export interface DesignStore {
   // ── Design Parameters (undo/redo tracked) ───────────────────────
   design: AircraftDesign;
   activePreset: PresetName;
   lastChangeSource: ChangeSource;
+  /** Human-readable description of the last action (for history panel). */
+  lastAction: string;
 
   setParam: <K extends keyof AircraftDesign>(
     key: K,
@@ -81,7 +126,10 @@ export interface DesignStore {
 
   // ── Viewport Selection ──────────────────────────────────────────
   selectedComponent: ComponentSelection;
+  selectedSubElement: SubElementSelection;
   setSelectedComponent: (component: ComponentSelection) => void;
+  /** Cycle to next sub-element within the currently selected component. */
+  cycleSubElement: () => void;
 
   // ── Mesh centering offset (applied in AircraftMesh) ───────────
   meshOffset: [number, number, number];
@@ -109,7 +157,7 @@ export interface DesignStore {
 }
 
 /** Subset of state tracked by Zundo for undo/redo. */
-export type UndoableState = Pick<DesignStore, 'design' | 'activePreset'>;
+export type UndoableState = Pick<DesignStore, 'design' | 'activePreset' | 'lastAction'>;
 
 // ---------------------------------------------------------------------------
 // Store Implementation
@@ -124,14 +172,17 @@ export const useDesignStore = create<DesignStore>()(
       design: initialDesign,
       activePreset: DEFAULT_PRESET,
       lastChangeSource: 'immediate' as ChangeSource,
+      lastAction: 'Initial state',
 
       setParam: (key, value, source = 'immediate') => {
         if (get().design[key] === value) return;
+        const label = PARAM_LABELS[key] ?? String(key);
         set(
           produce((state: DesignStore) => {
             (state.design[key] as AircraftDesign[typeof key]) = value;
             state.activePreset = 'Custom';
             state.lastChangeSource = source;
+            state.lastAction = `Set ${label} to ${String(value)}`;
             state.isDirty = true;
           }),
         );
@@ -141,12 +192,12 @@ export const useDesignStore = create<DesignStore>()(
         set(
           produce((state: DesignStore) => {
             const preset = createDesignFromPreset(name);
-            // Preserve meta fields
             preset.id = state.design.id;
             preset.name = state.design.name;
             state.design = preset;
             state.activePreset = name;
             state.lastChangeSource = 'immediate';
+            state.lastAction = `Loaded ${name} preset`;
             state.isDirty = true;
           }),
         ),
@@ -195,8 +246,23 @@ export const useDesignStore = create<DesignStore>()(
 
       // ── Viewport ──────────────────────────────────────────────────
       selectedComponent: null,
+      selectedSubElement: null,
       setSelectedComponent: (component) =>
-        set({ selectedComponent: component }),
+        set({ selectedComponent: component, selectedSubElement: null }),
+      cycleSubElement: () => {
+        const { selectedComponent, selectedSubElement } = get();
+        if (!selectedComponent) return;
+        const subs = COMPONENT_SUB_ELEMENTS[selectedComponent];
+        if (!subs || subs.length === 0) return;
+        const currentIndex = selectedSubElement ? subs.indexOf(selectedSubElement) : -1;
+        const nextIndex = currentIndex + 1;
+        if (nextIndex >= subs.length) {
+          // Cycled through all sub-elements — deselect entirely
+          set({ selectedSubElement: null, selectedComponent: null });
+        } else {
+          set({ selectedSubElement: subs[nextIndex] as SubElementSelection });
+        }
+      },
 
       meshOffset: [0, 0, 0] as [number, number, number],
       setMeshOffset: (offset) => set({ meshOffset: offset }),
@@ -232,6 +298,7 @@ export const useDesignStore = create<DesignStore>()(
           design: fresh,
           activePreset: DEFAULT_PRESET,
           lastChangeSource: 'immediate' as ChangeSource,
+          lastAction: 'New design',
           designId: null,
           designName: 'Untitled Aircraft',
           isDirty: false,
@@ -239,6 +306,7 @@ export const useDesignStore = create<DesignStore>()(
           warnings: [],
           meshData: null,
           selectedComponent: null,
+          selectedSubElement: null,
         });
       },
 
@@ -298,6 +366,7 @@ export const useDesignStore = create<DesignStore>()(
       partialize: (state): UndoableState => ({
         design: state.design,
         activePreset: state.activePreset,
+        lastAction: state.lastAction,
       }),
       limit: 50,
     },
