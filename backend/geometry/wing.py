@@ -85,9 +85,15 @@ def build_wing(
     tip_chord = root_chord * design.wing_tip_root_ratio
     half_span = design.wing_span / 2.0
 
-    # 3. Sweep offset at the tip
+    # 3. Sweep offset at the tip (quarter-chord line sweep)
+    #    The user-facing sweep angle is measured at the quarter-chord line.
+    #    The LE offset must account for taper so the quarter-chord points
+    #    align with the intended sweep angle.
     sweep_rad = math.radians(design.wing_sweep)
-    sweep_offset_x = half_span * math.tan(sweep_rad)
+    sweep_offset_x = (
+        half_span * math.tan(sweep_rad)
+        + 0.25 * (root_chord - tip_chord)
+    )
 
     # 4. Y direction sign
     y_sign = -1.0 if side == "left" else 1.0
@@ -122,9 +128,9 @@ def build_wing(
     # 8. TE enforcement: thicken trailing edge if needed
     result = _enforce_te_thickness(cq, result, design.te_min_thickness)
 
-    # 9. Shell if hollow
+    # 9. Shell if hollow, leaving root face open for spar/fuselage mating
     if design.hollow_parts:
-        result = _shell_wing(result, design.wing_skin_thickness)
+        result = _shell_wing(result, design.wing_skin_thickness, side)
 
     return result
 
@@ -194,16 +200,26 @@ def _enforce_te_thickness(
     return solid
 
 
-def _shell_wing(solid: cq.Workplane, skin_thickness: float) -> cq.Workplane:
+def _shell_wing(
+    solid: cq.Workplane,
+    skin_thickness: float,
+    side: Literal["left", "right"],
+) -> cq.Workplane:
     """Shell the wing to create a hollow interior.
 
     Leaves the root face open for spar insertion and fuselage mating.
-    Uses CadQuery's shell() with negative thickness (inward shelling).
+    The root face is the one closest to Y=0: for the right wing that is
+    the minimum-Y face ('<Y'), for the left wing the maximum-Y face ('>Y').
     """
+    # Select root face to leave open: right wing root is at -Y side of
+    # the half, left wing root is at +Y side (both nearest Y=0).
+    root_face_selector = "<Y" if side == "right" else ">Y"
     try:
-        # Shell inward, attempting to keep root face open
-        result = solid.shell(-skin_thickness)
+        result = solid.faces(root_face_selector).shell(-skin_thickness)
     except Exception:
-        # Shell can fail on complex lofted geometry; return solid as fallback
-        result = solid
+        # Fallback: try shelling without face selection
+        try:
+            result = solid.shell(-skin_thickness)
+        except Exception:
+            result = solid
     return result
