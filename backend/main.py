@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.routes.designs import router as designs_router
 from backend.routes.generate import router as generate_router
 from backend.routes.export import router as export_router
+from backend.routes.presets import router as presets_router
 from backend.routes.websocket import router as websocket_router
 
 logger = logging.getLogger("cheng")
@@ -59,6 +60,14 @@ async def lifespan(app: FastAPI):
     except OSError:
         logger.info("Cannot create /data/designs — using default storage path")
 
+    # 4. Ensure presets storage directory exists
+    presets_dir = Path("/data/presets")
+    try:
+        presets_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("Presets directory ready: %s", presets_dir)
+    except OSError:
+        logger.info("Cannot create /data/presets — presets will use module default")
+
     yield
 
 
@@ -84,6 +93,7 @@ app.add_middleware(
 app.include_router(designs_router)
 app.include_router(generate_router)
 app.include_router(export_router)
+app.include_router(presets_router)
 app.include_router(websocket_router)
 
 

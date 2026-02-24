@@ -257,6 +257,13 @@ export interface DesignSummary {
   modifiedAt: string;
 }
 
+/** Summary of a custom preset (from GET /api/presets). */
+export interface CustomPresetSummary {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
 /** Supported export formats. */
 export type ExportFormat = 'stl' | 'step' | 'dxf' | 'svg';
 
