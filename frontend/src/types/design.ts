@@ -180,6 +180,9 @@ export interface ValidationWarning {
 // MeshData — parsed from WebSocket binary frame
 // ---------------------------------------------------------------------------
 
+/** Per-component face index ranges for selection highlighting. */
+export type ComponentRanges = Partial<Record<'fuselage' | 'wing' | 'tail', [number, number]>>;
+
 /** Parsed mesh from WebSocket binary protocol (spec S6.2). */
 export interface MeshData {
   /** Flat vertex positions [x0,y0,z0, x1,y1,z1, ...]. */
@@ -190,6 +193,8 @@ export interface MeshData {
   faces: Uint32Array;
   vertexCount: number;
   faceCount: number;
+  /** Per-component face ranges from backend. */
+  componentRanges: ComponentRanges | null;
 }
 
 // ---------------------------------------------------------------------------

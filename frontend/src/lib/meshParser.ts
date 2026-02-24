@@ -4,7 +4,7 @@
 // ============================================================================
 
 import * as THREE from 'three';
-import type { DerivedValues, ValidationWarning } from '@/types/design';
+import type { DerivedValues, ValidationWarning, ComponentRanges } from '@/types/design';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -33,6 +33,7 @@ export interface MeshFrame {
   faces: Uint32Array;
   derived: DerivedValues;
   validation: ValidationWarning[];
+  componentRanges: ComponentRanges | null;
 }
 
 /** Parsed error frame from WebSocket binary protocol. */
@@ -126,6 +127,7 @@ function parseMeshUpdate(data: ArrayBuffer, view: DataView): MeshFrame {
   // Parse JSON trailer (derived values + validation warnings)
   let derived: DerivedValues;
   let validation: ValidationWarning[];
+  let componentRanges: ComponentRanges | null = null;
 
   if (trailerByteOffset < data.byteLength) {
     const trailerBytes = new Uint8Array(data, trailerByteOffset);
@@ -133,9 +135,11 @@ function parseMeshUpdate(data: ArrayBuffer, view: DataView): MeshFrame {
     const trailer = JSON.parse(trailerJson) as {
       derived: DerivedValues;
       validation: ValidationWarning[];
+      componentRanges?: Record<string, [number, number]>;
     };
     derived = trailer.derived;
     validation = trailer.validation;
+    componentRanges = trailer.componentRanges ?? null;
   } else {
     // No trailer — provide empty defaults
     derived = {
@@ -160,6 +164,7 @@ function parseMeshUpdate(data: ArrayBuffer, view: DataView): MeshFrame {
     faces,
     derived,
     validation,
+    componentRanges,
   };
 }
 

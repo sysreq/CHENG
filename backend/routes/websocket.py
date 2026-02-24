@@ -23,9 +23,9 @@ from backend.geometry.engine import (
     _cadquery_limiter,
     assemble_aircraft,
     compute_derived_values,
-    _compute_warnings,
 )
-from backend.models import AircraftDesign, DerivedValues
+from backend.models import AircraftDesign, DerivedValues, ValidationWarning
+from backend.validation import compute_warnings
 
 logger = logging.getLogger("cheng.ws")
 
@@ -46,28 +46,23 @@ def _build_error_frame(error: str, detail: str = "", field: str = "") -> bytes:
 
 def _build_mesh_response(
     mesh_binary: bytes,
-    derived: dict[str, float],
-    warnings: list[dict[str, Any]],
+    derived: DerivedValues,
+    warnings: list[ValidationWarning],
+    component_ranges: dict[str, list[int]] | None = None,
 ) -> bytes:
     """Append JSON trailer to mesh binary frame.
 
-    Converts derived keys from snake_case to camelCase for the frontend.
+    Uses Pydantic alias_generator (by_alias=True) for snake_case -> camelCase
+    conversion — see models.py CamelModel base class.
     """
-    trailer = json.dumps({
-        "derived": _to_camel_case_dict(derived),
-        "validation": warnings,
-    }).encode("utf-8")
+    trailer_dict: dict[str, Any] = {
+        "derived": derived.model_dump(by_alias=True),
+        "validation": [w.model_dump(by_alias=True) for w in warnings],
+    }
+    if component_ranges is not None:
+        trailer_dict["componentRanges"] = component_ranges
+    trailer = json.dumps(trailer_dict).encode("utf-8")
     return mesh_binary + trailer
-
-
-def _to_camel_case_dict(d: dict[str, Any]) -> dict[str, Any]:
-    """Convert snake_case dict keys to camelCase."""
-    result = {}
-    for key, value in d.items():
-        parts = key.split("_")
-        camel = parts[0] + "".join(p.capitalize() for p in parts[1:])
-        result[camel] = value
-    return result
 
 
 @router.websocket("/ws/preview")
@@ -106,14 +101,14 @@ async def preview_websocket(ws: WebSocket) -> None:
                 with cancel_scope:
                     # Compute derived values (pure math, fast)
                     derived_dict = compute_derived_values(design)
+                    derived = DerivedValues(**derived_dict)
 
-                    # Compute warnings
-                    warnings_list = _compute_warnings(design, derived_dict)
-                    warnings_dicts = [w.model_dump() for w in warnings_list]
+                    # Compute warnings (canonical module)
+                    warnings_list = compute_warnings(design)
 
                     # Generate geometry in thread pool with limiter
                     try:
-                        mesh_data = await anyio.to_thread.run_sync(
+                        mesh_data, comp_ranges = await anyio.to_thread.run_sync(
                             lambda: _generate_mesh(design),
                             limiter=_cadquery_limiter,
                             abandon_on_cancel=True,
@@ -130,8 +125,9 @@ async def preview_websocket(ws: WebSocket) -> None:
                     # Build and send response
                     response = _build_mesh_response(
                         mesh_data.to_binary_frame(),
-                        derived_dict,
-                        warnings_dicts,
+                        derived,
+                        warnings_list,
+                        component_ranges=comp_ranges,
                     )
                     await ws.send_bytes(response)
 
@@ -154,6 +150,10 @@ def _generate_mesh(design: AircraftDesign):
 
     Assembles aircraft, tessellates each component separately (faster and
     more robust than boolean union), and merges the mesh data.
+
+    Returns:
+        Tuple of (MeshData, component_ranges) where component_ranges maps
+        component category ('fuselage', 'wing', 'tail') to [startFace, endFace].
     """
     from backend.geometry.tessellate import tessellate_for_preview, MeshData
 
@@ -174,21 +174,45 @@ def _generate_mesh(design: AircraftDesign):
     all_normals = []
     all_faces = []
     offset = 0
+    face_offset = 0
 
-    for _name, solid in components.items():
+    # Track per-component face ranges for frontend selection highlighting.
+    # Keys are component categories: 'fuselage', 'wing', 'tail'.
+    component_ranges: dict[str, list[int]] = {}
+
+    for name, solid in components.items():
         mesh = tessellate_for_preview(solid, tolerance=2.0)
         if mesh.vertex_count == 0:
             continue
         all_verts.append(mesh.vertices)
         all_normals.append(mesh.normals)
         all_faces.append(mesh.faces + offset)
+
+        # Map component name to category
+        if "fuselage" in name:
+            category = "fuselage"
+        elif "wing" in name:
+            category = "wing"
+        else:
+            category = "tail"
+
+        start_face = face_offset
+        end_face = face_offset + mesh.face_count
+        if category in component_ranges:
+            # Extend existing range (e.g. wing_left + wing_right)
+            component_ranges[category][1] = end_face
+        else:
+            component_ranges[category] = [start_face, end_face]
+
         offset += mesh.vertex_count
+        face_offset += mesh.face_count
 
     if not all_verts:
         raise RuntimeError("Tessellation produced no geometry")
 
-    return MeshData(
+    mesh_data = MeshData(
         vertices=np.concatenate(all_verts),
         normals=np.concatenate(all_normals),
         faces=np.concatenate(all_faces),
     )
+    return mesh_data, component_ranges

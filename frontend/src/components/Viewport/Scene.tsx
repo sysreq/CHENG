@@ -8,6 +8,7 @@ import { Bounds, useBounds } from '@react-three/drei';
 import AircraftMesh from './AircraftMesh';
 import Controls from './Controls';
 import Annotations from './Annotations';
+import DimensionLines from './DimensionLines';
 import { useDesignStore } from '@/store/designStore';
 
 function BoundsWatcher({ readyTick }: { readyTick: number }) {
@@ -94,6 +95,7 @@ export default function Scene() {
           {readyTick > 0 && <BoundsWatcher readyTick={readyTick} />}
         </Bounds>
 
+        <DimensionLines />
         <Controls />
       </Canvas>
 

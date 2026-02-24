@@ -10,8 +10,11 @@ import { useDesignStore } from '@/store/designStore';
 import { useConnectionStore } from '@/store/connectionStore';
 import type { AircraftDesign } from '@/types/design';
 
-/** Reconnection interval in milliseconds. */
-const RECONNECT_INTERVAL_MS = 3_000;
+/** Base reconnection interval in milliseconds. */
+const BASE_RECONNECT_MS = 1_000;
+
+/** Maximum reconnection interval (cap for exponential backoff). */
+const MAX_RECONNECT_MS = 30_000;
 
 /**
  * Manages the WebSocket connection to /ws/preview.
@@ -21,7 +24,8 @@ const RECONNECT_INTERVAL_MS = 3_000;
  * - Parses binary frames via parseMeshFrame()
  * - Updates designStore (meshData, derived, warnings) on MeshFrame
  * - Updates connectionStore on open/close/error
- * - Implements reconnection: 3s interval, max 5 attempts -> disconnected
+ * - Implements reconnection with exponential backoff: 1s, 2s, 4s, 8s, 16s
+ *   then gives up after maxReconnectAttempts (5).
  *
  * @returns send function to transmit design JSON, and disconnect to close.
  */
@@ -57,11 +61,17 @@ export function useWebSocket(): {
       return;
     }
 
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s (capped at MAX_RECONNECT_MS)
+    const delay = Math.min(
+      BASE_RECONNECT_MS * Math.pow(2, reconnectAttempts - 1),
+      MAX_RECONNECT_MS,
+    );
+
     // Schedule next reconnection attempt
     reconnectTimerRef.current = setTimeout(() => {
       reconnectTimerRef.current = null;
       connectRef.current();
-    }, RECONNECT_INTERVAL_MS);
+    }, delay);
   }, []);
 
   const connect = useCallback(() => {
@@ -71,15 +81,21 @@ export function useWebSocket(): {
       wsRef.current = null;
     }
 
+    const connStore = useConnectionStore.getState();
+    // Set to 'connecting' on initial connect, keep 'reconnecting' on retries
+    if (connStore.state !== 'reconnecting') {
+      connStore.setState('connecting');
+    }
+
     const url = getWebSocketUrl();
     const ws = new WebSocket(url);
     ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
 
     ws.onopen = () => {
-      const connStore = useConnectionStore.getState();
-      connStore.setState('connected');
-      connStore.resetAttempts();
+      const store = useConnectionStore.getState();
+      store.setState('connected');
+      store.resetAttempts();
     };
 
     ws.onmessage = (event: MessageEvent) => {
@@ -100,6 +116,7 @@ export function useWebSocket(): {
             faces: frame.faces,
             vertexCount: frame.vertexCount,
             faceCount: frame.faceCount,
+            componentRanges: frame.componentRanges,
           });
           actions.setDerived(frame.derived);
           actions.setWarnings(frame.validation);
@@ -115,9 +132,9 @@ export function useWebSocket(): {
       }
     };
 
-    ws.onerror = (event) => {
-      console.error('[WS] WebSocket error:', event);
-      // onclose will follow
+    ws.onerror = () => {
+      // onerror fires before onclose — set error state with message
+      useConnectionStore.getState().setError('WebSocket connection error');
     };
 
     ws.onclose = () => {
