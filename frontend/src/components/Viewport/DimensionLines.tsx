@@ -79,12 +79,12 @@ export default function DimensionLines() {
       </Html>
 
       {/* Sweep angle arc — only shown when sweep > 0 */}
-      {wingSweep > 0 && <SweepArc sweep={wingSweep} halfSpan={halfSpan} />}
+      {wingSweep > 0 && <SweepArc sweep={wingSweep} />}
     </group>
   );
 }
 
-function SweepArc({ sweep, halfSpan }: { sweep: number; halfSpan: number }) {
+function SweepArc({ sweep }: { sweep: number }) {
   const wingChord = useDesignStore((s) => s.design.wingChord);
   // Fuselage half-width derived from chord (same formula as backend: chord * 0.45 / 2)
   const fuselageHalfWidth = wingChord * 0.45 / 2;

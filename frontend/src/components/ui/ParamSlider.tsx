@@ -3,6 +3,7 @@
 // ============================================================================
 
 import React, { useState, useCallback, useEffect, useId } from 'react';
+import * as Tooltip from '@radix-ui/react-tooltip';
 
 export interface ParamSliderProps {
   /** Display label */
@@ -55,8 +56,6 @@ export function ParamSlider({
   // Local string state for the number input — allows free typing
   const [localValue, setLocalValue] = useState<string>(String(value));
   const [isFocused, setIsFocused] = useState(false);
-  const [showWarningTooltip, setShowWarningTooltip] = useState(false);
-
   // Sync local value from prop when not focused (e.g. slider or preset change)
   useEffect(() => {
     if (!isFocused) {
@@ -125,22 +124,32 @@ export function ParamSlider({
         <label htmlFor={id} className="text-xs font-medium text-zinc-300">
           {label}
           {hasWarning && (
-            <span className="relative inline-block ml-1">
-              <button
-                type="button"
-                onClick={() => setShowWarningTooltip((v) => !v)}
-                className="cursor-pointer"
-                style={{ color: '#FFD60A' }}
-                aria-label="has warning"
-              >
-                {'\u26A0'}
-              </button>
-              {showWarningTooltip && warningText && (
-                <span className="absolute left-0 top-full mt-1 z-50 px-2 py-1 text-xs text-zinc-100 bg-zinc-800 border border-amber-500/50 rounded shadow-lg whitespace-nowrap">
-                  {warningText}
-                </span>
-              )}
-            </span>
+            <Tooltip.Provider delayDuration={200}>
+              <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                  <span
+                    className="inline-block ml-1 cursor-help"
+                    style={{ color: '#FFD60A' }}
+                    aria-label="has warning"
+                  >
+                    {'\u26A0'}
+                  </span>
+                </Tooltip.Trigger>
+                {warningText && (
+                  <Tooltip.Portal>
+                    <Tooltip.Content
+                      className="z-50 px-2 py-1.5 text-xs text-zinc-100 bg-zinc-800 border border-amber-500/50 rounded shadow-lg max-w-[250px] whitespace-normal"
+                      side="bottom"
+                      align="start"
+                      sideOffset={4}
+                    >
+                      {warningText}
+                      <Tooltip.Arrow className="fill-zinc-800" />
+                    </Tooltip.Content>
+                  </Tooltip.Portal>
+                )}
+              </Tooltip.Root>
+            </Tooltip.Provider>
           )}
         </label>
         <span className="text-xs text-zinc-500">{unit}</span>

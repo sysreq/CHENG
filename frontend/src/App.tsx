@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useDesignSync } from '@/hooks/useDesignSync';
 import { useConnectionStore } from '@/store/connectionStore';
@@ -27,7 +27,11 @@ export default function App() {
   useDesignSync(send);
 
   const [exportOpen, setExportOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const isConnected = useConnectionStore((s) => s.state === 'connected');
+
+  const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   // When disconnected, disable parameter panels (read-only mode)
   const panelStyle = !isConnected
@@ -56,13 +60,52 @@ export default function App() {
       >
         <Toolbar onOpenExport={() => setExportOpen(true)} />
         <DisconnectedBanner />
+        {/* Hamburger toggle for narrow viewports */}
+        <button
+          className="sidebar-toggle"
+          onClick={toggleSidebar}
+          aria-label="Toggle parameters panel"
+          style={{
+            position: 'absolute',
+            top: 56,
+            right: 12,
+            zIndex: 20,
+            width: 36,
+            height: 36,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 6,
+            border: '1px solid var(--color-border)',
+            backgroundColor: 'var(--color-bg-tertiary)',
+            color: 'var(--color-text-primary)',
+            cursor: 'pointer',
+            fontSize: 18,
+          }}
+        >
+          {sidebarOpen ? '\u2715' : '\u2630'}
+        </button>
         <div style={{ position: 'absolute', inset: 0, top: 'var(--toolbar-height)' }}>
           <Scene />
         </div>
       </main>
 
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={closeSidebar}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 25,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+          }}
+        />
+      )}
+
       {/* Right Sidebar — Global Parameters */}
       <aside
+        className={`app-sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}
         style={{
           gridColumn: '2',
           gridRow: '1 / 3',
@@ -72,6 +115,9 @@ export default function App() {
           ...panelStyle,
         }}
       >
+        <div className="sticky top-0 z-10 px-3 py-2 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider bg-zinc-900/90 backdrop-blur border-b border-zinc-700/50">
+          Parameters
+        </div>
         <GlobalPanel />
       </aside>
 
@@ -80,13 +126,17 @@ export default function App() {
         style={{
           gridColumn: '1',
           gridRow: '2',
-          backgroundColor: 'var(--color-bg-secondary)',
+          backgroundColor: 'var(--color-bg-tertiary)',
           borderTop: '1px solid var(--color-border)',
           overflowY: 'auto',
           maxHeight: '280px',
+          position: 'relative',
           ...panelStyle,
         }}
       >
+        <div className="sticky top-0 z-10 px-3 py-2 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider bg-zinc-800/90 backdrop-blur border-b border-zinc-700/50">
+          Component Details
+        </div>
         <ComponentPanel />
       </section>
 
