@@ -212,8 +212,17 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
 
     taper_ratio = tip_chord_mm / design.wing_chord if design.wing_chord > 0 else 0.0
 
-    # CG at 25% MAC — spec D05: estimatedCG = 0.25 * D03 (mean_aero_chord_mm)
-    estimated_cg_mm = 0.25 * mean_aero_chord_mm
+    # CG position aft of root LE at 25% MAC, accounting for sweep.
+    # For swept/tapered wings the MAC is located aft of the root LE by
+    # y_mac * tan(sweep), where y_mac is the spanwise position of the MAC.
+    # The aerodynamic center (25% MAC) is then:
+    #   CG = 0.25 * MAC + y_mac * tan(sweep_c/4)
+    half_span = design.wing_span / 2.0
+    sweep_rad = math.radians(design.wing_sweep)
+    y_mac = (
+        (half_span / 3.0) * (1.0 + 2.0 * lambda_) / (1.0 + lambda_)
+    ) if (1.0 + lambda_) > 0 else 0.0
+    estimated_cg_mm = 0.25 * mean_aero_chord_mm + y_mac * math.tan(sweep_rad)
 
     min_feature_thickness_mm = 2.0 * design.nozzle_diameter
 
