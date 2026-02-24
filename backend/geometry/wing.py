@@ -85,7 +85,7 @@ def build_wing(
     tip_chord = root_chord * design.wing_tip_root_ratio
     half_span = design.wing_span / 2.0
 
-    # 3. Sweep and dihedral offsets
+    # 3. Sweep and dihedral offsets at the tip
     sweep_rad = math.radians(design.wing_sweep)
     dihedral_rad = math.radians(design.wing_dihedral)
 
@@ -95,35 +95,26 @@ def build_wing(
     # 4. Y direction sign
     y_sign = -1.0 if side == "left" else 1.0
 
-    # 5. Build root section at Y=0
-    root_wire = _make_airfoil_wire(
-        cq,
-        profile,
-        chord=root_chord,
-        x_offset=0.0,
-        y_offset=0.0,
-        z_offset=0.0,
-        rotation_deg=_WING_INCIDENCE_DEG,
+    # 5. Scale airfoil points to root and tip chords
+    root_pts = _scale_airfoil_2d(profile, root_chord, _WING_INCIDENCE_DEG)
+    tip_pts = _scale_airfoil_2d(
+        profile, tip_chord, _WING_INCIDENCE_DEG + _WING_TWIST_DEG,
     )
 
-    # 6. Build tip section at Y = +/-span/2
-    tip_wire = _make_airfoil_wire(
-        cq,
-        profile,
-        chord=tip_chord,
-        x_offset=sweep_offset_x,
-        y_offset=y_sign * half_span,
-        z_offset=dihedral_offset_z,
-        rotation_deg=_WING_INCIDENCE_DEG + _WING_TWIST_DEG,
+    # 6. Loft: root at Y=0, tip at Y=+/-half_span with sweep+dihedral offsets
+    result = (
+        cq.Workplane("XZ")
+        .spline(root_pts, periodic=False).close()
+        .workplane(offset=y_sign * half_span)
+        .transformed(offset=(sweep_offset_x, 0, dihedral_offset_z))
+        .spline(tip_pts, periodic=False).close()
+        .loft(ruled=False)
     )
 
-    # 7. Loft between root and tip
-    result = root_wire.add(tip_wire).loft(ruled=False)
-
-    # 8. TE enforcement: thicken trailing edge if needed
+    # 7. TE enforcement: thicken trailing edge if needed
     result = _enforce_te_thickness(cq, result, design.te_min_thickness)
 
-    # 9. Shell if hollow
+    # 8. Shell if hollow
     if design.hollow_parts:
         result = _shell_wing(result, design.wing_skin_thickness)
 
@@ -135,44 +126,31 @@ def build_wing(
 # ---------------------------------------------------------------------------
 
 
-def _make_airfoil_wire(
-    cq_mod: type,
+def _scale_airfoil_2d(
     profile: list[tuple[float, float]],
     chord: float,
-    x_offset: float,
-    y_offset: float,
-    z_offset: float,
     rotation_deg: float,
-) -> cq.Workplane:
-    """Create a CadQuery wire from an airfoil profile at a given station.
+) -> list[tuple[float, float]]:
+    """Scale and rotate an airfoil profile for use in a CadQuery spline.
 
-    The airfoil is placed in the XZ plane at the given Y position.
-    X runs chordwise (LE at front), Z is thickness direction.
-    Rotation (incidence/twist) is about the Y axis at 25% chord.
+    Returns 2D (x, z) points in the XZ plane, scaled to the given chord
+    and rotated about the quarter-chord point.
 
     Args:
-        cq_mod:       The cadquery module.
         profile:      Airfoil (x, y) coordinates, unit chord.
         chord:        Chord length in mm.
-        x_offset:     Chordwise offset (sweep) in mm.
-        y_offset:     Spanwise position in mm.
-        z_offset:     Vertical offset (dihedral) in mm.
         rotation_deg: Incidence/twist rotation about quarter-chord in degrees.
 
     Returns:
-        CadQuery Workplane containing the airfoil wire.
+        List of (x, z) 2D tuples ready for cq.Workplane("XZ").spline().
     """
-    cq = cq_mod
-
-    # Scale profile to chord and apply rotation about quarter-chord
     rot_rad = math.radians(rotation_deg)
     cos_r = math.cos(rot_rad)
     sin_r = math.sin(rot_rad)
     qc = 0.25 * chord  # quarter-chord point
 
-    points_3d: list[tuple[float, float, float]] = []
+    points: list[tuple[float, float]] = []
     for px, py in profile:
-        # Scale to chord
         x = px * chord
         z = py * chord
 
@@ -181,28 +159,9 @@ def _make_airfoil_wire(
         x_rot = qc + dx * cos_r - z * sin_r
         z_rot = dx * sin_r + z * cos_r
 
-        # Translate to station position
-        x_final = x_rot + x_offset
-        y_final = y_offset
-        z_final = z_rot + z_offset
+        points.append((x_rot, z_rot))
 
-        points_3d.append((x_final, y_final, z_final))
-
-    # Close the profile if not already closed
-    if points_3d[0] != points_3d[-1]:
-        points_3d.append(points_3d[0])
-
-    # Create a spline wire through the 3D points
-    wire = cq.Workplane("XZ").transformed(offset=(0, y_offset, 0))
-
-    # Convert to 2D points in the XZ plane at the given Y
-    points_2d = [(p[0], p[2]) for p in points_3d]
-
-    wire = cq.Workplane("XZ").workplane(offset=y_offset).spline(
-        points_2d, periodic=True
-    )
-
-    return wire
+    return points
 
 
 def _enforce_te_thickness(

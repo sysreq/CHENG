@@ -129,7 +129,7 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
     Pure math -- no CadQuery, no geometry.  Safe to call frequently.
 
     **Formulas:**
-    1. wing_tip_chord_mm     = wing_chord * wing_tip_root_ratio
+    1. tip_chord_mm     = wing_chord * wing_tip_root_ratio
     2. wing_area_cm2         = 0.5 * (wing_chord + tip_chord) * wing_span / 100
     3. aspect_ratio          = wing_span^2 / wing_area_mm^2
     4. mean_aero_chord_mm    = (2/3) * wing_chord * (1 + l + l^2) / (1 + l)
@@ -147,9 +147,9 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
     """
     lambda_ = design.wing_tip_root_ratio
 
-    wing_tip_chord_mm = design.wing_chord * lambda_
+    tip_chord_mm = design.wing_chord * lambda_
 
-    wing_area_mm2 = 0.5 * (design.wing_chord + wing_tip_chord_mm) * design.wing_span
+    wing_area_mm2 = 0.5 * (design.wing_chord + tip_chord_mm) * design.wing_span
     wing_area_cm2 = wing_area_mm2 / 100.0
 
     aspect_ratio = (design.wing_span ** 2) / wing_area_mm2 if wing_area_mm2 > 0 else 0.0
@@ -161,7 +161,7 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
         / (1.0 + lambda_)
     ) if (1.0 + lambda_) > 0 else design.wing_chord
 
-    taper_ratio = wing_tip_chord_mm / design.wing_chord if design.wing_chord > 0 else 0.0
+    taper_ratio = tip_chord_mm / design.wing_chord if design.wing_chord > 0 else 0.0
 
     estimated_cg_mm = 0.25 * mean_aero_chord_mm
 
@@ -175,7 +175,7 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
     wall_thickness_mm = wall_thickness_map.get(design.fuselage_preset, 1.6)
 
     return {
-        "wing_tip_chord_mm": wing_tip_chord_mm,
+        "tip_chord_mm": tip_chord_mm,
         "wing_area_cm2": wing_area_cm2,
         "aspect_ratio": aspect_ratio,
         "mean_aero_chord_mm": mean_aero_chord_mm,

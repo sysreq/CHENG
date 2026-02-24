@@ -72,7 +72,7 @@ class TestGenerate:
 
         # Check derived values are present
         derived = data["derived"]
-        assert "wing_tip_chord_mm" in derived
+        assert "tip_chord_mm" in derived
         assert "wing_area_cm2" in derived
         assert "aspect_ratio" in derived
         assert "mean_aero_chord_mm" in derived

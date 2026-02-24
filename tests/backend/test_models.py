@@ -103,7 +103,7 @@ class TestDerivedValues:
 
     def test_construction(self) -> None:
         dv = DerivedValues(
-            wing_tip_chord_mm=200.0,
+            tip_chord_mm=200.0,
             wing_area_cm2=2400.0,
             aspect_ratio=6.0,
             mean_aero_chord_mm=200.0,
@@ -156,7 +156,7 @@ class TestGenerationResult:
     def test_construction(self) -> None:
         result = GenerationResult(
             derived=DerivedValues(
-                wing_tip_chord_mm=200,
+                tip_chord_mm=200,
                 wing_area_cm2=2400,
                 aspect_ratio=6.0,
                 mean_aero_chord_mm=200,

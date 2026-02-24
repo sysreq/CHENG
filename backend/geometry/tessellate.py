@@ -83,7 +83,7 @@ class MeshData:
 # ---------------------------------------------------------------------------
 
 
-def tessellate_for_preview(solid: cq.Workplane, tolerance: float = 0.5) -> MeshData:
+def tessellate_for_preview(solid: cq.Workplane, tolerance: float = 0.5, angular_tolerance: float = 0.5) -> MeshData:
     """Tessellate a CadQuery solid into triangle mesh for WebSocket preview.
 
     Uses coarser tolerance than export for fast transfer.  Default 0.5 mm
@@ -92,16 +92,17 @@ def tessellate_for_preview(solid: cq.Workplane, tolerance: float = 0.5) -> MeshD
     Args:
         solid:     CadQuery Workplane containing one or more solids.
         tolerance: Max chordal deviation in mm.  Default 0.5 mm for preview.
+        angular_tolerance: Max angular deviation in radians. Default 0.5 for preview.
 
     Returns:
         MeshData with float32 vertices/normals and uint32 face indices.
     """
     import cadquery as cq  # noqa: F811 -- runtime import
 
-    return _tessellate_workplane(solid, tolerance)
+    return _tessellate_workplane(solid, tolerance, angular_tolerance)
 
 
-def tessellate_for_export(solid: cq.Workplane, tolerance: float = 0.1) -> bytes:
+def tessellate_for_export(solid: cq.Workplane, tolerance: float = 0.1, angular_tolerance: float = 0.1) -> bytes:
     """Tessellate a CadQuery solid into binary STL for file export.
 
     Uses finer tolerance for dimensional accuracy.  Output must be watertight
@@ -112,13 +113,14 @@ def tessellate_for_export(solid: cq.Workplane, tolerance: float = 0.1) -> bytes:
     Args:
         solid:     CadQuery Workplane containing a single solid.
         tolerance: Max chordal deviation in mm.  Default 0.1 mm for export quality.
+        angular_tolerance: Max angular deviation in radians. Default 0.1 for export.
 
     Returns:
         Binary STL file content as bytes.
     """
     import cadquery as cq  # noqa: F811 -- runtime import
 
-    mesh = _tessellate_workplane(solid, tolerance)
+    mesh = _tessellate_workplane(solid, tolerance, angular_tolerance)
     return _mesh_to_binary_stl(mesh)
 
 
@@ -127,7 +129,7 @@ def tessellate_for_export(solid: cq.Workplane, tolerance: float = 0.1) -> bytes:
 # ---------------------------------------------------------------------------
 
 
-def _tessellate_workplane(solid: cq.Workplane, tolerance: float) -> MeshData:
+def _tessellate_workplane(solid: cq.Workplane, tolerance: float, angular_tolerance: float = 0.1) -> MeshData:
     """Extract triangle mesh from a CadQuery Workplane.
 
     Uses the OCCT tessellation via CadQuery's ``tessellate()`` method on each
@@ -140,7 +142,7 @@ def _tessellate_workplane(solid: cq.Workplane, tolerance: float) -> MeshData:
 
     for shape in solid.objects:
         # CadQuery Shape.tessellate returns (vertices, faces)
-        verts, faces = shape.tessellate(tolerance)
+        verts, faces = shape.tessellate(tolerance, angular_tolerance)
         for v in verts:
             all_vertices.append((v.x, v.y, v.z))
         for f in faces:

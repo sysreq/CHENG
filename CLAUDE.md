@@ -30,11 +30,23 @@ Containerized web app for designing 3D-printable RC aircraft. Users adjust param
 - Auto-sectioning with tongue-and-groove joints
 - 6 structural warnings (V01-V06) + 7 print warnings (V16-V23), all non-blocking
 
-## Planning Status
-- `docs/mvp_spec.md` — Complete, verified, critique-reviewed
-- `docs/implementation_guide.md` — Complete. Contains: directory tree (~60 files), geometry engine API (14 functions), TypeScript interfaces, Zustand store shape, WebSocket binary parser, module boundary rules, build config
-- `docs/next_steps.md` — Roadmap with 4-phase task decomposition (Scaffold → Parallel → Integration → Polish)
-- Implementation task list — NOT YET CREATED. Ready to decompose from implementation_guide.md + next_steps.md §2
+## Implementation Status
+- **Phase 0 (Scaffold):** Complete — project structure, models, types, stores, presets
+- **Phase 1 (Parallel):** Complete — 4 tracks merged (Backend API, Geometry Engine, Frontend Core, Frontend Panels)
+- **Phase 2 (Integration):** Complete — WebSocket, generate, export routes wired. 166 tests passing.
+- **Phase 3 (Polish):** Not started — Docker build, acceptance criteria, bug fixes
+- **App is functional:** Backend generates CadQuery geometry, sends binary mesh via WebSocket, frontend renders in Three.js
+
+## Dev Scripts
+- `startup.ps1` — Builds frontend + starts both servers. Use `-r` for backend `--reload`.
+- `shutdown.ps1` — Kills processes on ports 8000/5173.
+- Run: `powershell -ExecutionPolicy Bypass -File .\startup.ps1`
+
+## CadQuery Gotchas
+- **Loft:** Must use chained `.workplane(offset=delta).ellipse().loft()` — NOT `.add()` from separate Workplanes
+- **Splines:** Use `.spline(pts, periodic=False).close()` for loft cross-sections
+- **Shell:** `.shell(-thickness)` often fails on complex lofts — always try/except with fallback
+- **Preview:** Tessellate components individually (no boolean union) and disable hollow_parts
 
 ## Conventions
 - Python: snake_case, Pydantic models, type hints

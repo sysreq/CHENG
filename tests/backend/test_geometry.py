@@ -130,7 +130,7 @@ class TestComputeDerivedValues:
         """All 8 derived value keys must be present."""
         result = compute_derived_values(default_design)
         expected_keys = {
-            "wing_tip_chord_mm",
+            "tip_chord_mm",
             "wing_area_cm2",
             "aspect_ratio",
             "mean_aero_chord_mm",
@@ -151,13 +151,13 @@ class TestComputeDerivedValues:
         """With taper_ratio=1.0, tip chord == root chord."""
         design = AircraftDesign(wing_chord=200, wing_tip_root_ratio=1.0)
         result = compute_derived_values(design)
-        assert result["wing_tip_chord_mm"] == pytest.approx(200.0)
+        assert result["tip_chord_mm"] == pytest.approx(200.0)
 
     def test_wing_tip_chord_tapered(self) -> None:
         """Tip chord should be chord * taper ratio."""
         design = AircraftDesign(wing_chord=180, wing_tip_root_ratio=0.67)
         result = compute_derived_values(design)
-        assert result["wing_tip_chord_mm"] == pytest.approx(180 * 0.67, rel=1e-4)
+        assert result["tip_chord_mm"] == pytest.approx(180 * 0.67, rel=1e-4)
 
     def test_wing_area_rectangular(self) -> None:
         """Rectangular wing: area = span * chord / 100 (mm^2 -> cm^2)."""
@@ -245,14 +245,14 @@ class TestComputeDerivedValues:
         # AR for 1000mm span, 180mm chord, 0.67 taper should be around 6-8
         assert 4.0 < result["aspect_ratio"] < 12.0
         # Tip chord should be ~120mm
-        assert result["wing_tip_chord_mm"] == pytest.approx(180 * 0.67, rel=0.01)
+        assert result["tip_chord_mm"] == pytest.approx(180 * 0.67, rel=0.01)
 
     def test_aerobatic_preset(self, aerobatic_design: AircraftDesign) -> None:
         """Aerobatic preset should produce reasonable derived values."""
         result = compute_derived_values(aerobatic_design)
         # 900mm span, 200mm chord, 0.8 taper
         assert 3.0 < result["aspect_ratio"] < 10.0
-        assert result["wing_tip_chord_mm"] == pytest.approx(200 * 0.8)
+        assert result["tip_chord_mm"] == pytest.approx(200 * 0.8)
 
 
 # ===================================================================

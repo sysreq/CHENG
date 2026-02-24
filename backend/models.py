@@ -86,7 +86,7 @@ class AircraftDesign(BaseModel):
 class DerivedValues(BaseModel):
     """Backend-computed values returned in WebSocket JSON trailer."""
 
-    wing_tip_chord_mm: float
+    tip_chord_mm: float
     wing_area_cm2: float
     aspect_ratio: float
     mean_aero_chord_mm: float

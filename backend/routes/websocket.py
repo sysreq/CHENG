@@ -49,12 +49,25 @@ def _build_mesh_response(
     derived: dict[str, float],
     warnings: list[dict[str, Any]],
 ) -> bytes:
-    """Append JSON trailer to mesh binary frame."""
+    """Append JSON trailer to mesh binary frame.
+
+    Converts derived keys from snake_case to camelCase for the frontend.
+    """
     trailer = json.dumps({
-        "derived": derived,
+        "derived": _to_camel_case_dict(derived),
         "validation": warnings,
     }).encode("utf-8")
     return mesh_binary + trailer
+
+
+def _to_camel_case_dict(d: dict[str, Any]) -> dict[str, Any]:
+    """Convert snake_case dict keys to camelCase."""
+    result = {}
+    for key, value in d.items():
+        parts = key.split("_")
+        camel = parts[0] + "".join(p.capitalize() for p in parts[1:])
+        result[camel] = value
+    return result
 
 
 @router.websocket("/ws/preview")
@@ -139,25 +152,43 @@ async def preview_websocket(ws: WebSocket) -> None:
 def _generate_mesh(design: AircraftDesign):
     """Synchronous geometry generation — runs in thread pool.
 
-    Assembles aircraft, tessellates the union for preview.
+    Assembles aircraft, tessellates each component separately (faster and
+    more robust than boolean union), and merges the mesh data.
     """
-    from backend.geometry.tessellate import tessellate_for_preview
+    from backend.geometry.tessellate import tessellate_for_preview, MeshData
 
-    components = assemble_aircraft(design)
+    import numpy as np
 
-    # Union all components into a single solid for preview tessellation
-    import cadquery as cq
+    # For the preview, we don't need hollow internal geometry.
+    # Disabling hollow_parts vastly reduces the vertex count (e.g. 34K -> 1K)
+    # and prevents the WebSocket connection from crashing.
+    preview_design = design.model_copy(update={"hollow_parts": False})
+    components = assemble_aircraft(preview_design)
 
-    solids = list(components.values())
-    if not solids:
+    if not components:
         raise RuntimeError("No geometry produced")
 
-    combined = solids[0]
-    for s in solids[1:]:
-        try:
-            combined = combined.union(s)
-        except Exception:
-            # If boolean union fails, just use the first solid
-            pass
+    # Tessellate each component individually — avoids slow/fragile boolean union.
+    # Use coarser tolerance (2.0mm) for fast preview.
+    all_verts = []
+    all_normals = []
+    all_faces = []
+    offset = 0
 
-    return tessellate_for_preview(combined)
+    for _name, solid in components.items():
+        mesh = tessellate_for_preview(solid, tolerance=2.0)
+        if mesh.vertex_count == 0:
+            continue
+        all_verts.append(mesh.vertices)
+        all_normals.append(mesh.normals)
+        all_faces.append(mesh.faces + offset)
+        offset += mesh.vertex_count
+
+    if not all_verts:
+        raise RuntimeError("Tessellation produced no geometry")
+
+    return MeshData(
+        vertices=np.concatenate(all_verts),
+        normals=np.concatenate(all_normals),
+        faces=np.concatenate(all_faces),
+    )

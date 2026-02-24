@@ -101,14 +101,14 @@ export function useDesignSync(send: (design: AircraftDesign) => void): void {
     };
   }, []);
 
-  // On reconnection (reconnecting -> connected), resend current design
+  // On connection (initial or reconnection), send current design to sync backend
   useEffect(() => {
     let prevConnState = useConnectionStore.getState().state;
 
     const unsubConnection = useConnectionStore.subscribe((state) => {
       const curr = state.state;
-      if (prevConnState === 'reconnecting' && curr === 'connected') {
-        // Re-sync the backend with current design state
+      if (curr === 'connected' && prevConnState !== 'connected') {
+        // Sync the backend with current design state on any connection
         const design = useDesignStore.getState().design;
         sendRef.current(design);
       }

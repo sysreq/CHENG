@@ -15,22 +15,14 @@ export const CAMERA_PRESETS = {
 
 export type CameraPreset = keyof typeof CAMERA_PRESETS;
 
-/**
- * OrbitControls wrapper with damping and camera preset support.
- *
- * Controls:
- * - Left click + drag: Orbit
- * - Right click + drag: Pan
- * - Scroll: Zoom
- */
 export default function Controls() {
   return (
     <OrbitControls
       makeDefault
       enableDamping
-      dampingFactor={0.1}
-      minDistance={50}
-      maxDistance={5000}
+      dampingFactor={0.05} // Lower value = smoother, more stable transition
+      minDistance={10}     // Reduced to allow close-up inspection of parts
+      maxDistance={8000}   // Increased to prevent clipping on huge models
       enablePan
       panSpeed={0.8}
       rotateSpeed={0.8}

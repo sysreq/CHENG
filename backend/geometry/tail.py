@@ -205,24 +205,15 @@ def _build_h_stab_half(
     # Incidence rotation
     inc_rad = math.radians(incidence)
 
-    # Root cross-section: simple ellipse approximation of symmetric airfoil
-    root_wire = (
+    # Loft from root to tip using chained workplane offsets
+    result = (
         cq.Workplane("XZ")
         .transformed(offset=(0, 0, z_offset), rotate=(0, -incidence, 0))
         .ellipse(chord / 2, half_thickness)
-    )
-
-    # Tip cross-section
-    tip_wire = (
-        cq.Workplane("XZ")
-        .transformed(
-            offset=(0, y_sign * half_span, z_offset),
-            rotate=(0, -incidence, 0),
-        )
+        .workplane(offset=y_sign * half_span)
         .ellipse(chord / 2, half_thickness)
+        .loft(ruled=False)
     )
-
-    result = root_wire.add(tip_wire).loft(ruled=False)
 
     # Shell if hollow
     if design.hollow_parts:
@@ -255,21 +246,16 @@ def _build_v_stab(
     root_half_t = root_chord * thickness_ratio / 2.0
     tip_half_t = tip_chord * thickness_ratio / 2.0
 
-    # Root cross-section in XY plane at Z=mount_z
-    root_wire = (
+    # Loft from root to tip using chained workplane offsets
+    # V-stab extends along Z, so we use XY plane and offset along Z
+    result = (
         cq.Workplane("XY")
         .transformed(offset=(0, 0, mount_z))
         .ellipse(root_chord / 2, root_half_t)
-    )
-
-    # Tip cross-section at Z = mount_z + height
-    tip_wire = (
-        cq.Workplane("XY")
-        .transformed(offset=(0, 0, mount_z + height))
+        .workplane(offset=height)
         .ellipse(tip_chord / 2, tip_half_t)
+        .loft(ruled=False)
     )
-
-    result = root_wire.add(tip_wire).loft(ruled=False)
 
     # Shell if hollow
     if design.hollow_parts:
@@ -309,24 +295,18 @@ def _build_v_tail_half(
     tip_y = y_sign * half_span * math.cos(dihedral_rad)
     tip_z = half_span * math.sin(dihedral_rad)
 
-    # Root cross-section
-    root_wire = (
+    # Loft from root to tip using chained workplane offsets
+    # workplane(offset=tip_y) moves along Y (XZ plane normal),
+    # transformed adds the Z offset from dihedral
+    result = (
         cq.Workplane("XZ")
-        .transformed(offset=(0, 0, 0), rotate=(0, -incidence, 0))
+        .transformed(rotate=(0, -incidence, 0))
         .ellipse(chord / 2, half_thickness)
-    )
-
-    # Tip cross-section
-    tip_wire = (
-        cq.Workplane("XZ")
-        .transformed(
-            offset=(0, tip_y, tip_z),
-            rotate=(0, -incidence, 0),
-        )
+        .workplane(offset=tip_y)
+        .transformed(offset=(0, 0, tip_z))
         .ellipse(chord / 2, half_thickness)
+        .loft(ruled=False)
     )
-
-    result = root_wire.add(tip_wire).loft(ruled=False)
 
     # Shell if hollow
     if design.hollow_parts:

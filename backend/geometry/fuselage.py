@@ -116,8 +116,7 @@ def _build_conventional(cq_mod: type, design: AircraftDesign, length: float) -> 
     # Wing mount Z offset
     mount_z = _wing_mount_z_offset(design, max_height)
 
-    # Build cross-sections at key stations
-    sections = []
+    # Build cross-sections at key stations: (x_position, width, height)
     stations = [
         (0.0, nose_radius, nose_radius),               # nose tip
         (nose_end * 0.5, max_width * 0.6, max_height * 0.6),  # mid-nose
@@ -128,22 +127,13 @@ def _build_conventional(cq_mod: type, design: AircraftDesign, length: float) -> 
         (length, tail_radius, tail_radius),             # tail tip
     ]
 
-    # Create workplane and loft through elliptical sections
-    result = cq.Workplane("YZ")
-
-    wires = []
-    for x_pos, w, h in stations:
-        wire = (
-            cq.Workplane("YZ")
-            .transformed(offset=(x_pos, 0, 0))
-            .ellipse(w / 2, h / 2)
-        )
-        wires.append(wire)
-
-    # Loft through all sections
-    result = wires[0]
-    for wire in wires[1:]:
-        result = result.add(wire)
+    # Loft through elliptical sections using chained workplane offsets
+    result = cq.Workplane("YZ").ellipse(stations[0][1] / 2, stations[0][2] / 2)
+    prev_x = stations[0][0]
+    for x_pos, w, h in stations[1:]:
+        delta = x_pos - prev_x
+        result = result.workplane(offset=delta).ellipse(w / 2, h / 2)
+        prev_x = x_pos
 
     result = result.loft(ruled=False)
 
@@ -173,18 +163,12 @@ def _build_pod(cq_mod: type, design: AircraftDesign, length: float) -> cq.Workpl
         (length, tail_radius, tail_radius),
     ]
 
-    wires = []
-    for x_pos, w, h in stations:
-        wire = (
-            cq.Workplane("YZ")
-            .transformed(offset=(x_pos, 0, 0))
-            .ellipse(w / 2, h / 2)
-        )
-        wires.append(wire)
-
-    result = wires[0]
-    for wire in wires[1:]:
-        result = result.add(wire)
+    result = cq.Workplane("YZ").ellipse(stations[0][1] / 2, stations[0][2] / 2)
+    prev_x = stations[0][0]
+    for x_pos, w, h in stations[1:]:
+        delta = x_pos - prev_x
+        result = result.workplane(offset=delta).ellipse(w / 2, h / 2)
+        prev_x = x_pos
 
     result = result.loft(ruled=False)
 
@@ -210,18 +194,12 @@ def _build_bwb(cq_mod: type, design: AircraftDesign, length: float) -> cq.Workpl
         (length, max_width * 0.3, max_height * 0.3),
     ]
 
-    wires = []
-    for x_pos, w, h in stations:
-        wire = (
-            cq.Workplane("YZ")
-            .transformed(offset=(x_pos, 0, 0))
-            .ellipse(w / 2, h / 2)
-        )
-        wires.append(wire)
-
-    result = wires[0]
-    for wire in wires[1:]:
-        result = result.add(wire)
+    result = cq.Workplane("YZ").ellipse(stations[0][1] / 2, stations[0][2] / 2)
+    prev_x = stations[0][0]
+    for x_pos, w, h in stations[1:]:
+        delta = x_pos - prev_x
+        result = result.workplane(offset=delta).ellipse(w / 2, h / 2)
+        prev_x = x_pos
 
     result = result.loft(ruled=False)
 
