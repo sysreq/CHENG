@@ -146,10 +146,11 @@ def _cut_wing_saddle(
 
     root_chord = design.wing_chord
     # Pocket depth extends slightly into the fuselage on each side.
-    # Limit depth to less than skin thickness to avoid penetrating the
-    # shell and exposing the hollow interior (#86).
-    skin_t = design.wing_skin_thickness
-    pocket_half_y = min(design.wing_chord * 0.05, skin_t * 0.8)  # never deeper than 80% of skin
+    # Limit depth to less than fuselage wall thickness to avoid penetrating
+    # the shell and exposing the hollow interior (#86).
+    # Fuselage wall is hardcoded at 1.6mm internally (see fuselage.py).
+    fuselage_wall_t = 1.6
+    pocket_half_y = min(design.wing_chord * 0.05, fuselage_wall_t * 0.8)
     # Pocket height approximates the root airfoil thickness (~12% of chord)
     pocket_height = root_chord * 0.14
 

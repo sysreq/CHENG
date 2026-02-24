@@ -3,7 +3,7 @@
 // Issue #28, #59
 // ============================================================================
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useDesignStore } from '../store/designStore';
 import { fieldHasWarning, formatWarning, groupWarningsByCategory, WARNING_COLORS } from '../lib/validation';
@@ -67,6 +67,114 @@ function estimatePartCount(
 }
 
 // ---------------------------------------------------------------------------
+// Bed Visualization — simple 2D SVG schematic
+// ---------------------------------------------------------------------------
+
+function BedVisualization({
+  bedX,
+  bedY,
+  wingSpan,
+  fuselageLength,
+  wingChord,
+}: {
+  bedX: number;
+  bedY: number;
+  wingSpan: number;
+  fuselageLength: number;
+  wingChord: number;
+}) {
+  const svgW = 440;
+  const svgH = 120;
+  const pad = 8;
+
+  // Scale to fit the bed in the SVG
+  const maxDim = Math.max(bedX, bedY);
+  const scale = Math.min((svgW - pad * 2) / maxDim, (svgH - pad * 2) / maxDim);
+  const bw = bedX * scale;
+  const bh = bedY * scale;
+  const ox = (svgW - bw) / 2;
+  const oy = (svgH - bh) / 2;
+
+  // Compute section sizes (clamped to bed)
+  const halfSpan = wingSpan / 2;
+  const wingSections = Math.max(1, Math.ceil(halfSpan / bedY));
+  const wingSecLen = Math.min(halfSpan / wingSections, bedY) * scale;
+  const wingSecW = Math.min(wingChord, bedX) * scale;
+
+  const fuseSections = Math.max(1, Math.ceil(fuselageLength / bedX));
+  const fuseSecLen = Math.min(fuselageLength / fuseSections, bedX) * scale;
+  const fuseSecW = Math.min(wingChord * 0.35, bedY) * scale;
+
+  return (
+    <div className="mb-3">
+      <p className="text-[10px] text-zinc-500 mb-1">Bed Layout (schematic)</p>
+      <svg
+        width={svgW}
+        height={svgH}
+        className="bg-zinc-800/50 border border-zinc-700/50 rounded"
+      >
+        {/* Bed outline */}
+        <rect
+          x={ox}
+          y={oy}
+          width={bw}
+          height={bh}
+          fill="none"
+          stroke="#555"
+          strokeWidth={1}
+          strokeDasharray="4 2"
+        />
+        <text x={ox + bw / 2} y={oy - 2} textAnchor="middle" fontSize={9} fill="#888">
+          {bedX} x {bedY} mm
+        </text>
+
+        {/* Wing section example (blue) */}
+        <rect
+          x={ox + 4}
+          y={oy + 4}
+          width={Math.min(wingSecW, bw - 8)}
+          height={Math.min(wingSecLen, bh - 8)}
+          fill="#4a9eff33"
+          stroke="#4a9eff"
+          strokeWidth={1}
+          rx={2}
+        />
+        <text
+          x={ox + 4 + Math.min(wingSecW, bw - 8) / 2}
+          y={oy + 4 + Math.min(wingSecLen, bh - 8) / 2 + 3}
+          textAnchor="middle"
+          fontSize={8}
+          fill="#4a9eff"
+        >
+          Wing ({wingSections}x2)
+        </text>
+
+        {/* Fuselage section example (gray) */}
+        <rect
+          x={ox + Math.min(wingSecW, bw - 8) + 12}
+          y={oy + 4}
+          width={Math.min(fuseSecLen, bw - Math.min(wingSecW, bw - 8) - 20)}
+          height={Math.min(fuseSecW, bh - 8)}
+          fill="#8b8b8b33"
+          stroke="#8b8b8b"
+          strokeWidth={1}
+          rx={2}
+        />
+        <text
+          x={ox + Math.min(wingSecW, bw - 8) + 12 + Math.min(fuseSecLen, bw - Math.min(wingSecW, bw - 8) - 20) / 2}
+          y={oy + 4 + Math.min(fuseSecW, bh - 8) / 2 + 3}
+          textAnchor="middle"
+          fontSize={8}
+          fill="#8b8b8b"
+        >
+          Fuse ({fuseSections})
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -77,6 +185,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
 
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportSuccess, setExportSuccess] = useState(false);
 
   const { structural, print } = groupWarningsByCategory(warnings);
 
@@ -171,6 +280,16 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
 
   // ── Export handler ────────────────────────────────────────────────────
 
+  // Auto-close after success
+  useEffect(() => {
+    if (!exportSuccess) return;
+    const timer = setTimeout(() => {
+      setExportSuccess(false);
+      onOpenChange(false);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [exportSuccess, onOpenChange]);
+
   const handleExport = useCallback(async () => {
     setIsExporting(true);
     setExportError(null);
@@ -198,14 +317,14 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      onOpenChange(false);
+      setExportSuccess(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Export failed';
       setExportError(msg);
     } finally {
       setIsExporting(false);
     }
-  }, [design, onOpenChange]);
+  }, [design]);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -275,6 +394,15 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
             border border-zinc-700/50 rounded cursor-default">
             Estimated Parts: {estimatedParts} pieces
           </div>
+
+          {/* Bed visualization */}
+          <BedVisualization
+            bedX={design.printBedX}
+            bedY={design.printBedY}
+            wingSpan={design.wingSpan}
+            fuselageLength={design.fuselageLength}
+            wingChord={design.wingChord}
+          />
 
           {/* ── Sectioning ───────────────────────────────────────────── */}
           <div className="border-t border-zinc-700/50 my-3" />
@@ -412,6 +540,14 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
             </>
           )}
 
+          {/* ── Export Success ──────────────────────────────────────────── */}
+          {exportSuccess && (
+            <div className="mt-3 px-3 py-2 text-xs text-green-200 bg-green-900/40
+              border border-green-700/50 rounded">
+              Export complete! Download started. ({estimatedParts} parts)
+            </div>
+          )}
+
           {/* ── Export Error ───────────────────────────────────────────── */}
           {exportError && (
             <div className="mt-3 px-3 py-2 text-xs text-red-200 bg-red-900/40
@@ -430,35 +566,37 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
                   focus:outline-none focus:ring-1 focus:ring-zinc-600
                   disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Cancel
+                {exportSuccess ? 'Done' : 'Cancel'}
               </button>
             </Dialog.Close>
 
-            <button
-              onClick={handleExport}
-              disabled={isExporting}
-              className="px-4 py-1.5 text-xs font-medium text-zinc-100 bg-blue-600
-                rounded hover:bg-blue-500 focus:outline-none focus:ring-2
-                focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900
-                disabled:opacity-50 disabled:cursor-not-allowed
-                inline-flex items-center gap-1.5"
-            >
-              {isExporting ? (
-                <>
-                  <span className="generating-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                  Exporting...
-                </>
-              ) : (
-                <>
-                  Export ZIP
-                  {warnings.length > 0 && (
-                    <span className="text-[10px] text-blue-200">
-                      ({warnings.length} warnings)
-                    </span>
-                  )}
-                </>
-              )}
-            </button>
+            {!exportSuccess && (
+              <button
+                onClick={handleExport}
+                disabled={isExporting}
+                className="px-4 py-1.5 text-xs font-medium text-zinc-100 bg-blue-600
+                  rounded hover:bg-blue-500 focus:outline-none focus:ring-2
+                  focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                  inline-flex items-center gap-1.5"
+              >
+                {isExporting ? (
+                  <>
+                    <span className="generating-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    Export ZIP
+                    {warnings.length > 0 && (
+                      <span className="text-[10px] text-blue-200">
+                        ({warnings.length} warnings)
+                      </span>
+                    )}
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </Dialog.Content>
       </Dialog.Portal>

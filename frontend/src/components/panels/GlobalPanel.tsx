@@ -3,7 +3,8 @@
 // Issue #25
 // ============================================================================
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
+import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { useDesignStore } from '../../store/designStore';
 import { PRESET_DESCRIPTIONS } from '../../lib/presets';
 import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
@@ -62,17 +63,30 @@ export function GlobalPanel(): React.JSX.Element {
   const setParam = useDesignStore((s) => s.setParam);
   const loadPreset = useDesignStore((s) => s.loadPreset);
 
-  // ── Preset ──────────────────────────────────────────────────────────
+  // ── Preset (with confirmation dialog) ──────────────────────────────
+
+  const [pendingPreset, setPendingPreset] = useState<Exclude<PresetName, 'Custom'> | null>(null);
 
   const handlePresetChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const value = e.target.value as PresetName;
       if (value !== 'Custom') {
-        loadPreset(value);
+        setPendingPreset(value as Exclude<PresetName, 'Custom'>);
       }
     },
-    [loadPreset],
+    [],
   );
+
+  const confirmPreset = useCallback(() => {
+    if (pendingPreset) {
+      loadPreset(pendingPreset);
+      setPendingPreset(null);
+    }
+  }, [pendingPreset, loadPreset]);
+
+  const cancelPreset = useCallback(() => {
+    setPendingPreset(null);
+  }, []);
 
   // ── Param Setters (dropdowns — immediate source) ────────────────────
 
@@ -163,6 +177,40 @@ export function GlobalPanel(): React.JSX.Element {
             {PRESET_DESCRIPTIONS[activePreset]}
           </p>
         )}
+
+        {/* Preset confirmation dialog */}
+        <AlertDialog.Root open={pendingPreset !== null} onOpenChange={(open) => { if (!open) cancelPreset(); }}>
+          <AlertDialog.Portal>
+            <AlertDialog.Overlay className="fixed inset-0 bg-black/60 z-50" />
+            <AlertDialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl z-50 p-5">
+              <AlertDialog.Title className="text-sm font-semibold text-zinc-200 mb-2">
+                Load Preset
+              </AlertDialog.Title>
+              <AlertDialog.Description className="text-xs text-zinc-400 mb-4">
+                Load <span className="text-zinc-200 font-medium">{pendingPreset}</span> preset?
+                This will replace all parameters.
+              </AlertDialog.Description>
+              <div className="flex justify-end gap-2">
+                <AlertDialog.Cancel asChild>
+                  <button
+                    className="px-3 py-1.5 text-xs text-zinc-400 bg-zinc-800 border border-zinc-700 rounded hover:bg-zinc-700 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+                    onClick={cancelPreset}
+                  >
+                    Cancel
+                  </button>
+                </AlertDialog.Cancel>
+                <AlertDialog.Action asChild>
+                  <button
+                    className="px-3 py-1.5 text-xs font-medium text-zinc-100 bg-blue-600 rounded hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    onClick={confirmPreset}
+                  >
+                    Apply
+                  </button>
+                </AlertDialog.Action>
+              </div>
+            </AlertDialog.Content>
+          </AlertDialog.Portal>
+        </AlertDialog.Root>
       </div>
 
       {/* ── Separator ───────────────────────────────────────────────── */}
