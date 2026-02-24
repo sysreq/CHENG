@@ -248,11 +248,15 @@ def build_dxf_zip(
                 dxf_tmp.close()
 
                 try:
-                    # Create a cross-section at the station
+                    # Create a true 2D cross-section using CadQuery's .section()
+                    # Produces clean planar wires for laser cutting, unlike
+                    # thin-box intersection which creates 3D slivers with double lines.
                     if axis == "X":
-                        section_wp = solid.section(cq.Workplane("YZ").workplane(offset=station_pos))
+                        wp = cq.Workplane("YZ", origin=(station_pos, 0, 0))
                     else:
-                        section_wp = solid.section(cq.Workplane("XZ").workplane(offset=station_pos))
+                        wp = cq.Workplane("XZ", origin=(0, station_pos, 0))
+                    wp = wp.add(solid.val())
+                    section_wp = wp.section()
 
                     cq.exporters.export(section_wp, str(dxf_tmp_path), "DXF")
                     dxf_bytes = dxf_tmp_path.read_bytes()

@@ -264,7 +264,7 @@ class TestExport:
         """Invalid export format should return 422."""
         resp = client.post("/api/export", json={
             "design": AircraftDesign().model_dump(),
-            "format": "dxf",  # Not supported in MVP
+            "format": "obj",  # Not a supported format
         })
         assert resp.status_code == 422
 

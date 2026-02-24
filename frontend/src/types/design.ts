@@ -223,3 +223,25 @@ export interface ExportRequest {
   design: AircraftDesign;
   format: 'stl';
 }
+
+/** Metadata for a single sectioned part in the export preview. */
+export interface ExportPreviewPart {
+  filename: string;
+  component: string;
+  side: string;
+  sectionNum: number;
+  totalSections: number;
+  dimensionsMm: [number, number, number];
+  printOrientation: string;
+  assemblyOrder: number;
+  fitsBed: boolean;
+}
+
+/** Response from POST /api/export/preview. */
+export interface ExportPreviewResponse {
+  parts: ExportPreviewPart[];
+  totalParts: number;
+  bedDimensionsMm: [number, number, number];
+  partsThatFit: number;
+  partsThatExceed: number;
+}
