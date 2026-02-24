@@ -34,7 +34,8 @@ Containerized web app for designing 3D-printable RC aircraft. Users adjust param
 - **Phase 0 (Scaffold):** Complete — project structure, models, types, stores, presets
 - **Phase 1 (Parallel):** Complete — 4 tracks merged (Backend API, Geometry Engine, Frontend Core, Frontend Panels)
 - **Phase 2 (Integration):** Complete — WebSocket, generate, export routes wired. 166 tests passing.
-- **Phase 3 (Polish):** Complete — 44 issues fixed (#39-#82). 228 backend + 42 frontend + 7 E2E tests.
+- **Phase 3 (Polish):** Complete — issues #39-#82 fixed. 228 backend + 42 frontend + 7 E2E tests.
+- **Phase 4 (Bugfix):** Complete — issues #83-#115 fixed. Backend/geometry fixes, frontend UX polish, responsive layout.
 - **App is fully functional:** Geometry, preview, export, validation, Docker all working
 
 ## Dev Scripts
