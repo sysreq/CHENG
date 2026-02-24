@@ -1,11 +1,16 @@
 // ============================================================================
 // CHENG — 3D Dimension Annotations (inside R3F Canvas)
 // Contextual: annotations change based on selectedComponent (#134)
+// Direct-edit: click dimension labels to edit values inline (#135)
 // ============================================================================
 
-import { useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Html, Line } from '@react-three/drei';
 import { useDesignStore } from '@/store/designStore';
+import type { AircraftDesign } from '@/types/design';
+
+/** Extract only numeric keys from AircraftDesign for type-safe editing. */
+type NumericDesignKey = { [K in keyof AircraftDesign]: AircraftDesign[K] extends number ? K : never }[keyof AircraftDesign];
 
 const LABEL_STYLE: React.CSSProperties = {
   fontSize: 10,
@@ -22,6 +27,149 @@ const CONTEXT_LABEL_STYLE: React.CSSProperties = {
   ...LABEL_STYLE,
   color: '#FFD60A',
 };
+
+// ---------------------------------------------------------------------------
+// EditableLabel — click a dimension label to inline-edit its value (#135)
+// ---------------------------------------------------------------------------
+
+interface EditableLabelProps {
+  /** Display text label prefix (e.g. "Span:", "Root:") */
+  label: string;
+  /** Current numeric value */
+  value: number;
+  /** Unit suffix (e.g. "mm", "deg") */
+  unit: string;
+  /** Design parameter key to update on commit (must be numeric) */
+  paramKey: NumericDesignKey;
+  /** Whether this label uses context (yellow) styling */
+  contextual?: boolean;
+  /** 3D position for the Html overlay */
+  position: [number, number, number];
+  /** Whether the value is read-only (computed, not directly editable) */
+  readOnly?: boolean;
+}
+
+function EditableLabel({
+  label,
+  value,
+  unit,
+  paramKey,
+  contextual = false,
+  position,
+  readOnly = false,
+}: EditableLabelProps) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const setParam = useDesignStore((s) => s.setParam);
+
+  const displayText = label ? `${label} ${value} ${unit}` : `${value} ${unit}`;
+
+  const handleClick = useCallback(() => {
+    if (readOnly) return;
+    setEditValue(String(value));
+    setEditing(true);
+  }, [readOnly, value]);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const handleCommit = useCallback(() => {
+    const parsed = parseFloat(editValue);
+    if (!isNaN(parsed) && parsed !== value) {
+      setParam(paramKey, parsed as AircraftDesign[typeof paramKey]);
+    }
+    setEditing(false);
+  }, [editValue, value, paramKey, setParam]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        // Let blur handle the commit
+        inputRef.current?.blur();
+      } else if (e.key === 'Escape') {
+        // Reset value before closing so blur won't commit stale edit
+        setEditValue(String(value));
+        setEditing(false);
+      }
+      // Stop propagation so keyboard shortcuts don't fire
+      e.stopPropagation();
+    },
+    [value],
+  );
+
+  const baseStyle = contextual ? CONTEXT_LABEL_STYLE : LABEL_STYLE;
+
+  if (editing) {
+    return (
+      <Html position={position} center>
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 2 }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+          onWheel={(e) => e.stopPropagation()}
+        >
+          {label && (
+            <span style={{ ...baseStyle, pointerEvents: 'none' }}>{label}</span>
+          )}
+          <input
+            ref={inputRef}
+            type="number"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleCommit}
+            aria-label={`Edit ${label || paramKey}`}
+            style={{
+              width: 60,
+              fontSize: 10,
+              fontFamily: 'monospace',
+              color: '#fff',
+              backgroundColor: 'rgba(30, 30, 34, 0.95)',
+              border: '1px solid #FFD60A',
+              borderRadius: 2,
+              padding: '1px 4px',
+              outline: 'none',
+              textAlign: 'right',
+            }}
+          />
+          <span style={{ ...baseStyle, pointerEvents: 'none' }}>{unit}</span>
+        </div>
+      </Html>
+    );
+  }
+
+  return (
+    <Html position={position} center>
+      <span
+        style={{
+          ...baseStyle,
+          pointerEvents: readOnly ? 'none' : 'auto',
+          cursor: readOnly ? 'default' : 'pointer',
+          borderBottom: readOnly ? 'none' : '1px dashed currentColor',
+          paddingBottom: readOnly ? 0 : 1,
+        }}
+        onClick={handleClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') handleClick();
+        }}
+        role={readOnly ? undefined : 'button'}
+        tabIndex={readOnly ? undefined : 0}
+        title={readOnly ? undefined : `Click to edit ${paramKey}`}
+      >
+        {displayText}
+      </span>
+    </Html>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main Component
+// ---------------------------------------------------------------------------
 
 /**
  * 3D dimension annotations rendered inside the R3F canvas.
@@ -69,17 +217,25 @@ function GlobalDimensions() {
       <Line points={[[0, -halfSpan, 0], [0, halfSpan, 0]]} color={LINE_COLOR} lineWidth={1} />
       <Line points={[[0, -halfSpan, -10], [0, -halfSpan, 10]]} color={LINE_COLOR} lineWidth={1} />
       <Line points={[[0, halfSpan, -10], [0, halfSpan, 10]]} color={LINE_COLOR} lineWidth={1} />
-      <Html position={[0, 0, 15]} center>
-        <span style={LABEL_STYLE}>{wingSpan} mm</span>
-      </Html>
+      <EditableLabel
+        label=""
+        value={wingSpan}
+        unit="mm"
+        paramKey="wingSpan"
+        position={[0, 0, 15]}
+      />
 
       {/* Fuselage length line */}
       <Line points={[[0, spanY, 0], [fuselageLength, spanY, 0]]} color={LINE_COLOR} lineWidth={1} />
       <Line points={[[0, spanY - 10, 0], [0, spanY + 10, 0]]} color={LINE_COLOR} lineWidth={1} />
       <Line points={[[fuselageLength, spanY - 10, 0], [fuselageLength, spanY + 10, 0]]} color={LINE_COLOR} lineWidth={1} />
-      <Html position={[fuselageLength / 2, spanY + 15, 0]} center>
-        <span style={LABEL_STYLE}>{fuselageLength} mm</span>
-      </Html>
+      <EditableLabel
+        label=""
+        value={fuselageLength}
+        unit="mm"
+        paramKey="fuselageLength"
+        position={[fuselageLength / 2, spanY + 15, 0]}
+      />
 
       {wingSweep > 0 && <SweepArc sweep={wingSweep} />}
     </>
@@ -104,21 +260,37 @@ function WingDimensions() {
       <Line points={[[0, -halfSpan, 0], [0, halfSpan, 0]]} color={CONTEXT_LINE_COLOR} lineWidth={1.5} />
       <Line points={[[0, -halfSpan, -10], [0, -halfSpan, 10]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
       <Line points={[[0, halfSpan, -10], [0, halfSpan, 10]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
-      <Html position={[0, 0, 18]} center>
-        <span style={CONTEXT_LABEL_STYLE}>Span: {wingSpan} mm</span>
-      </Html>
+      <EditableLabel
+        label="Span:"
+        value={wingSpan}
+        unit="mm"
+        paramKey="wingSpan"
+        contextual
+        position={[0, 0, 18]}
+      />
 
       {/* Root chord at center */}
       <Line points={[[0, 0, 0], [wingChord, 0, 0]]} color={CONTEXT_LINE_COLOR} lineWidth={1.5} />
-      <Html position={[wingChord / 2, 0, -15]} center>
-        <span style={CONTEXT_LABEL_STYLE}>Root: {wingChord} mm</span>
-      </Html>
+      <EditableLabel
+        label="Root:"
+        value={wingChord}
+        unit="mm"
+        paramKey="wingChord"
+        contextual
+        position={[wingChord / 2, 0, -15]}
+      />
 
-      {/* Tip chord at wingtip */}
+      {/* Tip chord at wingtip (read-only — derived from chord * ratio) */}
       <Line points={[[0, halfSpan, 0], [tipChord, halfSpan, 0]]} color={CONTEXT_LINE_COLOR} lineWidth={1.5} />
-      <Html position={[tipChord / 2, halfSpan, -15]} center>
-        <span style={CONTEXT_LABEL_STYLE}>Tip: {Math.round(tipChord)} mm</span>
-      </Html>
+      <EditableLabel
+        label="Tip:"
+        value={Math.round(tipChord)}
+        unit="mm"
+        paramKey="wingChord"
+        contextual
+        readOnly
+        position={[tipChord / 2, halfSpan, -15]}
+      />
     </>
   );
 }
@@ -136,7 +308,6 @@ function TailDimensions() {
   return <ConventionalTailDimensions />;
 }
 
-/** V-Tail specific dimensions — isolated subscriptions. */
 function VTailDimensions() {
   const vTailSpan = useDesignStore((s) => s.design.vTailSpan);
   const vTailChord = useDesignStore((s) => s.design.vTailChord);
@@ -148,19 +319,28 @@ function VTailDimensions() {
       <Line points={[[0, -halfVSpan, 0], [0, halfVSpan, 0]]} color={CONTEXT_LINE_COLOR} lineWidth={1.5} />
       <Line points={[[0, -halfVSpan, -8], [0, -halfVSpan, 8]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
       <Line points={[[0, halfVSpan, -8], [0, halfVSpan, 8]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
-      <Html position={[0, 0, 15]} center>
-        <span style={CONTEXT_LABEL_STYLE}>V-Span: {vTailSpan} mm</span>
-      </Html>
+      <EditableLabel
+        label="V-Span:"
+        value={vTailSpan}
+        unit="mm"
+        paramKey="vTailSpan"
+        contextual
+        position={[0, 0, 15]}
+      />
 
       <Line points={[[-vTailChord, 0, 0], [0, 0, 0]]} color={CONTEXT_LINE_COLOR} lineWidth={1.5} />
-      <Html position={[-vTailChord / 2, 0, -12]} center>
-        <span style={CONTEXT_LABEL_STYLE}>Chord: {vTailChord} mm</span>
-      </Html>
+      <EditableLabel
+        label="Chord:"
+        value={vTailChord}
+        unit="mm"
+        paramKey="vTailChord"
+        contextual
+        position={[-vTailChord / 2, 0, -12]}
+      />
     </group>
   );
 }
 
-/** Conventional / T-Tail / Cruciform tail dimensions — isolated subscriptions. */
 function ConventionalTailDimensions() {
   const hStabSpan = useDesignStore((s) => s.design.hStabSpan);
   const hStabChord = useDesignStore((s) => s.design.hStabChord);
@@ -173,19 +353,34 @@ function ConventionalTailDimensions() {
       <Line points={[[0, -halfHSpan, 0], [0, halfHSpan, 0]]} color={CONTEXT_LINE_COLOR} lineWidth={1.5} />
       <Line points={[[0, -halfHSpan, -8], [0, -halfHSpan, 8]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
       <Line points={[[0, halfHSpan, -8], [0, halfHSpan, 8]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
-      <Html position={[0, 0, 15]} center>
-        <span style={CONTEXT_LABEL_STYLE}>H-Span: {hStabSpan} mm</span>
-      </Html>
+      <EditableLabel
+        label="H-Span:"
+        value={hStabSpan}
+        unit="mm"
+        paramKey="hStabSpan"
+        contextual
+        position={[0, 0, 15]}
+      />
 
       <Line points={[[-hStabChord, 0, 0], [0, 0, 0]]} color={CONTEXT_LINE_COLOR} lineWidth={1.5} />
-      <Html position={[-hStabChord / 2, 0, -12]} center>
-        <span style={CONTEXT_LABEL_STYLE}>Chord: {hStabChord} mm</span>
-      </Html>
+      <EditableLabel
+        label="Chord:"
+        value={hStabChord}
+        unit="mm"
+        paramKey="hStabChord"
+        contextual
+        position={[-hStabChord / 2, 0, -12]}
+      />
 
       <Line points={[[0, 0, 0], [0, 0, vStabHeight]]} color={CONTEXT_LINE_COLOR} lineWidth={1.5} />
-      <Html position={[15, 0, vStabHeight / 2]} center>
-        <span style={CONTEXT_LABEL_STYLE}>V-Height: {vStabHeight} mm</span>
-      </Html>
+      <EditableLabel
+        label="V-Height:"
+        value={vStabHeight}
+        unit="mm"
+        paramKey="vStabHeight"
+        contextual
+        position={[15, 0, vStabHeight / 2]}
+      />
     </group>
   );
 }
@@ -208,18 +403,27 @@ function FuselageDimensions() {
       <Line points={[[0, 0, -offsetZ], [fuselageLength, 0, -offsetZ]]} color={CONTEXT_LINE_COLOR} lineWidth={1.5} />
       <Line points={[[0, 0, -offsetZ - 8], [0, 0, -offsetZ + 8]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
       <Line points={[[fuselageLength, 0, -offsetZ - 8], [fuselageLength, 0, -offsetZ + 8]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
-      <Html position={[fuselageLength / 2, 0, -offsetZ - 15]} center>
-        <span style={CONTEXT_LABEL_STYLE}>Total: {fuselageLength} mm</span>
-      </Html>
+      <EditableLabel
+        label="Total:"
+        value={fuselageLength}
+        unit="mm"
+        paramKey="fuselageLength"
+        contextual
+        position={[fuselageLength / 2, 0, -offsetZ - 15]}
+      />
 
-      {/* Section markers */}
       {/* Nose section */}
       <Line points={[[0, 0, offsetZ], [fuselageNoseLength, 0, offsetZ]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
       <Line points={[[0, 0, offsetZ - 6], [0, 0, offsetZ + 6]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
       <Line points={[[fuselageNoseLength, 0, offsetZ - 6], [fuselageNoseLength, 0, offsetZ + 6]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
-      <Html position={[fuselageNoseLength / 2, 0, offsetZ + 12]} center>
-        <span style={CONTEXT_LABEL_STYLE}>Nose: {fuselageNoseLength} mm</span>
-      </Html>
+      <EditableLabel
+        label="Nose:"
+        value={fuselageNoseLength}
+        unit="mm"
+        paramKey="fuselageNoseLength"
+        contextual
+        position={[fuselageNoseLength / 2, 0, offsetZ + 12]}
+      />
 
       {/* Cabin section */}
       <Line
@@ -235,9 +439,14 @@ function FuselageDimensions() {
         color={CONTEXT_LINE_COLOR}
         lineWidth={1}
       />
-      <Html position={[fuselageNoseLength + fuselageCabinLength / 2, 0, offsetZ + 12]} center>
-        <span style={CONTEXT_LABEL_STYLE}>Cabin: {fuselageCabinLength} mm</span>
-      </Html>
+      <EditableLabel
+        label="Cabin:"
+        value={fuselageCabinLength}
+        unit="mm"
+        paramKey="fuselageCabinLength"
+        contextual
+        position={[fuselageNoseLength + fuselageCabinLength / 2, 0, offsetZ + 12]}
+      />
 
       {/* Tail section */}
       <Line
@@ -256,9 +465,14 @@ function FuselageDimensions() {
         color={CONTEXT_LINE_COLOR}
         lineWidth={1}
       />
-      <Html position={[fuselageNoseLength + fuselageCabinLength + fuselageTailLength / 2, 0, offsetZ + 12]} center>
-        <span style={CONTEXT_LABEL_STYLE}>Tail: {fuselageTailLength} mm</span>
-      </Html>
+      <EditableLabel
+        label="Tail:"
+        value={fuselageTailLength}
+        unit="mm"
+        paramKey="fuselageTailLength"
+        contextual
+        position={[fuselageNoseLength + fuselageCabinLength + fuselageTailLength / 2, 0, offsetZ + 12]}
+      />
     </>
   );
 }
@@ -288,9 +502,13 @@ function SweepArc({ sweep }: { sweep: number }) {
   return (
     <group position={[wingX, 0, 0]}>
       <Line points={arcPoints} color={LINE_COLOR} lineWidth={1} />
-      <Html position={[arcRadius * 0.7, arcRadius * 0.7, 0]} center>
-        <span style={LABEL_STYLE}>{sweep}deg</span>
-      </Html>
+      <EditableLabel
+        label=""
+        value={sweep}
+        unit="deg"
+        paramKey="wingSweep"
+        position={[arcRadius * 0.7, arcRadius * 0.7, 0]}
+      />
     </group>
   );
 }
