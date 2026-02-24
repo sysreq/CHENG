@@ -244,6 +244,44 @@ class TestStepExport:
         finally:
             package.EXPORT_TMP_DIR = original_tmp
 
+    def test_step_geometric_bounds_integrity(self, tmp_path: Path) -> None:
+        """Exported STEP files should have valid ISO headers and match original geometric bounds."""
+        from backend.export import package
+        from backend.models import AircraftDesign
+        import cadquery as cq
+
+        original_tmp = package.EXPORT_TMP_DIR
+        package.EXPORT_TMP_DIR = tmp_path
+
+        try:
+            # Create a box of known dimensions
+            components = {"box": _make_box(120, 80, 40)}
+            design = AircraftDesign(id="test-step-bounds", name="StepBounds")
+            zip_path = package.build_step_zip(components, design)
+
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                # Extract step file to temporary path
+                step_data = zf.read("box.step")
+                
+                # Verify ISO-10303 header
+                assert b"ISO-10303" in step_data[:1024]
+                
+                # Write to disk to read with cadquery
+                step_file_path = tmp_path / "box.step"
+                step_file_path.write_bytes(step_data)
+                
+                # Import STEP and check bounds
+                imported_shape = cq.importers.importStep(str(step_file_path))
+                bb = imported_shape.val().BoundingBox()
+                
+                # Assert geometric bounds match original solid
+                assert abs((bb.xmax - bb.xmin) - 120.0) < 0.1
+                assert abs((bb.ymax - bb.ymin) - 80.0) < 0.1
+                assert abs((bb.zmax - bb.zmin) - 40.0) < 0.1
+
+        finally:
+            package.EXPORT_TMP_DIR = original_tmp
+
 
 # ===================================================================
 # #117: DXF export tests
