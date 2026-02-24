@@ -327,7 +327,7 @@ function createScalePreset(): AircraftDesign {
     wingSpan: 1400,
     wingChord: 190,
     wingMountType: 'Low-Wing',
-    fuselageLength: 500,
+    fuselageLength: 1100,
     tailType: 'Conventional',
 
     // Wing
@@ -339,21 +339,21 @@ function createScalePreset(): AircraftDesign {
     wingIncidence: 2.0,
     wingTwist: -1.5,
 
-    // Tail (Conventional)
-    hStabSpan: 450,
-    hStabChord: 120,
+    // Tail (Conventional) — scale-like proportions with proper tail arm
+    hStabSpan: 380,
+    hStabChord: 100,
     hStabIncidence: -1.5,
-    vStabHeight: 140,
+    vStabHeight: 160,
     vStabRootChord: 130,
-    tailArm: 280,
+    tailArm: 650,
 
     // V-tail defaults
     ...VTAIL_DEFAULTS,
 
-    // Fuselage sections (sum = 500 = fuselageLength)
-    fuselageNoseLength: 125,
-    fuselageCabinLength: 250,
-    fuselageTailLength: 125,
+    // Fuselage sections (sum = 1100 = fuselageLength)
+    fuselageNoseLength: 275,
+    fuselageCabinLength: 440,
+    fuselageTailLength: 385,
 
     // Fuselage wall
     wallThickness: 1.5,

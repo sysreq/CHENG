@@ -147,6 +147,9 @@ describe('presets', () => {
     expect(d.tailType).toBe('Conventional');
     expect(d.wingSweep).toBe(8);
     expect(d.wingTipRootRatio).toBe(0.55);
+    // Fuselage length ~78% of wingspan — scale-like proportion
+    expect(d.fuselageLength).toBe(1100);
+    expect(d.tailArm).toBe(650);
   });
 
   it('Scale preset has moderate AR like scale models', () => {
