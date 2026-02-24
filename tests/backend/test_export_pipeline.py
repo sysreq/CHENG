@@ -595,3 +595,73 @@ class TestExportPipelineIntegration:
 
         # Should have multiple parts total (wings will need sectioning)
         assert len(all_parts) >= 5  # fuselage + 2 wings (each sectioned) + tail parts
+
+    def test_exported_stl_geometric_bounds(self, tmp_path: Path) -> None:
+        """Exported STL files should have headers, correct triangle counts, and valid geometric bounds."""
+        from backend.export.section import SectionPart
+        from backend.export import package
+        from backend.models import AircraftDesign
+
+        original_tmp = package.EXPORT_TMP_DIR
+        package.EXPORT_TMP_DIR = tmp_path
+
+        try:
+            solid = _make_box(100, 100, 50)
+            sections = [
+                SectionPart(
+                    solid=solid,
+                    filename="box_1of1.stl",
+                    component="box",
+                    side="center",
+                    section_num=1,
+                    total_sections=1,
+                    dimensions_mm=(100.0, 100.0, 50.0),
+                    print_orientation="flat",
+                    assembly_order=1,
+                ),
+            ]
+
+            design = AircraftDesign(id="test-zip-bounds", name="BoundsTest")
+            zip_path = package.build_zip(sections, design)
+
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                stl_data = zf.read("box_1of1.stl")
+                
+                # Check header
+                assert stl_data[:5] == b"CHENG"
+                
+                # Check triangle count and file size
+                num_triangles = struct.unpack_from("<I", stl_data, 80)[0]
+                expected_size = 84 + 50 * num_triangles
+                assert len(stl_data) == expected_size
+                
+                # Compute bounds manually from binary STL
+                min_x, min_y, min_z = float('inf'), float('inf'), float('inf')
+                max_x, max_y, max_z = float('-inf'), float('-inf'), float('-inf')
+                
+                offset = 84
+                for _ in range(num_triangles):
+                    offset += 12 # Skip normal
+                    for _ in range(3): # 3 vertices
+                        x, y, z = struct.unpack_from("<fff", stl_data, offset)
+                        min_x = min(min_x, x)
+                        max_x = max(max_x, x)
+                        min_y = min(min_y, y)
+                        max_y = max(max_y, y)
+                        min_z = min(min_z, z)
+                        max_z = max(max_z, z)
+                        offset += 12
+                    offset += 2 # Skip attribute byte count
+                
+                dx = max_x - min_x
+                dy = max_y - min_y
+                dz = max_z - min_z
+                
+                # Assert geometric bounds match original solid
+                assert abs(dx - 100.0) < 0.1
+                assert abs(dy - 100.0) < 0.1
+                assert abs(dz - 50.0) < 0.1
+                
+        finally:
+            package.EXPORT_TMP_DIR = original_tmp
+
