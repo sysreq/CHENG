@@ -39,7 +39,6 @@ const VTAIL_DEFAULTS = {
 // Preset Factory Functions
 // ---------------------------------------------------------------------------
 
-let counter = 0;
 function generateId(): string {
   return crypto.randomUUID();
 }

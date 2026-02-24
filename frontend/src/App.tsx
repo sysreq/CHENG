@@ -1,11 +1,12 @@
+import { useState } from 'react';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useDesignSync } from '@/hooks/useDesignSync';
-import Toolbar from '@/components/Toolbar';
+import { Toolbar } from '@/components/Toolbar';
 import Scene from '@/components/Viewport/Scene';
-import GlobalPanel from '@/components/panels/GlobalPanel';
-import ComponentPanel from '@/components/panels/ComponentPanel';
+import { GlobalPanel } from '@/components/panels/GlobalPanel';
+import { ComponentPanel } from '@/components/panels/ComponentPanel';
 import ConnectionStatus from '@/components/ConnectionStatus';
-import ExportDialog from '@/components/ExportDialog';
+import { ExportDialog } from '@/components/ExportDialog';
 
 /**
  * Root application layout.
@@ -16,8 +17,10 @@ import ExportDialog from '@/components/ExportDialog';
  * - Bottom bar: Toolbar + ConnectionStatus
  */
 export default function App() {
-  const { send, disconnect } = useWebSocket();
+  const { send } = useWebSocket();
   useDesignSync(send);
+
+  const [exportOpen, setExportOpen] = useState(false);
 
   return (
     <div
@@ -55,7 +58,7 @@ export default function App() {
           backgroundColor: 'var(--color-bg-secondary)',
         }}
       >
-        <Toolbar />
+        <Toolbar onOpenExport={() => setExportOpen(true)} />
         <div style={{ position: 'absolute', inset: 0, top: 'var(--toolbar-height)' }}>
           <Scene />
         </div>
@@ -79,7 +82,7 @@ export default function App() {
       </footer>
 
       {/* Modal overlay */}
-      <ExportDialog />
+      <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
     </div>
   );
 }

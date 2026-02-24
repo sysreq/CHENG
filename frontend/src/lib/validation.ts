@@ -2,7 +2,7 @@
 // CHENG — Validation Warning Utilities
 // ============================================================================
 
-import type { ValidationWarning, StructuralWarningId, PrintWarningId } from '../types/design';
+import type { ValidationWarning } from '../types/design';
 
 // ---------------------------------------------------------------------------
 // Warning Severity Colors (Tailwind classes)
@@ -23,7 +23,7 @@ export const WARNING_COLORS = {
 // Warning ID Descriptions
 // ---------------------------------------------------------------------------
 
-const WARNING_DESCRIPTIONS: Record<string, string> = {
+export const WARNING_DESCRIPTIONS: Record<string, string> = {
   V01: 'Wing aspect ratio too high — risk of flutter',
   V02: 'Wing loading exceeds recommendation',
   V03: 'CG position outside safe range',

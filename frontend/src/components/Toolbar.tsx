@@ -3,7 +3,7 @@
 // Issue #25
 // ============================================================================
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useDesignStore } from '../store/designStore';
 import { getWarningCountBadge } from '../lib/validation';

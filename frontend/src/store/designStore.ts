@@ -159,7 +159,7 @@ export const useDesignStore = create<DesignStore>()(
       },
 
       saveDesign: async () => {
-        const { design, designId } = get();
+        const { design } = get();
         const res = await fetch('/api/designs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
