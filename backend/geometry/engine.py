@@ -215,7 +215,7 @@ async def generate_geometry_safe(design: AircraftDesign) -> GenerationResult:
     result = await anyio.to_thread.run_sync(
         lambda: _generate_geometry_blocking(design),
         limiter=_cadquery_limiter,
-        cancellable=True,
+        abandon_on_cancel=True,
     )
     return result
 
