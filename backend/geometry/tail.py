@@ -208,7 +208,7 @@ def _build_h_stab_half(
     # Loft from root to tip using chained workplane offsets
     result = (
         cq.Workplane("XZ")
-        .transformed(offset=(0, 0, z_offset), rotate=(0, -incidence, 0))
+        .transformed(offset=(0, z_offset, 0), rotate=(0, -incidence, 0))
         .ellipse(chord / 2, half_thickness)
         .workplane(offset=y_sign * half_span)
         .ellipse(chord / 2, half_thickness)
@@ -303,7 +303,7 @@ def _build_v_tail_half(
         .transformed(rotate=(0, -incidence, 0))
         .ellipse(chord / 2, half_thickness)
         .workplane(offset=tip_y)
-        .transformed(offset=(0, 0, tip_z))
+        .transformed(offset=(0, tip_z, 0))
         .ellipse(chord / 2, half_thickness)
         .loft(ruled=False)
     )

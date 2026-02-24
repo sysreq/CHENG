@@ -85,12 +85,9 @@ def build_wing(
     tip_chord = root_chord * design.wing_tip_root_ratio
     half_span = design.wing_span / 2.0
 
-    # 3. Sweep and dihedral offsets at the tip
+    # 3. Sweep offset at the tip
     sweep_rad = math.radians(design.wing_sweep)
-    dihedral_rad = math.radians(design.wing_dihedral)
-
     sweep_offset_x = half_span * math.tan(sweep_rad)
-    dihedral_offset_z = half_span * math.tan(dihedral_rad)
 
     # 4. Y direction sign
     y_sign = -1.0 if side == "left" else 1.0
@@ -101,20 +98,31 @@ def build_wing(
         profile, tip_chord, _WING_INCIDENCE_DEG + _WING_TWIST_DEG,
     )
 
-    # 6. Loft: root at Y=0, tip at Y=+/-half_span with sweep+dihedral offsets
+    # 6. Loft: root at Y=0, tip at Y=+/-half_span with sweep offset only
+    #    Dihedral is applied as a rotation after lofting (Bug #65 fix).
     result = (
         cq.Workplane("XZ")
         .spline(root_pts, periodic=False).close()
         .workplane(offset=y_sign * half_span)
-        .transformed(offset=(sweep_offset_x, 0, dihedral_offset_z))
+        .transformed(offset=(sweep_offset_x, 0, 0))
         .spline(tip_pts, periodic=False).close()
         .loft(ruled=False)
     )
 
-    # 7. TE enforcement: thicken trailing edge if needed
+    # 7. Apply dihedral as rotation about the X-axis at root (Y=0, Z=0).
+    #    Positive dihedral = tips up. For the left wing (−Y), rotation
+    #    sense is negated so both tips deflect upward symmetrically.
+    dihedral_deg = design.wing_dihedral
+    if abs(dihedral_deg) > 1e-6:
+        rot_sign = -1.0 if side == "left" else 1.0
+        result = result.rotate(
+            (0, 0, 0), (1, 0, 0), rot_sign * dihedral_deg
+        )
+
+    # 8. TE enforcement: thicken trailing edge if needed
     result = _enforce_te_thickness(cq, result, design.te_min_thickness)
 
-    # 8. Shell if hollow
+    # 9. Shell if hollow
     if design.hollow_parts:
         result = _shell_wing(result, design.wing_skin_thickness)
 
@@ -156,8 +164,8 @@ def _scale_airfoil_2d(
 
         # Rotate about quarter-chord (in XZ plane)
         dx = x - qc
-        x_rot = qc + dx * cos_r - z * sin_r
-        z_rot = dx * sin_r + z * cos_r
+        x_rot = qc + dx * cos_r + z * sin_r
+        z_rot = -(dx * sin_r) + z * cos_r
 
         points.append((x_rot, z_rot))
 
