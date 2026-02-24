@@ -8,6 +8,7 @@ added in 1.0 without modifying calling code.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
@@ -55,7 +56,11 @@ class LocalStorage:
         return json.loads(path.read_text(encoding="utf-8"))
 
     def list_designs(self) -> list[dict]:
-        """Return summaries of all saved designs, newest first."""
+        """Return summaries of all saved designs, newest first.
+
+        Uses os.stat() for timestamps and a partial JSON read to extract
+        only 'id' and 'name' fields without parsing the entire file.
+        """
         designs: list[dict] = []
         for p in sorted(
             self.base_path.glob("*.cheng"),
@@ -63,15 +68,23 @@ class LocalStorage:
             reverse=True,
         ):
             try:
-                data = json.loads(p.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                continue  # skip corrupt files
-            mtime = p.stat().st_mtime
+                stat = os.stat(p)
+                # Read only the first 1 KB to extract id/name without full parse
+                with open(p, "r", encoding="utf-8") as f:
+                    head = f.read(1024)
+                data = json.loads(head if head.rstrip().endswith("}") else head + "}")
+            except (json.JSONDecodeError, OSError, ValueError):
+                # Fallback: full parse for files where partial read fails
+                try:
+                    data = json.loads(p.read_text(encoding="utf-8"))
+                    stat = os.stat(p)
+                except (json.JSONDecodeError, OSError):
+                    continue  # skip corrupt files
             designs.append(
                 {
                     "id": data.get("id", p.stem),
                     "name": data.get("name", "Untitled"),
-                    "modified_at": datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat(),
+                    "modified_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
                 }
             )
         return designs

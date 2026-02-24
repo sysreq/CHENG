@@ -145,8 +145,11 @@ def _cut_wing_saddle(
     cq = cq_mod
 
     root_chord = design.wing_chord
-    # Pocket depth extends slightly into the fuselage on each side
-    pocket_half_y = design.wing_chord * 0.05  # 5% of chord on each side
+    # Pocket depth extends slightly into the fuselage on each side.
+    # Limit depth to less than skin thickness to avoid penetrating the
+    # shell and exposing the hollow interior (#86).
+    skin_t = design.wing_skin_thickness
+    pocket_half_y = min(design.wing_chord * 0.05, skin_t * 0.8)  # never deeper than 80% of skin
     # Pocket height approximates the root airfoil thickness (~12% of chord)
     pocket_height = root_chord * 0.14
 

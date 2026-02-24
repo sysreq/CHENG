@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 _TONGUE_AREA_FRACTION: float = 0.60   # Tongue = 60% of cross-sectional area
 _TONGUE_FILLET_RADIUS_MM: float = 1.0  # Fillet on tongue corners
+_GROOVE_DEPTH_CLEARANCE_MM: float = 0.2  # Extra groove depth for printer tolerance
 
 
 # ---------------------------------------------------------------------------
@@ -106,14 +107,16 @@ def add_tongue_and_groove(
         pass  # Fillet can fail on very small features
 
     # Create groove: a box cut into the -Y face of right.
+    # Groove is slightly deeper than tongue length for printer tolerance clearance (#87).
+    groove_depth = overlap + _GROOVE_DEPTH_CLEARANCE_MM
     bb_r = right.val().BoundingBox()
     cx_r = (bb_r.xmin + bb_r.xmax) / 2.0
     cz_r = (bb_r.zmin + bb_r.zmax) / 2.0
-    groove_center_y = bb_r.ymin + overlap / 2.0
+    groove_center_y = bb_r.ymin + groove_depth / 2.0
     groove = (
         cq.Workplane("XY")
         .transformed(offset=(cx_r, groove_center_y, cz_r))
-        .box(groove_width, overlap, groove_height)
+        .box(groove_width, groove_depth, groove_height)
     )
 
     # Boolean operations: add tongue to left, cut groove from right

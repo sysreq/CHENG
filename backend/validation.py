@@ -11,6 +11,8 @@ Spec reference: docs/mvp_spec.md §9.2 and §9.3.
 
 from __future__ import annotations
 
+import math
+
 from backend.models import AircraftDesign, ValidationWarning
 
 
@@ -121,10 +123,8 @@ def _check_v16(design: AircraftDesign, out: list[ValidationWarning]) -> None:
 def _check_v17(design: AircraftDesign, out: list[ValidationWarning]) -> None:
     """V17: skinThickness % nozzleDiameter > 0.01 — wall not clean multiple of nozzle."""
     remainder = design.wing_skin_thickness % design.nozzle_diameter
-    # Account for floating-point: remainder near nozzle_diameter means ~0
-    if remainder > design.nozzle_diameter - 0.01:
-        remainder = 0.0
-    if remainder > 0.01:
+    # Use math.isclose to handle floating-point precision (e.g. 1.2 % 0.4 = 0.3999...)
+    if not math.isclose(remainder, 0, abs_tol=1e-6) and not math.isclose(remainder, design.nozzle_diameter, abs_tol=1e-6):
         out.append(
             ValidationWarning(
                 id="V17",

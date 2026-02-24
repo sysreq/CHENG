@@ -8,6 +8,7 @@ the path to the temp file.  Caller must delete after streaming.
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import zipfile
 from datetime import datetime, timezone
@@ -21,7 +22,7 @@ from backend.export.section import SectionPart
 # Constants
 # ---------------------------------------------------------------------------
 
-EXPORT_TMP_DIR: Path = Path("/data/tmp")
+EXPORT_TMP_DIR: Path = Path(os.environ.get("CHENG_DATA_DIR", tempfile.gettempdir())) / "tmp"
 
 
 # ---------------------------------------------------------------------------
@@ -64,13 +65,16 @@ def build_zip(sections: list[SectionPart], design: AircraftDesign) -> Path:
     zip_filename = f"cheng_{design.name.replace(' ', '_')}_{design.id[:8] if design.id else 'export'}.zip"
     zip_path = tmp_dir / zip_filename
 
-    # Use a temporary file to avoid partial writes
-    with tempfile.NamedTemporaryFile(
+    # Use a temporary file to avoid partial writes.
+    # Explicitly close before opening with ZipFile to avoid PermissionError
+    # on Windows where open file handles block re-opening (#88).
+    tmp_file = tempfile.NamedTemporaryFile(
         dir=str(tmp_dir),
         suffix=".zip",
         delete=False,
-    ) as tmp_file:
-        tmp_path = Path(tmp_file.name)
+    )
+    tmp_path = Path(tmp_file.name)
+    tmp_file.close()
 
     with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
         # Add manifest

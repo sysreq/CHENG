@@ -115,14 +115,23 @@ def build_wing(
         .loft(ruled=False)
     )
 
-    # 7. Apply dihedral as rotation about the X-axis at root (Y=0, Z=0).
+    # 7. Apply dihedral as rotation about the X-axis at the root face.
     #    Positive dihedral = tips up. For the left wing (−Y), rotation
     #    sense is negated so both tips deflect upward symmetrically.
+    #    Rotate about root face center (not origin) to avoid gapping the
+    #    root face away from the fuselage. The root face Z center is
+    #    approximately at the airfoil's mean camber height.
     dihedral_deg = design.wing_dihedral
     if abs(dihedral_deg) > 1e-6:
         rot_sign = -1.0 if side == "left" else 1.0
+        # Compute root face Z center from airfoil points
+        root_z_vals = [pt[1] for pt in root_pts]  # (x, z) tuples
+        root_z_center = (min(root_z_vals) + max(root_z_vals)) / 2.0
+        root_x_center = root_chord / 2.0
         result = result.rotate(
-            (0, 0, 0), (1, 0, 0), rot_sign * dihedral_deg
+            (root_x_center, 0, root_z_center),
+            (root_x_center + 1, 0, root_z_center),
+            rot_sign * dihedral_deg,
         )
 
     # 8. TE enforcement: thicken trailing edge if needed

@@ -74,6 +74,11 @@ async def preview_websocket(ws: WebSocket) -> None:
     # Cancel scope for in-flight generation (last-write-wins)
     cancel_scope: anyio.CancelScope | None = None
 
+    # Generation counter: incremented on each new request.  After a thread
+    # finishes, we compare its snapshot to the current counter — if it's
+    # stale we discard the result instead of sending it (#90).
+    generation_counter = 0
+
     try:
         while True:
             raw = await ws.receive_text()
@@ -93,6 +98,10 @@ async def preview_websocket(ws: WebSocket) -> None:
             # Cancel any in-flight generation
             if cancel_scope is not None:
                 cancel_scope.cancel()
+
+            # Increment generation counter so in-flight threads know they're stale
+            generation_counter += 1
+            my_generation = generation_counter
 
             # Start new generation in a cancel scope
             cancel_scope = anyio.CancelScope()
@@ -120,6 +129,12 @@ async def preview_websocket(ws: WebSocket) -> None:
                             detail=str(gen_err),
                         )
                         await ws.send_bytes(frame)
+                        continue
+
+                    # Discard stale results: if a newer request arrived while
+                    # we were generating, skip sending this outdated frame.
+                    if my_generation != generation_counter:
+                        logger.debug("Generation %d superseded by %d, discarding", my_generation, generation_counter)
                         continue
 
                     # Build and send response
