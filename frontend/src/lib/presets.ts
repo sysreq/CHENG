@@ -275,8 +275,9 @@ function createFlyingWingPreset(): AircraftDesign {
     fuselageLength: 200,
     tailType: 'Conventional',
 
-    // Wing — high sweep + washout for pitch stability without a tail
-    wingAirfoil: 'NACA-6412',
+    // Wing — high sweep + washout for pitch stability without a meaningful tail
+    // Symmetrical airfoil avoids nose-down pitching moment of cambered profiles
+    wingAirfoil: 'NACA-0012',
     wingSweep: 25,
     wingTipRootRatio: 0.4,
     wingDihedral: 2,
@@ -284,12 +285,14 @@ function createFlyingWingPreset(): AircraftDesign {
     wingIncidence: 3.0,
     wingTwist: -3.0,
 
-    // Tail — minimal (vestigial, flying wing relies on wing for stability)
+    // Tail — minimal vestigial (backend requires tail geometry; flying wing
+    // relies on sweep + washout for pitch stability). Vertical fin sized for
+    // basic yaw damping on a pusher configuration.
     hStabSpan: 100,
     hStabChord: 30,
     hStabIncidence: 0,
-    vStabHeight: 60,
-    vStabRootChord: 50,
+    vStabHeight: 150,
+    vStabRootChord: 80,
     tailArm: 80,
 
     // V-tail defaults

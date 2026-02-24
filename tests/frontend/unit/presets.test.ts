@@ -116,7 +116,7 @@ describe('presets', () => {
     expect(d.wingSweep).toBe(25);
     expect(d.wingTwist).toBe(-3.0); // strong washout for stability
     expect(d.wingIncidence).toBe(3.0);
-    expect(d.wingAirfoil).toBe('NACA-6412');
+    expect(d.wingAirfoil).toBe('NACA-0012'); // symmetrical avoids nose-down pitching moment
     expect(d.fuselagePreset).toBe('Blended-Wing-Body');
     expect(d.motorConfig).toBe('Pusher');
   });
