@@ -1,6 +1,6 @@
 // ============================================================================
-// CHENG — Export Dialog: Print/export settings + validation warnings + ZIP download
-// Issue #28, #59
+// CHENG — Export Dialog: Print/export settings + preview + ZIP download
+// Issue #28, #59, #119
 // ============================================================================
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
@@ -8,7 +8,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { useDesignStore } from '../store/designStore';
 import { fieldHasWarning, formatWarning, groupWarningsByCategory, WARNING_COLORS } from '../lib/validation';
 import { ParamSlider, ParamSelect, ParamToggle, DerivedField } from './ui';
-import type { JointType } from '../types/design';
+import type { JointType, ExportPreviewPart, ExportPreviewResponse } from '../types/design';
 
 // ---------------------------------------------------------------------------
 // Option Constants
@@ -19,6 +19,12 @@ const JOINT_TYPE_OPTIONS: readonly JointType[] = [
   'Dowel-Pin',
   'Flat-with-Alignment-Pins',
 ] as const;
+
+// ---------------------------------------------------------------------------
+// Dialog step type
+// ---------------------------------------------------------------------------
+
+type DialogStep = 'settings' | 'preview';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -66,8 +72,38 @@ function estimatePartCount(
   return parts;
 }
 
+/** Color for a component type in the preview visualization. */
+function componentColor(component: string): { fill: string; stroke: string; text: string } {
+  switch (component) {
+    case 'wing':
+      return { fill: '#4a9eff22', stroke: '#4a9eff', text: '#4a9eff' };
+    case 'fuselage':
+      return { fill: '#8b8b8b22', stroke: '#8b8b8b', text: '#8b8b8b' };
+    case 'h_stab':
+      return { fill: '#22c55e22', stroke: '#22c55e', text: '#22c55e' };
+    case 'v_stab':
+      return { fill: '#a855f722', stroke: '#a855f7', text: '#a855f7' };
+    case 'v_tail':
+      return { fill: '#f59e0b22', stroke: '#f59e0b', text: '#f59e0b' };
+    default:
+      return { fill: '#6b728022', stroke: '#6b7280', text: '#6b7280' };
+  }
+}
+
+/** Human-readable label for a component name. */
+function componentLabel(component: string): string {
+  switch (component) {
+    case 'wing': return 'Wing';
+    case 'fuselage': return 'Fuselage';
+    case 'h_stab': return 'H-Stab';
+    case 'v_stab': return 'V-Stab';
+    case 'v_tail': return 'V-Tail';
+    default: return component;
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Bed Visualization — simple 2D SVG schematic
+// Bed Visualization — simple 2D SVG schematic (settings step)
 // ---------------------------------------------------------------------------
 
 function BedVisualization({
@@ -175,6 +211,213 @@ function BedVisualization({
 }
 
 // ---------------------------------------------------------------------------
+// Part Bed Footprint — SVG showing a single part on the bed
+// ---------------------------------------------------------------------------
+
+function PartBedFootprint({
+  part,
+  bedX,
+  bedY,
+}: {
+  part: ExportPreviewPart;
+  bedX: number;
+  bedY: number;
+}) {
+  const svgW = 120;
+  const svgH = 80;
+  const pad = 6;
+
+  const [dx, dy] = part.dimensionsMm;
+  const maxDim = Math.max(bedX, bedY, dx, dy);
+  const scale = Math.min((svgW - pad * 2) / maxDim, (svgH - pad * 2) / maxDim);
+
+  const bw = bedX * scale;
+  const bh = bedY * scale;
+  const ox = (svgW - bw) / 2;
+  const oy = (svgH - bh) / 2;
+
+  const pw = dx * scale;
+  const ph = dy * scale;
+
+  const colors = componentColor(part.component);
+
+  return (
+    <svg width={svgW} height={svgH} className="shrink-0">
+      {/* Bed outline */}
+      <rect
+        x={ox}
+        y={oy}
+        width={bw}
+        height={bh}
+        fill="none"
+        stroke="#555"
+        strokeWidth={0.5}
+        strokeDasharray="3 1.5"
+      />
+      {/* Part footprint */}
+      <rect
+        x={ox + 2}
+        y={oy + 2}
+        width={Math.min(pw, bw + 10)}
+        height={Math.min(ph, bh + 10)}
+        fill={part.fitsBed ? colors.fill : '#ef444422'}
+        stroke={part.fitsBed ? colors.stroke : '#ef4444'}
+        strokeWidth={1}
+        rx={1}
+      />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Export Preview Panel — shows all sectioned parts
+// ---------------------------------------------------------------------------
+
+function ExportPreviewPanel({
+  preview,
+  onBack,
+  onExport,
+  isExporting,
+}: {
+  preview: ExportPreviewResponse;
+  onBack: () => void;
+  onExport: () => void;
+  isExporting: boolean;
+}) {
+  const [bedX, bedY] = preview.bedDimensionsMm;
+
+  return (
+    <div>
+      {/* Summary */}
+      <div className="mb-3 flex items-center gap-3">
+        <div className="px-2 py-1.5 text-xs text-zinc-300 bg-zinc-800/50
+          border border-zinc-700/50 rounded flex-1">
+          Total Parts: <span className="font-medium text-zinc-100">{preview.totalParts}</span>
+        </div>
+        <div className="px-2 py-1.5 text-xs text-green-300 bg-green-900/30
+          border border-green-700/40 rounded flex-1">
+          Fit: <span className="font-medium text-green-100">{preview.partsThatFit}</span>
+        </div>
+        {preview.partsThatExceed > 0 && (
+          <div className="px-2 py-1.5 text-xs text-red-300 bg-red-900/30
+            border border-red-700/40 rounded flex-1">
+            Oversize: <span className="font-medium text-red-100">{preview.partsThatExceed}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Bed dimensions reminder */}
+      <p className="text-[10px] text-zinc-500 mb-2">
+        Print bed: {bedX} x {bedY} mm
+      </p>
+
+      {/* Parts grid */}
+      <div className="max-h-[45vh] overflow-y-auto space-y-1.5 pr-1">
+        {preview.parts.map((part) => {
+          const [dx, dy, dz] = part.dimensionsMm;
+          const colors = componentColor(part.component);
+
+          return (
+            <div
+              key={part.filename}
+              className={`flex items-center gap-3 px-2.5 py-2 rounded border text-xs ${
+                part.fitsBed
+                  ? 'bg-zinc-800/40 border-zinc-700/50'
+                  : 'bg-red-900/20 border-red-700/40'
+              }`}
+            >
+              {/* Mini bed footprint */}
+              <PartBedFootprint part={part} bedX={bedX} bedY={bedY} />
+
+              {/* Part info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: colors.stroke }}
+                  />
+                  <span className="font-medium text-zinc-200 truncate">
+                    {componentLabel(part.component)}
+                    {part.side !== 'center' ? ` (${part.side})` : ''}
+                  </span>
+                  <span className="text-zinc-500">
+                    {part.sectionNum}/{part.totalSections}
+                  </span>
+                </div>
+                <div className="text-zinc-400">
+                  {dx.toFixed(1)} x {dy.toFixed(1)} x {dz.toFixed(1)} mm
+                </div>
+                <div className="text-zinc-500 text-[10px]">
+                  {part.printOrientation} &middot; #{part.assemblyOrder}
+                </div>
+              </div>
+
+              {/* Fit badge */}
+              <div className="shrink-0">
+                {part.fitsBed ? (
+                  <span className="px-1.5 py-0.5 text-[10px] font-medium text-green-200
+                    bg-green-800/40 border border-green-700/40 rounded">
+                    Fits
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.5 text-[10px] font-medium text-red-200
+                    bg-red-800/40 border border-red-700/40 rounded">
+                    Oversize
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Warning if oversized parts */}
+      {preview.partsThatExceed > 0 && (
+        <div className="mt-3 px-3 py-2 text-xs text-amber-200 bg-amber-900/30
+          border border-amber-700/40 rounded">
+          {preview.partsThatExceed} part{preview.partsThatExceed > 1 ? 's' : ''} exceed
+          the print bed. The auto-sectioner could not split them further.
+          Export will proceed but these parts may not print correctly.
+        </div>
+      )}
+
+      {/* Navigation buttons */}
+      <div className="flex items-center justify-between mt-4 pt-3 border-t border-zinc-700/50">
+        <button
+          onClick={onBack}
+          disabled={isExporting}
+          className="px-4 py-1.5 text-xs text-zinc-300 bg-zinc-800 border
+            border-zinc-700 rounded hover:bg-zinc-700
+            focus:outline-none focus:ring-1 focus:ring-zinc-600
+            disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Back to Settings
+        </button>
+
+        <button
+          onClick={onExport}
+          disabled={isExporting}
+          className="px-4 py-1.5 text-xs font-medium text-zinc-100 bg-blue-600
+            rounded hover:bg-blue-500 focus:outline-none focus:ring-2
+            focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900
+            disabled:opacity-50 disabled:cursor-not-allowed
+            inline-flex items-center gap-1.5"
+        >
+          {isExporting ? (
+            <>
+              <span className="generating-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+              Exporting...
+            </>
+          ) : (
+            'Download ZIP'
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -183,9 +426,12 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
   const warnings = useDesignStore((s) => s.warnings);
   const setParam = useDesignStore((s) => s.setParam);
 
+  const [step, setStep] = useState<DialogStep>('settings');
   const [isExporting, setIsExporting] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState(false);
+  const [previewData, setPreviewData] = useState<ExportPreviewResponse | null>(null);
 
   const { structural, print } = groupWarningsByCategory(warnings);
 
@@ -197,6 +443,16 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
     () => estimatePartCount(design.wingSpan, design.fuselageLength, design.wingChord, design.printBedX, design.printBedY, design.printBedZ),
     [design.wingSpan, design.fuselageLength, design.wingChord, design.printBedX, design.printBedY, design.printBedZ],
   );
+
+  // Reset state when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      setStep('settings');
+      setPreviewData(null);
+      setExportError(null);
+      setExportSuccess(false);
+    }
+  }, [open]);
 
   // ── Number input handlers ──────────────────────────────────────────
 
@@ -278,6 +534,35 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
     [setParam],
   );
 
+  // ── Preview handler ─────────────────────────────────────────────────
+
+  const handlePreview = useCallback(async () => {
+    setIsPreviewing(true);
+    setExportError(null);
+
+    try {
+      const res = await fetch('/api/export/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ design, format: 'stl' }),
+      });
+
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        throw new Error(detail || `Preview failed (${res.status})`);
+      }
+
+      const data = (await res.json()) as ExportPreviewResponse;
+      setPreviewData(data);
+      setStep('preview');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Preview failed';
+      setExportError(msg);
+    } finally {
+      setIsPreviewing(false);
+    }
+  }, [design]);
+
   // ── Export handler ────────────────────────────────────────────────────
 
   // Auto-close after success
@@ -326,278 +611,318 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
     }
   }, [design]);
 
+  const handleBack = useCallback(() => {
+    setStep('settings');
+    setExportError(null);
+  }, []);
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 z-40" />
         <Dialog.Content
           className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
-            w-[480px] max-h-[85vh] overflow-y-auto bg-zinc-900 border border-zinc-700
+            w-[520px] max-h-[85vh] overflow-y-auto bg-zinc-900 border border-zinc-700
             rounded-lg shadow-2xl z-50 p-6"
         >
           <Dialog.Title className="text-sm font-semibold text-zinc-100 mb-1">
-            Export STL
+            {step === 'settings' ? 'Export STL' : 'Export Preview'}
           </Dialog.Title>
           <Dialog.Description className="text-xs text-zinc-500 mb-4">
-            Configure print bed and sectioning settings before exporting.
+            {step === 'settings'
+              ? 'Configure print bed and sectioning settings before exporting.'
+              : 'Review sectioned parts and their print bed fit before downloading.'}
           </Dialog.Description>
 
-          {/* ── Print Bed ────────────────────────────────────────────── */}
-          <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-            Print Bed Size
-          </h4>
-
-          <div className="grid grid-cols-3 gap-3 mb-3">
-            <div>
-              <ParamSlider
-                label="Bed X"
-                unit="mm"
-                value={design.printBedX}
-                min={100}
-                max={500}
-                step={10}
-                onSliderChange={setBedXSlider}
-                onInputChange={setBedXInput}
-                hasWarning={fieldHasWarning(warnings, 'printBedX')}
-              />
-            </div>
-            <div>
-              <ParamSlider
-                label="Bed Y"
-                unit="mm"
-                value={design.printBedY}
-                min={100}
-                max={500}
-                step={10}
-                onSliderChange={setBedYSlider}
-                onInputChange={setBedYInput}
-                hasWarning={fieldHasWarning(warnings, 'printBedY')}
-              />
-            </div>
-            <div>
-              <ParamSlider
-                label="Bed Z"
-                unit="mm"
-                value={design.printBedZ}
-                min={50}
-                max={500}
-                step={10}
-                onSliderChange={setBedZSlider}
-                onInputChange={setBedZInput}
-                hasWarning={fieldHasWarning(warnings, 'printBedZ')}
-              />
-            </div>
-          </div>
-
-          {/* Estimated parts */}
-          <div className="mb-3 px-2 py-1.5 text-xs text-zinc-300 bg-zinc-800/50
-            border border-zinc-700/50 rounded cursor-default">
-            Estimated Parts: {estimatedParts} pieces
-          </div>
-
-          {/* Bed visualization */}
-          <BedVisualization
-            bedX={design.printBedX}
-            bedY={design.printBedY}
-            wingSpan={design.wingSpan}
-            fuselageLength={design.fuselageLength}
-            wingChord={design.wingChord}
-          />
-
-          {/* ── Sectioning ───────────────────────────────────────────── */}
-          <div className="border-t border-zinc-700/50 my-3" />
-          <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-            Sectioning
-          </h4>
-
-          <ParamToggle
-            label="Auto-Section Parts"
-            checked={design.autoSection}
-            onChange={setAutoSection}
-            hasWarning={fieldHasWarning(warnings, 'autoSection')}
-          />
-
-          <ParamSlider
-            label="Section Overlap"
-            unit="mm"
-            value={design.sectionOverlap}
-            min={5}
-            max={30}
-            step={1}
-            onSliderChange={setOverlapSlider}
-            onInputChange={setOverlapInput}
-            hasWarning={fieldHasWarning(warnings, 'sectionOverlap')}
-          />
-
-          <ParamSelect
-            label="Joint Type"
-            value={design.jointType}
-            options={JOINT_TYPE_OPTIONS}
-            onChange={setJointType}
-            hasWarning={fieldHasWarning(warnings, 'jointType')}
-          />
-
-          <ParamSlider
-            label="Joint Tolerance"
-            unit="mm"
-            value={design.jointTolerance}
-            min={0.05}
-            max={0.5}
-            step={0.01}
-            onSliderChange={setToleranceSlider}
-            onInputChange={setToleranceInput}
-            hasWarning={fieldHasWarning(warnings, 'jointTolerance')}
-          />
-
-          {/* ── Print Settings ───────────────────────────────────────── */}
-          <div className="border-t border-zinc-700/50 my-3" />
-          <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-            Print Settings
-          </h4>
-
-          <ParamSlider
-            label="Nozzle Diameter"
-            unit="mm"
-            value={design.nozzleDiameter}
-            min={0.2}
-            max={1.0}
-            step={0.05}
-            onSliderChange={setNozzleSlider}
-            onInputChange={setNozzleInput}
-            hasWarning={fieldHasWarning(warnings, 'nozzleDiameter')}
-          />
-
-          {/* PR08 — Min Feature Thickness (read-only derived) */}
-          <DerivedField
-            label="Min Feature Thickness"
-            value={minFeatureThickness}
-            unit="mm"
-            decimals={2}
-          />
-
-          <ParamToggle
-            label="Hollow Parts"
-            checked={design.hollowParts}
-            onChange={setHollowParts}
-            hasWarning={fieldHasWarning(warnings, 'hollowParts')}
-          />
-
-          <ParamSlider
-            label="TE Min Thickness"
-            unit="mm"
-            value={design.teMinThickness}
-            min={0.4}
-            max={2.0}
-            step={0.1}
-            onSliderChange={setTeMinSlider}
-            onInputChange={setTeMinInput}
-            hasWarning={fieldHasWarning(warnings, 'teMinThickness')}
-          />
-
-          {/* ── Validation Warnings ──────────────────────────────────── */}
-          {warnings.length > 0 && (
+          {/* ── STEP: PREVIEW ─────────────────────────────────────────── */}
+          {step === 'preview' && previewData && (
             <>
-              <div className="border-t border-zinc-700/50 my-3" />
-              <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-                Warnings
-                <span
-                  className="ml-2 px-1.5 py-0.5 text-[9px] font-medium text-amber-100
-                    bg-amber-600 rounded-full"
-                >
-                  {warnings.length}
-                </span>
-              </h4>
+              <ExportPreviewPanel
+                preview={previewData}
+                onBack={handleBack}
+                onExport={handleExport}
+                isExporting={isExporting}
+              />
 
-              {structural.length > 0 && (
-                <div className="mb-2">
-                  <p className="text-[10px] font-medium text-zinc-500 mb-1">Structural</p>
-                  {structural.map((w) => (
-                    <div
-                      key={w.id}
-                      className={`px-2 py-1.5 mb-1 text-[10px] rounded border
-                        ${WARNING_COLORS.warn.bg} ${WARNING_COLORS.warn.border} ${WARNING_COLORS.warn.text}`}
-                    >
-                      {formatWarning(w)}
-                    </div>
-                  ))}
+              {/* Export success */}
+              {exportSuccess && (
+                <div className="mt-3 px-3 py-2 text-xs text-green-200 bg-green-900/40
+                  border border-green-700/50 rounded">
+                  Export complete! Download started.
                 </div>
               )}
 
-              {print.length > 0 && (
-                <div className="mb-2">
-                  <p className="text-[10px] font-medium text-zinc-500 mb-1">Print</p>
-                  {print.map((w) => (
-                    <div
-                      key={w.id}
-                      className={`px-2 py-1.5 mb-1 text-[10px] rounded border
-                        ${WARNING_COLORS.warn.bg} ${WARNING_COLORS.warn.border} ${WARNING_COLORS.warn.text}`}
-                    >
-                      {formatWarning(w)}
-                    </div>
-                  ))}
+              {/* Export error */}
+              {exportError && (
+                <div className="mt-3 px-3 py-2 text-xs text-red-200 bg-red-900/40
+                  border border-red-700/50 rounded">
+                  {exportError}
                 </div>
               )}
             </>
           )}
 
-          {/* ── Export Success ──────────────────────────────────────────── */}
-          {exportSuccess && (
-            <div className="mt-3 px-3 py-2 text-xs text-green-200 bg-green-900/40
-              border border-green-700/50 rounded">
-              Export complete! Download started. ({estimatedParts} parts)
-            </div>
-          )}
+          {/* ── STEP: SETTINGS ────────────────────────────────────────── */}
+          {step === 'settings' && (
+            <>
+              {/* ── Print Bed ────────────────────────────────────────────── */}
+              <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                Print Bed Size
+              </h4>
 
-          {/* ── Export Error ───────────────────────────────────────────── */}
-          {exportError && (
-            <div className="mt-3 px-3 py-2 text-xs text-red-200 bg-red-900/40
-              border border-red-700/50 rounded">
-              {exportError}
-            </div>
-          )}
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div>
+                  <ParamSlider
+                    label="Bed X"
+                    unit="mm"
+                    value={design.printBedX}
+                    min={100}
+                    max={500}
+                    step={10}
+                    onSliderChange={setBedXSlider}
+                    onInputChange={setBedXInput}
+                    hasWarning={fieldHasWarning(warnings, 'printBedX')}
+                  />
+                </div>
+                <div>
+                  <ParamSlider
+                    label="Bed Y"
+                    unit="mm"
+                    value={design.printBedY}
+                    min={100}
+                    max={500}
+                    step={10}
+                    onSliderChange={setBedYSlider}
+                    onInputChange={setBedYInput}
+                    hasWarning={fieldHasWarning(warnings, 'printBedY')}
+                  />
+                </div>
+                <div>
+                  <ParamSlider
+                    label="Bed Z"
+                    unit="mm"
+                    value={design.printBedZ}
+                    min={50}
+                    max={500}
+                    step={10}
+                    onSliderChange={setBedZSlider}
+                    onInputChange={setBedZInput}
+                    hasWarning={fieldHasWarning(warnings, 'printBedZ')}
+                  />
+                </div>
+              </div>
 
-          {/* ── Action Buttons ───────────────────────────────────────── */}
-          <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-zinc-700/50">
-            <Dialog.Close asChild>
-              <button
-                disabled={isExporting}
-                className="px-4 py-1.5 text-xs text-zinc-300 bg-zinc-800 border
-                  border-zinc-700 rounded hover:bg-zinc-700
-                  focus:outline-none focus:ring-1 focus:ring-zinc-600
-                  disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {exportSuccess ? 'Done' : 'Cancel'}
-              </button>
-            </Dialog.Close>
+              {/* Estimated parts */}
+              <div className="mb-3 px-2 py-1.5 text-xs text-zinc-300 bg-zinc-800/50
+                border border-zinc-700/50 rounded cursor-default">
+                Estimated Parts: {estimatedParts} pieces
+              </div>
 
-            {!exportSuccess && (
-              <button
-                onClick={handleExport}
-                disabled={isExporting}
-                className="px-4 py-1.5 text-xs font-medium text-zinc-100 bg-blue-600
-                  rounded hover:bg-blue-500 focus:outline-none focus:ring-2
-                  focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                  inline-flex items-center gap-1.5"
-              >
-                {isExporting ? (
-                  <>
-                    <span className="generating-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                    Exporting...
-                  </>
-                ) : (
-                  <>
-                    Export ZIP
-                    {warnings.length > 0 && (
-                      <span className="text-[10px] text-blue-200">
-                        ({warnings.length} warnings)
-                      </span>
+              {/* Bed visualization */}
+              <BedVisualization
+                bedX={design.printBedX}
+                bedY={design.printBedY}
+                wingSpan={design.wingSpan}
+                fuselageLength={design.fuselageLength}
+                wingChord={design.wingChord}
+              />
+
+              {/* ── Sectioning ───────────────────────────────────────────── */}
+              <div className="border-t border-zinc-700/50 my-3" />
+              <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                Sectioning
+              </h4>
+
+              <ParamToggle
+                label="Auto-Section Parts"
+                checked={design.autoSection}
+                onChange={setAutoSection}
+                hasWarning={fieldHasWarning(warnings, 'autoSection')}
+              />
+
+              <ParamSlider
+                label="Section Overlap"
+                unit="mm"
+                value={design.sectionOverlap}
+                min={5}
+                max={30}
+                step={1}
+                onSliderChange={setOverlapSlider}
+                onInputChange={setOverlapInput}
+                hasWarning={fieldHasWarning(warnings, 'sectionOverlap')}
+              />
+
+              <ParamSelect
+                label="Joint Type"
+                value={design.jointType}
+                options={JOINT_TYPE_OPTIONS}
+                onChange={setJointType}
+                hasWarning={fieldHasWarning(warnings, 'jointType')}
+              />
+
+              <ParamSlider
+                label="Joint Tolerance"
+                unit="mm"
+                value={design.jointTolerance}
+                min={0.05}
+                max={0.5}
+                step={0.01}
+                onSliderChange={setToleranceSlider}
+                onInputChange={setToleranceInput}
+                hasWarning={fieldHasWarning(warnings, 'jointTolerance')}
+              />
+
+              {/* ── Print Settings ───────────────────────────────────────── */}
+              <div className="border-t border-zinc-700/50 my-3" />
+              <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                Print Settings
+              </h4>
+
+              <ParamSlider
+                label="Nozzle Diameter"
+                unit="mm"
+                value={design.nozzleDiameter}
+                min={0.2}
+                max={1.0}
+                step={0.05}
+                onSliderChange={setNozzleSlider}
+                onInputChange={setNozzleInput}
+                hasWarning={fieldHasWarning(warnings, 'nozzleDiameter')}
+              />
+
+              {/* PR08 — Min Feature Thickness (read-only derived) */}
+              <DerivedField
+                label="Min Feature Thickness"
+                value={minFeatureThickness}
+                unit="mm"
+                decimals={2}
+              />
+
+              <ParamToggle
+                label="Hollow Parts"
+                checked={design.hollowParts}
+                onChange={setHollowParts}
+                hasWarning={fieldHasWarning(warnings, 'hollowParts')}
+              />
+
+              <ParamSlider
+                label="TE Min Thickness"
+                unit="mm"
+                value={design.teMinThickness}
+                min={0.4}
+                max={2.0}
+                step={0.1}
+                onSliderChange={setTeMinSlider}
+                onInputChange={setTeMinInput}
+                hasWarning={fieldHasWarning(warnings, 'teMinThickness')}
+              />
+
+              {/* ── Validation Warnings ──────────────────────────────────── */}
+              {warnings.length > 0 && (
+                <>
+                  <div className="border-t border-zinc-700/50 my-3" />
+                  <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                    Warnings
+                    <span
+                      className="ml-2 px-1.5 py-0.5 text-[9px] font-medium text-amber-100
+                        bg-amber-600 rounded-full"
+                    >
+                      {warnings.length}
+                    </span>
+                  </h4>
+
+                  {structural.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-[10px] font-medium text-zinc-500 mb-1">Structural</p>
+                      {structural.map((w) => (
+                        <div
+                          key={w.id}
+                          className={`px-2 py-1.5 mb-1 text-[10px] rounded border
+                            ${WARNING_COLORS.warn.bg} ${WARNING_COLORS.warn.border} ${WARNING_COLORS.warn.text}`}
+                        >
+                          {formatWarning(w)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {print.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-[10px] font-medium text-zinc-500 mb-1">Print</p>
+                      {print.map((w) => (
+                        <div
+                          key={w.id}
+                          className={`px-2 py-1.5 mb-1 text-[10px] rounded border
+                            ${WARNING_COLORS.warn.bg} ${WARNING_COLORS.warn.border} ${WARNING_COLORS.warn.text}`}
+                        >
+                          {formatWarning(w)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── Export Success ──────────────────────────────────────────── */}
+              {exportSuccess && (
+                <div className="mt-3 px-3 py-2 text-xs text-green-200 bg-green-900/40
+                  border border-green-700/50 rounded">
+                  Export complete! Download started. ({estimatedParts} parts)
+                </div>
+              )}
+
+              {/* ── Export Error ───────────────────────────────────────────── */}
+              {exportError && (
+                <div className="mt-3 px-3 py-2 text-xs text-red-200 bg-red-900/40
+                  border border-red-700/50 rounded">
+                  {exportError}
+                </div>
+              )}
+
+              {/* ── Action Buttons ───────────────────────────────────────── */}
+              <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-zinc-700/50">
+                <Dialog.Close asChild>
+                  <button
+                    disabled={isExporting || isPreviewing}
+                    className="px-4 py-1.5 text-xs text-zinc-300 bg-zinc-800 border
+                      border-zinc-700 rounded hover:bg-zinc-700
+                      focus:outline-none focus:ring-1 focus:ring-zinc-600
+                      disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {exportSuccess ? 'Done' : 'Cancel'}
+                  </button>
+                </Dialog.Close>
+
+                {!exportSuccess && (
+                  <button
+                    onClick={handlePreview}
+                    disabled={isPreviewing || isExporting}
+                    className="px-4 py-1.5 text-xs font-medium text-zinc-100 bg-blue-600
+                      rounded hover:bg-blue-500 focus:outline-none focus:ring-2
+                      focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900
+                      disabled:opacity-50 disabled:cursor-not-allowed
+                      inline-flex items-center gap-1.5"
+                  >
+                    {isPreviewing ? (
+                      <>
+                        <span className="generating-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                        Generating Preview...
+                      </>
+                    ) : (
+                      <>
+                        Export Preview
+                        {warnings.length > 0 && (
+                          <span className="text-[10px] text-blue-200">
+                            ({warnings.length} warnings)
+                          </span>
+                        )}
+                      </>
                     )}
-                  </>
+                  </button>
                 )}
-              </button>
-            )}
-          </div>
+              </div>
+            </>
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

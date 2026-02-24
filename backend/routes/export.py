@@ -1,8 +1,8 @@
-"""POST /api/export — STL export as streaming ZIP.
+"""POST /api/export -- STL export as streaming ZIP.
 
 Generates geometry, auto-sections for print bed, adds joints,
 packages as ZIP with manifest, and streams to client.
-Temp file on /data/tmp is deleted after streaming (spec §8.5).
+Temp file on /data/tmp is deleted after streaming (spec section 8.5).
 """
 
 from __future__ import annotations
@@ -19,7 +19,12 @@ from backend.geometry.engine import assemble_aircraft, _cadquery_limiter
 from backend.export.section import auto_section, create_section_parts
 from backend.export.joints import add_tongue_and_groove
 from backend.export.package import build_zip, EXPORT_TMP_DIR
-from backend.models import AircraftDesign, ExportRequest
+from backend.models import (
+    AircraftDesign,
+    ExportRequest,
+    ExportPreviewPart,
+    ExportPreviewResponse,
+)
 
 logger = logging.getLogger("cheng.export")
 
@@ -58,8 +63,101 @@ async def export_stl(request: ExportRequest) -> FileResponse:
     )
 
 
+@router.post("/export/preview")
+async def export_preview(request: ExportRequest) -> ExportPreviewResponse:
+    """Preview the sectioned parts without generating files.
+
+    Runs the same assemble + auto_section pipeline but skips joints,
+    tessellation and ZIP packaging. Returns part metadata and bed-fit info.
+    """
+    design = request.design
+
+    try:
+        parts_meta = await anyio.to_thread.run_sync(
+            lambda: _preview_blocking(design),
+            limiter=_cadquery_limiter,
+            abandon_on_cancel=True,
+        )
+    except Exception as exc:
+        logger.exception("Export preview failed")
+        raise HTTPException(
+            status_code=500, detail=f"Export preview failed: {exc}"
+        ) from exc
+
+    bed = (design.print_bed_x, design.print_bed_y, design.print_bed_z)
+    fits = sum(1 for p in parts_meta if p.fits_bed)
+    exceeds = len(parts_meta) - fits
+
+    return ExportPreviewResponse(
+        parts=parts_meta,
+        total_parts=len(parts_meta),
+        bed_dimensions_mm=bed,
+        parts_that_fit=fits,
+        parts_that_exceed=exceeds,
+    )
+
+
+def _preview_blocking(design: AircraftDesign) -> list[ExportPreviewPart]:
+    """Synchronous preview pipeline: assemble + section only (no joints/ZIP)."""
+    components = assemble_aircraft(design)
+
+    all_parts: list[ExportPreviewPart] = []
+    assembly_order = 1
+
+    for comp_name, solid in components.items():
+        if "left" in comp_name:
+            side = "left"
+        elif "right" in comp_name:
+            side = "right"
+        else:
+            side = "center"
+
+        comp_category = comp_name.split("_")[0]
+        if comp_category in ("h", "v"):
+            comp_category = comp_name.replace("_left", "").replace("_right", "")
+
+        pieces = auto_section(
+            solid,
+            bed_x=design.print_bed_x,
+            bed_y=design.print_bed_y,
+            bed_z=design.print_bed_z,
+        )
+
+        section_parts = create_section_parts(
+            comp_category,
+            side,
+            pieces,
+            start_assembly_order=assembly_order,
+        )
+
+        for sp in section_parts:
+            dx, dy, dz = sp.dimensions_mm
+            fits = (
+                dx <= design.print_bed_x
+                and dy <= design.print_bed_y
+                and dz <= design.print_bed_z
+            )
+            all_parts.append(
+                ExportPreviewPart(
+                    filename=sp.filename,
+                    component=sp.component,
+                    side=sp.side,
+                    section_num=sp.section_num,
+                    total_sections=sp.total_sections,
+                    dimensions_mm=sp.dimensions_mm,
+                    print_orientation=sp.print_orientation,
+                    assembly_order=sp.assembly_order,
+                    fits_bed=fits,
+                )
+            )
+
+        assembly_order += len(section_parts)
+
+    return all_parts
+
+
 def _export_blocking(design: AircraftDesign) -> Path:
-    """Synchronous export pipeline — runs in thread pool.
+    """Synchronous export pipeline -- runs in thread pool.
 
     1. Assemble aircraft components
     2. Auto-section each component for print bed
@@ -83,7 +181,7 @@ def _export_blocking(design: AircraftDesign) -> Path:
             side = "center"
 
         # Determine component category
-        comp_category = comp_name.split("_")[0]  # "wing", "fuselage", "h", "v"
+        comp_category = comp_name.split("_")[0]
         if comp_category in ("h", "v"):
             comp_category = comp_name.replace("_left", "").replace("_right", "")
 
@@ -116,7 +214,10 @@ def _export_blocking(design: AircraftDesign) -> Path:
             except Exception as exc:
                 logger.warning(
                     "Joint creation failed for %s sections %d-%d: %s",
-                    comp_name, i, i + 1, exc,
+                    comp_name,
+                    i,
+                    i + 1,
+                    exc,
                 )
 
         all_sections.extend(section_parts)

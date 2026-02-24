@@ -153,6 +153,31 @@ class GenerationResult(CamelModel):
     warnings: list[ValidationWarning] = Field(default_factory=list)
 
 
+
+class ExportPreviewPart(CamelModel):
+    """Metadata for a single sectioned part in the export preview."""
+
+    filename: str
+    component: str
+    side: str
+    section_num: int
+    total_sections: int
+    dimensions_mm: tuple[float, float, float]
+    print_orientation: str
+    assembly_order: int
+    fits_bed: bool
+
+
+class ExportPreviewResponse(CamelModel):
+    """Response from POST /api/export/preview."""
+
+    parts: list[ExportPreviewPart] = Field(default_factory=list)
+    total_parts: int = 0
+    bed_dimensions_mm: tuple[float, float, float] = (220.0, 220.0, 250.0)
+    parts_that_fit: int = 0
+    parts_that_exceed: int = 0
+
+
 class DesignSummary(CamelModel):
     """Summary for design listing (GET /api/designs)."""
 
