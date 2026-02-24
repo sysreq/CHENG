@@ -169,19 +169,19 @@ class TestV17:
 
 
 # ---------------------------------------------------------------------------
-# V18: skinThickness < 2 * nozzleDiameter (wing skin too thin for FDM)
+# V18: skinThickness < 1.0mm (absolute structural minimum)
 # ---------------------------------------------------------------------------
 
 
 class TestV18:
     def test_triggers_on_thin_skin(self) -> None:
-        # 0.8 < 2 * 0.6 = 1.2
-        design = AircraftDesign(wing_skin_thickness=0.8, nozzle_diameter=0.6)
+        # 0.8 < 1.0 absolute minimum
+        design = AircraftDesign(wing_skin_thickness=0.8)
         assert "V18" in _warning_ids(design)
 
     def test_does_not_trigger_on_adequate_skin(self) -> None:
-        # 1.2 >= 2 * 0.4 = 0.8
-        design = AircraftDesign(wing_skin_thickness=1.2, nozzle_diameter=0.4)
+        # 1.2 >= 1.0 absolute minimum
+        design = AircraftDesign(wing_skin_thickness=1.2)
         assert "V18" not in _warning_ids(design)
 
 

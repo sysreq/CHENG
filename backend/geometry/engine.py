@@ -212,17 +212,8 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
 
     taper_ratio = tip_chord_mm / design.wing_chord if design.wing_chord > 0 else 0.0
 
-    # CG at 25% MAC lies on the quarter-chord line. The most direct
-    # formula uses the quarter-chord sweep angle (which is what the user
-    # specifies) and the MAC spanwise position y_mac:
-    #   CG = 0.25 * root_chord + y_mac * tan(sweep_c/4)
-    # where y_mac = (half_span / 3) * (1 + 2*lambda) / (1 + lambda)
-    half_span = design.wing_span / 2.0
-    sweep_rad = math.radians(design.wing_sweep)
-    y_mac = (
-        (half_span / 3.0) * (1.0 + 2.0 * lambda_) / (1.0 + lambda_)
-    ) if (1.0 + lambda_) > 0 else 0.0
-    estimated_cg_mm = 0.25 * design.wing_chord + y_mac * math.tan(sweep_rad)
+    # CG at 25% MAC — spec D05: estimatedCG = 0.25 * D03 (mean_aero_chord_mm)
+    estimated_cg_mm = 0.25 * mean_aero_chord_mm
 
     min_feature_thickness_mm = 2.0 * design.nozzle_diameter
 

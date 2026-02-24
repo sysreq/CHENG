@@ -135,12 +135,12 @@ def _check_v17(design: AircraftDesign, out: list[ValidationWarning]) -> None:
 
 
 def _check_v18(design: AircraftDesign, out: list[ValidationWarning]) -> None:
-    """V18: skinThickness < 2 * nozzleDiameter — wing skin too thin for reliable FDM."""
-    if design.wing_skin_thickness < 2 * design.nozzle_diameter:
+    """V18: skinThickness < 1.0mm — absolute structural minimum for FDM wing skin."""
+    if design.wing_skin_thickness < 1.0:
         out.append(
             ValidationWarning(
                 id="V18",
-                message="Wing skin too thin for reliable FDM",
+                message="Wing skin below 1.0 mm absolute structural minimum",
                 fields=["wing_skin_thickness"],
             )
         )

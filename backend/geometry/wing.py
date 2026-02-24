@@ -194,18 +194,24 @@ def _enforce_te_thickness(
 ) -> cq.Workplane:
     """Enforce minimum trailing edge thickness.
 
-    If the TE is thinner than te_min_thickness, a small fillet or
-    material addition is applied.  In practice, most airfoil profiles
-    already meet the minimum; this is a safety net for very thin TEs.
+    .. note:: **Not yet functional (MVP).** This function is a documented
+       no-op. CadQuery boolean unions with thin wedge solids along the TE
+       line are fragile and frequently fail on lofted airfoil shapes.
+       Full TE thickening geometry is planned for post-MVP (1.0).
 
-    For MVP, this is implemented as a bounding box check and minor
-    geometry adjustment.  A full TE thickening algorithm would use
-    a boolean union with a thin wedge along the TE line.
+    The ``te_min_thickness`` parameter is accepted and validated by the
+    model, but has no geometric effect in the current release.  The
+    airfoil .dat files distributed with CHENG already have TE thickness
+    >= 0.4 mm at chord scales >= 50 mm (the minimum wing_chord).
     """
-    # MVP implementation: return as-is if TE is already thick enough.
-    # The airfoil .dat files distributed with CHENG already have TE
-    # thickness >= 0.4 mm at chord scales >= 50 mm (the minimum wing_chord).
-    # A more sophisticated TE enforcement could be added in 1.0.
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.warning(
+        "TE thickness enforcement is not yet implemented (te_min_thickness=%.2f). "
+        "Returning solid unchanged.",
+        te_min_thickness,
+    )
     return solid
 
 

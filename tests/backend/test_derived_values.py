@@ -165,11 +165,10 @@ class TestSportDerived:
         assert self.d["taper_ratio"] == pytest.approx(0.67)
 
     def test_cg_with_sweep(self):
-        # CG = 0.25 * root_chord + y_mac * tan(sweep)
+        # CG = 0.25 * MAC (spec D05)
         lam = 0.67
-        half_span = 500.0
-        y_mac = (half_span / 3.0) * (1 + 2 * lam) / (1 + lam)
-        expected = 0.25 * 180 + y_mac * math.tan(math.radians(5))
+        mac = (2/3) * 180 * (1 + lam + lam**2) / (1 + lam)
+        expected = 0.25 * mac
         assert self.d["estimated_cg_mm"] == pytest.approx(expected, rel=1e-3)
 
 
