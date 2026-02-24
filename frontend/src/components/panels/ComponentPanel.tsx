@@ -1,63 +1,67 @@
 // ============================================================================
-// CHENG — Component Panel (Stub)
-// Track D: Frontend Panels will implement the full version.
-// This stub provides a minimal placeholder based on selected component.
+// CHENG — Component Panel Router
+// Routes to the appropriate detail panel based on selectedComponent + tailType
+// Issue #27
 // ============================================================================
 
-import { useDesignStore } from '@/store/designStore';
+import React from 'react';
+import { useDesignStore } from '../../store/designStore';
+import { WingPanel } from './WingPanel';
+import { TailConventionalPanel } from './TailConventionalPanel';
+import { TailVTailPanel } from './TailVTailPanel';
 
 /**
- * Component-specific parameter panel.
- * Routes to Wing/Tail panels based on the selected component.
- * Stub implementation — Track D will provide the full version.
+ * Routes to the correct detail panel based on:
+ * - selectedComponent: 'wing' | 'tail' | 'fuselage' | null
+ * - design.tailType: determines which tail panel to show
  */
-export default function ComponentPanel() {
-  const selectedComponent = useDesignStore((state) => state.selectedComponent);
+export function ComponentPanel(): React.JSX.Element {
+  const selectedComponent = useDesignStore((s) => s.selectedComponent);
+  const tailType = useDesignStore((s) => s.design.tailType);
 
-  if (!selectedComponent) {
+  if (selectedComponent === null) {
     return (
-      <div
-        style={{
-          padding: 12,
-          fontSize: 12,
-          color: 'var(--color-text-muted)',
-          textAlign: 'center',
-          marginTop: 16,
-        }}
-      >
-        Click on the aircraft model to select a component
+      <div className="p-4 flex items-center justify-center h-full">
+        <p className="text-xs text-zinc-500 text-center leading-relaxed">
+          Click a component in the 3D viewport
+          <br />
+          to view and edit its parameters.
+        </p>
       </div>
     );
   }
 
-  return (
-    <div
-      style={{
-        padding: 12,
-        borderBottom: '1px solid var(--color-border)',
-      }}
-    >
-      <h3
-        style={{
-          fontSize: 12,
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-          color: 'var(--color-text-muted)',
-          marginBottom: 8,
-        }}
-      >
-        {selectedComponent} Parameters
-      </h3>
-      <div
-        style={{
-          fontSize: 11,
-          color: 'var(--color-text-muted)',
-          fontStyle: 'italic',
-        }}
-      >
-        Full {selectedComponent} controls coming soon (Track D)
+  if (selectedComponent === 'wing') {
+    return <WingPanel />;
+  }
+
+  if (selectedComponent === 'tail') {
+    if (tailType === 'V-Tail') {
+      return <TailVTailPanel />;
+    }
+    // Conventional, T-Tail, Cruciform all use the same panel
+    return <TailConventionalPanel />;
+  }
+
+  if (selectedComponent === 'fuselage') {
+    return (
+      <div className="p-4">
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+          Fuselage
+        </h3>
+        <p className="text-xs text-zinc-500">
+          Fuselage detail parameters coming soon.
+          <br />
+          Use the Global panel to set fuselage style and length.
+        </p>
       </div>
+    );
+  }
+
+  // Unreachable, but TypeScript exhaustiveness
+  return (
+    <div className="p-4">
+      <p className="text-xs text-zinc-500">Unknown component selected.</p>
     </div>
   );
 }
