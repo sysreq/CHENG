@@ -15,6 +15,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.routes.designs import router as designs_router
+from backend.routes.generate import router as generate_router
+from backend.routes.export import router as export_router
+from backend.routes.websocket import router as websocket_router
 
 logger = logging.getLogger("cheng")
 
@@ -56,14 +59,9 @@ app.add_middleware(
 # API route registration
 # ---------------------------------------------------------------------------
 app.include_router(designs_router)
-
-# Phase 2 routes — import routers when they are implemented
-# from backend.routes.generate import router as generate_router
-# from backend.routes.export import router as export_router
-# from backend.routes.websocket import router as websocket_router
-# app.include_router(generate_router)
-# app.include_router(export_router)
-# app.include_router(websocket_router)
+app.include_router(generate_router)
+app.include_router(export_router)
+app.include_router(websocket_router)
 
 
 # ---------------------------------------------------------------------------
