@@ -99,10 +99,10 @@ test('changing wingspan updates the input value', async ({ page }) => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 3: Export flow — open dialog, verify Export ZIP button
+// Test 3: Export flow — open dialog, verify two-step export preview flow
 // ---------------------------------------------------------------------------
 
-test('export dialog opens and contains Export ZIP button', async ({
+test('export dialog opens and contains Export Preview button', async ({
   page,
 }) => {
   await page.goto('/');
@@ -116,13 +116,10 @@ test('export dialog opens and contains Export ZIP button', async ({
   const dialog = page.locator('[role="dialog"]');
   await expect(dialog).toBeVisible({ timeout: 5_000 });
 
-  // Dialog title
-  await expect(dialog.locator('text=Export STL').first()).toBeVisible();
-
-  // Export ZIP button should be present
-  const zipButton = dialog.locator('button', { hasText: 'Export ZIP' });
-  await expect(zipButton).toBeVisible();
-  await expect(zipButton).toBeEnabled();
+  // Export Preview button should be present (two-step flow: settings → preview → download)
+  const previewButton = dialog.locator('button', { hasText: 'Export Preview' });
+  await expect(previewButton).toBeVisible();
+  await expect(previewButton).toBeEnabled();
 
   // Cancel button should close the dialog
   const cancelButton = dialog.locator('button', { hasText: 'Cancel' });
@@ -143,7 +140,8 @@ test('save design via keyboard shortcut', async ({ page }) => {
   await page.waitForTimeout(500);
 
   // The design name should show dirty indicator (*)
-  const nameDisplay = page.locator('span.truncate');
+  // The name is in a button.truncate with a child span containing "*"
+  const nameDisplay = page.locator('button.truncate');
   await expect(nameDisplay).toContainText('*');
 
   // Save via Ctrl+S
@@ -194,9 +192,14 @@ test('switching to Sport preset updates all parameters', async ({ page }) => {
   await page.goto('/');
   await waitForAppReady(page);
 
-  // Switch to Sport preset
+  // Switch to Sport preset (requires confirmation dialog)
   const presetSelect = page.locator('select').first();
   await presetSelect.selectOption('Sport');
+
+  // Confirm the preset load in the alert dialog
+  const confirmButton = page.locator('[role="alertdialog"] button', { hasText: 'Apply' });
+  await expect(confirmButton).toBeVisible({ timeout: 3_000 });
+  await confirmButton.click();
   await page.waitForTimeout(500);
 
   // Sport preset has wingspan 1000
