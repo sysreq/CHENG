@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 
 /** Aircraft preset names. 'Custom' auto-selected when any param is manually edited. */
-export type PresetName = 'Trainer' | 'Sport' | 'Aerobatic' | 'Custom';
+export type PresetName = 'Trainer' | 'Sport' | 'Aerobatic' | 'Glider' | 'FlyingWing' | 'Scale' | 'Custom';
 
 /** Fuselage body style. Controls cross-section shape and wallThickness. */
 export type FuselagePreset = 'Pod' | 'Conventional' | 'Blended-Wing-Body';

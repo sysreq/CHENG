@@ -25,6 +25,9 @@ const PRESET_OPTIONS: readonly (Exclude<PresetName, 'Custom'>)[] = [
   'Trainer',
   'Sport',
   'Aerobatic',
+  'Glider',
+  'FlyingWing',
+  'Scale',
 ] as const;
 
 const FUSELAGE_PRESET_OPTIONS: readonly FuselagePreset[] = [
