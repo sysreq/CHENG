@@ -152,16 +152,16 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
     wing_area_mm2 = 0.5 * (design.wing_chord + wing_tip_chord_mm) * design.wing_span
     wing_area_cm2 = wing_area_mm2 / 100.0
 
-    aspect_ratio = (design.wing_span ** 2) / wing_area_mm2
+    aspect_ratio = (design.wing_span ** 2) / wing_area_mm2 if wing_area_mm2 > 0 else 0.0
 
     mean_aero_chord_mm = (
         (2.0 / 3.0)
         * design.wing_chord
         * (1.0 + lambda_ + lambda_ ** 2)
         / (1.0 + lambda_)
-    )
+    ) if (1.0 + lambda_) > 0 else design.wing_chord
 
-    taper_ratio = wing_tip_chord_mm / design.wing_chord
+    taper_ratio = wing_tip_chord_mm / design.wing_chord if design.wing_chord > 0 else 0.0
 
     estimated_cg_mm = 0.25 * mean_aero_chord_mm
 
@@ -254,20 +254,13 @@ def _compute_warnings(
     """Compute structural and print validation warnings.
 
     Structural warnings (V01-V06):
-    - V01: Wing loading too high (area too small for estimated weight)
     - V02: Aspect ratio out of range
-    - V03: CG position warning
     - V04: Tail volume coefficient too low
     - V05: Dihedral angle warning
-    - V06: Control surface sizing
 
     Print warnings (V16-V23):
-    - V16: Part exceeds print bed (before sectioning)
     - V17: Thin wall warning
-    - V18: Overhang angle warning
-    - V19: Bridge distance warning
     - V20: Minimum feature size
-    - V21: Section count high
     - V22: Joint tolerance tight
     - V23: Nozzle diameter vs detail mismatch
     """
