@@ -196,3 +196,18 @@ class DesignSummary(CamelModel):
     id: str
     name: str
     modified_at: str
+
+
+class PresetSummary(CamelModel):
+    """Summary for custom preset listing (GET /api/presets)."""
+
+    id: str
+    name: str
+    created_at: str
+
+
+class SavePresetRequest(CamelModel):
+    """Request body for POST /api/presets."""
+
+    name: str
+    design: AircraftDesign
