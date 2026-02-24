@@ -33,6 +33,12 @@ export function useDesignSync(send: (design: AircraftDesign) => void): void {
   const sendRef = useRef(send);
   sendRef.current = send;
 
+  /** Send design and mark generating state. */
+  const sendAndMark = (design: AircraftDesign) => {
+    useDesignStore.getState().setIsGenerating(true);
+    sendRef.current(design);
+  };
+
   // Track throttle/debounce timers
   const throttleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -53,7 +59,7 @@ export function useDesignSync(send: (design: AircraftDesign) => void): void {
 
       if (source === 'immediate') {
         // Dropdowns, toggles, presets — send immediately
-        sendRef.current(design);
+        sendAndMark(design);
       } else if (source === 'slider') {
         // Throttle: send at most once per SLIDER_THROTTLE_MS
         const now = Date.now();
@@ -62,7 +68,7 @@ export function useDesignSync(send: (design: AircraftDesign) => void): void {
         if (elapsed >= SLIDER_THROTTLE_MS) {
           // Enough time has passed — send now
           lastThrottleSendRef.current = now;
-          sendRef.current(design);
+          sendAndMark(design);
         } else {
           // Schedule a trailing send at the end of the throttle window
           if (throttleTimerRef.current !== null) {
@@ -71,7 +77,7 @@ export function useDesignSync(send: (design: AircraftDesign) => void): void {
           throttleTimerRef.current = setTimeout(() => {
             throttleTimerRef.current = null;
             lastThrottleSendRef.current = Date.now();
-            sendRef.current(useDesignStore.getState().design);
+            sendAndMark(useDesignStore.getState().design);
           }, SLIDER_THROTTLE_MS - elapsed);
         }
       } else if (source === 'text') {
@@ -81,7 +87,7 @@ export function useDesignSync(send: (design: AircraftDesign) => void): void {
         }
         debounceTimerRef.current = setTimeout(() => {
           debounceTimerRef.current = null;
-          sendRef.current(useDesignStore.getState().design);
+          sendAndMark(useDesignStore.getState().design);
         }, TEXT_DEBOUNCE_MS);
       }
     });
@@ -109,8 +115,7 @@ export function useDesignSync(send: (design: AircraftDesign) => void): void {
       const curr = state.state;
       if (curr === 'connected' && prevConnState !== 'connected') {
         // Sync the backend with current design state on any connection
-        const design = useDesignStore.getState().design;
-        sendRef.current(design);
+        sendAndMark(useDesignStore.getState().design);
       }
       prevConnState = curr;
     });

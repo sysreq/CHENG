@@ -41,7 +41,9 @@ export interface DesignStore {
 
   // ── Mesh Data (from WebSocket binary) ───────────────────────────
   meshData: MeshData | null;
+  isGenerating: boolean;
   setMeshData: (mesh: MeshData) => void;
+  setIsGenerating: (generating: boolean) => void;
 
   // ── Viewport Selection ──────────────────────────────────────────
   selectedComponent: ComponentSelection;
@@ -110,7 +112,9 @@ export const useDesignStore = create<DesignStore>()(
       setWarnings: (warnings) => set({ warnings }),
 
       meshData: null,
-      setMeshData: (meshData) => set({ meshData }),
+      isGenerating: false,
+      setMeshData: (meshData) => set({ meshData, isGenerating: false }),
+      setIsGenerating: (isGenerating) => set({ isGenerating }),
 
       // ── Viewport ──────────────────────────────────────────────────
       selectedComponent: null,

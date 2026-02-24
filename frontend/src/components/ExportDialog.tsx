@@ -1,13 +1,13 @@
 // ============================================================================
-// CHENG — Export Dialog: Print/export settings + validation warnings
-// Issue #28
+// CHENG — Export Dialog: Print/export settings + validation warnings + ZIP download
+// Issue #28, #59
 // ============================================================================
 
-import React, { useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useDesignStore } from '../store/designStore';
 import { fieldHasWarning, formatWarning, groupWarningsByCategory, WARNING_COLORS } from '../lib/validation';
-import { ParamSlider, ParamSelect, ParamToggle } from './ui';
+import { ParamSlider, ParamSelect, ParamToggle, DerivedField } from './ui';
 import type { JointType } from '../types/design';
 
 // ---------------------------------------------------------------------------
@@ -30,6 +30,37 @@ interface ExportDialogProps {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Estimate the number of sectioned parts based on component dimensions
+ * exceeding bed dimensions. Basic client-side heuristic.
+ */
+function estimatePartCount(
+  wingSpan: number,
+  fuselageLength: number,
+  bedX: number,
+  bedY: number,
+): number {
+  let parts = 0;
+
+  // Wing: spans across Y axis (two halves), each half may be sectioned
+  const halfSpan = wingSpan / 2;
+  const wingSections = Math.max(1, Math.ceil(halfSpan / bedY));
+  parts += wingSections * 2; // both wing halves
+
+  // Fuselage: runs along X axis
+  const fuselageSections = Math.max(1, Math.ceil(fuselageLength / bedX));
+  parts += fuselageSections;
+
+  // Tail: usually fits within bed, estimate 2 pieces (h-stab + v-stab)
+  parts += 2;
+
+  return parts;
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -38,7 +69,19 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
   const warnings = useDesignStore((s) => s.warnings);
   const setParam = useDesignStore((s) => s.setParam);
 
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
   const { structural, print } = groupWarningsByCategory(warnings);
+
+  // PR08: Min feature thickness = 2 x nozzle diameter (read-only derived)
+  const minFeatureThickness = design.nozzleDiameter * 2;
+
+  // Estimated parts count
+  const estimatedParts = useMemo(
+    () => estimatePartCount(design.wingSpan, design.fuselageLength, design.printBedX, design.printBedY),
+    [design.wingSpan, design.fuselageLength, design.printBedX, design.printBedY],
+  );
 
   // ── Number input handlers ──────────────────────────────────────────
 
@@ -120,11 +163,43 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
     [setParam],
   );
 
-  // ── Export handler (placeholder) ────────────────────────────────────
+  // ── Export handler ────────────────────────────────────────────────────
 
-  const handleExport = useCallback(() => {
-    console.log('Export STL: placeholder — wired in Phase 2 integration');
-  }, []);
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    setExportError(null);
+
+    try {
+      const res = await fetch('/api/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ design, format: 'stl' }),
+      });
+
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        throw new Error(detail || `Export failed (${res.status})`);
+      }
+
+      // Stream the ZIP as a blob and trigger download
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${design.name.replace(/\s+/g, '_')}_export.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      onOpenChange(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Export failed';
+      setExportError(msg);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [design, onOpenChange]);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -189,6 +264,12 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
             </div>
           </div>
 
+          {/* Estimated parts */}
+          <div className="mb-3 px-2 py-1.5 text-xs text-zinc-300 bg-zinc-800/50
+            border border-zinc-700/50 rounded cursor-default">
+            Estimated Parts: {estimatedParts} pieces
+          </div>
+
           {/* ── Sectioning ───────────────────────────────────────────── */}
           <div className="border-t border-zinc-700/50 my-3" />
           <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
@@ -250,6 +331,14 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
             onSliderChange={setNozzleSlider}
             onInputChange={setNozzleInput}
             hasWarning={fieldHasWarning(warnings, 'nozzleDiameter')}
+          />
+
+          {/* PR08 — Min Feature Thickness (read-only derived) */}
+          <DerivedField
+            label="Min Feature Thickness"
+            value={minFeatureThickness}
+            unit="mm"
+            decimals={2}
           />
 
           <ParamToggle
@@ -317,13 +406,23 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
             </>
           )}
 
+          {/* ── Export Error ───────────────────────────────────────────── */}
+          {exportError && (
+            <div className="mt-3 px-3 py-2 text-xs text-red-200 bg-red-900/40
+              border border-red-700/50 rounded">
+              {exportError}
+            </div>
+          )}
+
           {/* ── Action Buttons ───────────────────────────────────────── */}
           <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-zinc-700/50">
             <Dialog.Close asChild>
               <button
+                disabled={isExporting}
                 className="px-4 py-1.5 text-xs text-zinc-300 bg-zinc-800 border
                   border-zinc-700 rounded hover:bg-zinc-700
-                  focus:outline-none focus:ring-1 focus:ring-zinc-600"
+                  focus:outline-none focus:ring-1 focus:ring-zinc-600
+                  disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
@@ -331,15 +430,27 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
 
             <button
               onClick={handleExport}
+              disabled={isExporting}
               className="px-4 py-1.5 text-xs font-medium text-zinc-100 bg-blue-600
                 rounded hover:bg-blue-500 focus:outline-none focus:ring-2
-                focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900"
+                focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900
+                disabled:opacity-50 disabled:cursor-not-allowed
+                inline-flex items-center gap-1.5"
             >
-              Export
-              {warnings.length > 0 && (
-                <span className="ml-1.5 text-[10px] text-blue-200">
-                  ({warnings.length} warnings)
-                </span>
+              {isExporting ? (
+                <>
+                  <span className="generating-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  Export ZIP
+                  {warnings.length > 0 && (
+                    <span className="text-[10px] text-blue-200">
+                      ({warnings.length} warnings)
+                    </span>
+                  )}
+                </>
               )}
             </button>
           </div>

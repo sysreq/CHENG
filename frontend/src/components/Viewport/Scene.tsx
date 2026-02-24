@@ -2,12 +2,13 @@
 // CHENG — 3D Viewport Scene
 // ============================================================================
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Bounds, useBounds } from '@react-three/drei';
 import AircraftMesh from './AircraftMesh';
 import Controls from './Controls';
 import Annotations from './Annotations';
+import { useDesignStore } from '@/store/designStore';
 
 function BoundsWatcher({ readyTick }: { readyTick: number }) {
   const bounds = useBounds();
@@ -16,16 +17,55 @@ function BoundsWatcher({ readyTick }: { readyTick: number }) {
     if (readyTick > 0) {
       // Force a re-calculation of the boundaries and fit the camera
       bounds.refresh().clip().fit();
-      
+
       const timer = setTimeout(() => {
         bounds.refresh().clip().fit();
       }, 150);
-      
+
       return () => clearTimeout(timer);
     }
   }, [readyTick, bounds]);
 
   return null;
+}
+
+/** Delayed loading overlay — only shows after 300ms to avoid flicker. */
+function GeneratingOverlay() {
+  const isGenerating = useDesignStore((s) => s.isGenerating);
+  const [visible, setVisible] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (isGenerating) {
+      timerRef.current = setTimeout(() => setVisible(true), 300);
+    } else {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = null;
+      setVisible(false);
+    }
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [isGenerating]);
+
+  if (!visible) return null;
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.35)',
+        zIndex: 10,
+        pointerEvents: 'none',
+      }}
+    >
+      <div className="generating-spinner" />
+    </div>
+  );
 }
 
 export default function Scene() {
@@ -57,6 +97,7 @@ export default function Scene() {
         <Controls />
       </Canvas>
 
+      <GeneratingOverlay />
       <Annotations onResetCamera={handleMeshLoaded} />
     </div>
   );

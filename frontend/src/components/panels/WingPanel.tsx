@@ -186,6 +186,7 @@ export function WingPanel(): React.JSX.Element {
         value={derived?.estimatedCgMm ?? null}
         unit="mm"
         decimals={1}
+        suffix="from wing LE"
       />
     </div>
   );
