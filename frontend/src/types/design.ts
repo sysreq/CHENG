@@ -36,6 +36,22 @@ export type SupportStrategy = 'none' | 'minimal' | 'full';
 /** Selectable component in the 3D viewport. */
 export type ComponentSelection = 'wing' | 'tail' | 'fuselage' | null;
 
+/** Sub-element within a wing component. */
+export type WingSubElement = 'left-panel' | 'right-panel';
+/** Sub-element within a tail component. */
+export type TailSubElement = 'h-stab' | 'v-stab' | 'left-panel' | 'right-panel';
+/** Sub-element within a fuselage component. */
+export type FuselageSubElement = 'nose' | 'cabin' | 'tail-cone';
+/** Union of all sub-element types. */
+export type SubElementSelection = WingSubElement | TailSubElement | FuselageSubElement | null;
+
+/** Sub-elements available for each component. */
+export const COMPONENT_SUB_ELEMENTS: Record<Exclude<ComponentSelection, null>, readonly string[]> = {
+  wing: ['left-panel', 'right-panel'] as const,
+  tail: ['h-stab', 'v-stab'] as const,
+  fuselage: ['nose', 'cabin', 'tail-cone'] as const,
+};
+
 /** Infill density hint for per-component print settings. */
 export type InfillHint = 'low' | 'medium' | 'high';
 

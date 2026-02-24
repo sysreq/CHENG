@@ -8,10 +8,12 @@ import type {
   MeshData,
   PresetName,
   ComponentSelection,
+  SubElementSelection,
   ChangeSource,
   PerComponentPrintSettings,
   ComponentPrintSettings,
 } from '../types/design';
+import { COMPONENT_SUB_ELEMENTS } from '../types/design';
 import { createDesignFromPreset, DEFAULT_PRESET, PRESET_FACTORIES } from '../lib/presets';
 
 enableMapSet();
@@ -124,7 +126,10 @@ export interface DesignStore {
 
   // ── Viewport Selection ──────────────────────────────────────────
   selectedComponent: ComponentSelection;
+  selectedSubElement: SubElementSelection;
   setSelectedComponent: (component: ComponentSelection) => void;
+  /** Cycle to next sub-element within the currently selected component. */
+  cycleSubElement: () => void;
 
   // ── Mesh centering offset (applied in AircraftMesh) ───────────
   meshOffset: [number, number, number];
@@ -224,8 +229,23 @@ export const useDesignStore = create<DesignStore>()(
 
       // ── Viewport ──────────────────────────────────────────────────
       selectedComponent: null,
+      selectedSubElement: null,
       setSelectedComponent: (component) =>
-        set({ selectedComponent: component }),
+        set({ selectedComponent: component, selectedSubElement: null }),
+      cycleSubElement: () => {
+        const { selectedComponent, selectedSubElement } = get();
+        if (!selectedComponent) return;
+        const subs = COMPONENT_SUB_ELEMENTS[selectedComponent];
+        if (!subs || subs.length === 0) return;
+        const currentIndex = selectedSubElement ? subs.indexOf(selectedSubElement) : -1;
+        const nextIndex = currentIndex + 1;
+        if (nextIndex >= subs.length) {
+          // Cycled through all sub-elements — deselect entirely
+          set({ selectedSubElement: null, selectedComponent: null });
+        } else {
+          set({ selectedSubElement: subs[nextIndex] as SubElementSelection });
+        }
+      },
 
       meshOffset: [0, 0, 0] as [number, number, number],
       setMeshOffset: (offset) => set({ meshOffset: offset }),
@@ -269,6 +289,7 @@ export const useDesignStore = create<DesignStore>()(
           warnings: [],
           meshData: null,
           selectedComponent: null,
+          selectedSubElement: null,
         });
       },
 
