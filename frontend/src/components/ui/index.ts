@@ -9,3 +9,6 @@ export type { ParamToggleProps } from './ParamToggle';
 
 export { DerivedField } from './DerivedField';
 export type { DerivedFieldProps } from './DerivedField';
+
+export { BidirectionalParam } from './BidirectionalParam';
+export type { BidirectionalParamProps } from './BidirectionalParam';
