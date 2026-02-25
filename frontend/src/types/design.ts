@@ -162,6 +162,52 @@ export interface AircraftDesign {
   /** Fuselage wall thickness. @unit mm @min 0.8 @max 4.0 @default 1.5 */
   wallThickness: number;
 
+  // ── Control Surfaces (Issue #144) ─────────────────────────────────
+
+  // Ailerons (Wing) — C01–C04
+  /** Enable aileron cutouts on the wing. @default false */
+  aileronEnable: boolean;
+  /** Aileron inboard edge as % of half-span from root. @unit % @min 30 @max 70 @default 55 */
+  aileronSpanStart: number;
+  /** Aileron outboard edge as % of half-span from root. @unit % @min 70 @max 98 @default 95 */
+  aileronSpanEnd: number;
+  /** Aileron chord as % of local wing chord. @unit % @min 15 @max 40 @default 25 */
+  aileronChordPercent: number;
+
+  // Elevator (H-Stab) — C11–C13
+  /** Enable elevator on H-stab. @default false */
+  elevatorEnable: boolean;
+  /** Elevator span as % of total H-stab span. @unit % @min 50 @max 100 @default 100 */
+  elevatorSpanPercent: number;
+  /** Elevator chord as % of H-stab chord. @unit % @min 20 @max 50 @default 35 */
+  elevatorChordPercent: number;
+
+  // Rudder (V-Stab) — C15–C17
+  /** Enable rudder on V-stab. @default false */
+  rudderEnable: boolean;
+  /** Rudder height as % of fin height. @unit % @min 50 @max 100 @default 90 */
+  rudderHeightPercent: number;
+  /** Rudder chord as % of fin chord. @unit % @min 20 @max 50 @default 35 */
+  rudderChordPercent: number;
+
+  // Ruddervators (V-Tail) — C18–C20
+  /** Enable ruddervators on V-tail surfaces. @default false */
+  ruddervatorEnable: boolean;
+  /** Ruddervator chord as % of V-tail chord. @unit % @min 20 @max 50 @default 35 */
+  ruddervatorChordPercent: number;
+  /** Ruddervator span as % of V-tail surface span. @unit % @min 60 @max 100 @default 90 */
+  ruddervatorSpanPercent: number;
+
+  // Elevons (Flying Wing) — C21–C24
+  /** Enable elevon cutouts (for flying-wing/delta). @default false */
+  elevonEnable: boolean;
+  /** Elevon inboard edge as % of half-span. @unit % @min 10 @max 40 @default 20 */
+  elevonSpanStart: number;
+  /** Elevon outboard edge as % of half-span. @unit % @min 60 @max 98 @default 90 */
+  elevonSpanEnd: number;
+  /** Elevon chord as % of local wing chord. @unit % @min 15 @max 35 @default 20 */
+  elevonChordPercent: number;
+
   // ── Export / Print ────────────────────────────────────────────────
   /** Printer bed X. @unit mm @min 100 @max 500 @default 220 */
   printBedX: number;
@@ -236,7 +282,15 @@ export interface ValidationWarning {
 // ---------------------------------------------------------------------------
 
 /** Per-component face index ranges for selection highlighting. */
-export type ComponentRanges = Partial<Record<'fuselage' | 'wing' | 'tail', [number, number]>>;
+export type ComponentRanges = Partial<Record<
+  | 'fuselage' | 'wing' | 'tail'
+  | 'aileron_left' | 'aileron_right'
+  | 'elevator_left' | 'elevator_right'
+  | 'rudder'
+  | 'ruddervator_left' | 'ruddervator_right'
+  | 'elevon_left' | 'elevon_right',
+  [number, number]
+>>;
 
 /** Parsed mesh from WebSocket binary protocol (spec S6.2). */
 export interface MeshData {

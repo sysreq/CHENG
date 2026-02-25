@@ -39,6 +39,27 @@ const VTAIL_DEFAULTS = {
   vTailSweep: 0,
 };
 
+// Shared control surface defaults — all disabled by default (Issue #144)
+const CONTROL_SURFACE_DEFAULTS = {
+  aileronEnable: false,
+  aileronSpanStart: 55,
+  aileronSpanEnd: 95,
+  aileronChordPercent: 25,
+  elevatorEnable: false,
+  elevatorSpanPercent: 100,
+  elevatorChordPercent: 35,
+  rudderEnable: false,
+  rudderHeightPercent: 90,
+  rudderChordPercent: 35,
+  ruddervatorEnable: false,
+  ruddervatorChordPercent: 35,
+  ruddervatorSpanPercent: 90,
+  elevonEnable: false,
+  elevonSpanStart: 20,
+  elevonSpanEnd: 90,
+  elevonChordPercent: 20,
+};
+
 // ---------------------------------------------------------------------------
 // Preset Factory Functions
 // ---------------------------------------------------------------------------
@@ -94,6 +115,9 @@ function createTrainerPreset(): AircraftDesign {
     // Print/Export
     ...PRINT_DEFAULTS,
 
+    // Control surfaces — all disabled by default
+    ...CONTROL_SURFACE_DEFAULTS,
+
     // Support strategy
     supportStrategy: 'minimal',
   };
@@ -146,6 +170,9 @@ function createSportPreset(): AircraftDesign {
     // Print/Export
     ...PRINT_DEFAULTS,
 
+    // Control surfaces — all disabled by default
+    ...CONTROL_SURFACE_DEFAULTS,
+
     // Support strategy
     supportStrategy: 'minimal',
   };
@@ -197,6 +224,9 @@ function createAerobaticPreset(): AircraftDesign {
 
     // Print/Export
     ...PRINT_DEFAULTS,
+
+    // Control surfaces — all disabled by default
+    ...CONTROL_SURFACE_DEFAULTS,
 
     // Support strategy
     supportStrategy: 'none',
@@ -254,6 +284,9 @@ function createGliderPreset(): AircraftDesign {
     // Print/Export
     ...PRINT_DEFAULTS,
 
+    // Control surfaces — all disabled by default
+    ...CONTROL_SURFACE_DEFAULTS,
+
     // Support strategy
     supportStrategy: 'none',
   };
@@ -309,6 +342,9 @@ function createFlyingWingPreset(): AircraftDesign {
     // Print/Export
     ...PRINT_DEFAULTS,
 
+    // Control surfaces — all disabled by default
+    ...CONTROL_SURFACE_DEFAULTS,
+
     // Support strategy
     supportStrategy: 'minimal',
   };
@@ -360,6 +396,9 @@ function createScalePreset(): AircraftDesign {
 
     // Print/Export
     ...PRINT_DEFAULTS,
+
+    // Control surfaces — all disabled by default
+    ...CONTROL_SURFACE_DEFAULTS,
 
     // Support strategy
     supportStrategy: 'minimal',

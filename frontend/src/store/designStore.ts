@@ -31,6 +31,12 @@ const PRESET_COMPARE_KEYS: (keyof AircraftDesign)[] = [
   'printBedX', 'printBedY', 'printBedZ', 'autoSection', 'sectionOverlap',
   'jointType', 'jointTolerance', 'nozzleDiameter', 'hollowParts', 'teMinThickness',
   'supportStrategy',
+  // Control surfaces (Issue #144)
+  'aileronEnable', 'aileronSpanStart', 'aileronSpanEnd', 'aileronChordPercent',
+  'elevatorEnable', 'elevatorSpanPercent', 'elevatorChordPercent',
+  'rudderEnable', 'rudderHeightPercent', 'rudderChordPercent',
+  'ruddervatorEnable', 'ruddervatorChordPercent', 'ruddervatorSpanPercent',
+  'elevonEnable', 'elevonSpanStart', 'elevonSpanEnd', 'elevonChordPercent',
 ];
 
 function detectPreset(design: AircraftDesign): PresetName {
@@ -85,6 +91,15 @@ const PARAM_LABELS: Partial<Record<keyof AircraftDesign, string>> = {
   jointTolerance: 'Joint Tolerance',
   nozzleDiameter: 'Nozzle Diameter',
   teMinThickness: 'TE Min Thickness',
+  // Control surfaces (Issue #144)
+  aileronEnable: 'Ailerons',
+  elevatorEnable: 'Elevator',
+  rudderEnable: 'Rudder',
+  ruddervatorEnable: 'Ruddervators',
+  elevonEnable: 'Elevons',
+  aileronChordPercent: 'Aileron Chord %',
+  elevatorChordPercent: 'Elevator Chord %',
+  rudderChordPercent: 'Rudder Chord %',
 };
 
 export interface DesignStore {
