@@ -17,6 +17,8 @@ export interface ParamSelectProps<T extends string> {
   hasWarning?: boolean;
   /** Optional tooltip/description */
   title?: string;
+  /** Whether the control is disabled (e.g. when disconnected) */
+  disabled?: boolean;
 }
 
 /**
@@ -30,6 +32,7 @@ export function ParamSelect<T extends string>({
   onChange,
   hasWarning = false,
   title,
+  disabled = false,
 }: ParamSelectProps<T>): React.JSX.Element {
   const id = useId();
 
@@ -52,9 +55,11 @@ export function ParamSelect<T extends string>({
         id={id}
         value={value}
         onChange={handleChange}
+        disabled={disabled}
         className={`w-full px-2 py-1.5 text-xs text-zinc-100 bg-zinc-800
           border border-zinc-700 rounded cursor-pointer
-          focus:outline-none focus:border-blue-500 ${warningRing}`}
+          focus:outline-none focus:border-blue-500 ${warningRing}
+          disabled:opacity-50 disabled:cursor-not-allowed`}
       >
         {options.map((opt) => (
           <option key={opt} value={opt}>

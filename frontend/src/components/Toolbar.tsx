@@ -9,6 +9,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { useStore } from 'zustand';
 import { useDesignStore } from '../store/designStore';
 import { getWarningCountBadge } from '../lib/validation';
+import { useConnectionStore } from '../store/connectionStore';
 import { HistoryPanel } from './HistoryPanel';
 
 // ---------------------------------------------------------------------------
@@ -173,6 +174,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
   const fileError = useDesignStore((s) => s.fileError);
   const clearFileError = useDesignStore((s) => s.clearFileError);
   const setCameraPreset = useDesignStore((s) => s.setCameraPreset);
+  const isConnected = useConnectionStore((s) => s.state === 'connected');
 
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -560,9 +562,11 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
         {/* Export Button */}
         <button
           onClick={onOpenExport}
+          disabled={!isConnected}
           className="px-3 py-1 text-xs font-medium text-zinc-100 bg-blue-600
             rounded hover:bg-blue-500 focus:outline-none focus:ring-2
-            focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900"
+            focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900
+            disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Export STL
         </button>

@@ -56,6 +56,8 @@ export interface BidirectionalParamProps {
   /** Decimal places for the derived display */
   decimalsA?: number;
   decimalsB?: number;
+  /** Whether the control is disabled (e.g. when disconnected) */
+  disabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +74,7 @@ function InlineSliderInput({
   onInputChange,
   hasWarning,
   warningText,
+  disabled = false,
 }: {
   id: string;
   value: number;
@@ -82,6 +85,7 @@ function InlineSliderInput({
   onInputChange: (v: number) => void;
   hasWarning?: boolean;
   warningText?: string;
+  disabled?: boolean;
 }): React.JSX.Element {
   const [localValue, setLocalValue] = React.useState<string>(String(value));
   const [isFocused, setIsFocused] = React.useState(false);
@@ -147,8 +151,10 @@ function InlineSliderInput({
         step={step}
         value={value}
         onChange={handleSlider}
+        disabled={disabled}
         className={`w-full h-1.5 rounded-full appearance-none cursor-pointer
-          bg-zinc-700 accent-blue-500 ${warningRing}`}
+          bg-zinc-700 accent-blue-500 ${warningRing}
+          disabled:opacity-50 disabled:cursor-not-allowed`}
         aria-label={`${id} slider`}
       />
       <input
@@ -162,10 +168,12 @@ function InlineSliderInput({
         onFocus={handleFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
+        disabled={disabled}
         className={`mt-1 w-full px-2 py-1 text-xs text-zinc-100 bg-zinc-800
           border ${outOfRangeBorder} rounded focus:outline-none focus:border-blue-500
           [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none
-          [&::-webkit-inner-spin-button]:appearance-none ${warningRing}`}
+          [&::-webkit-inner-spin-button]:appearance-none ${warningRing}
+          disabled:opacity-50 disabled:cursor-not-allowed`}
       />
     </>
   );
@@ -225,6 +233,7 @@ export function BidirectionalParam({
   warningTextB,
   decimalsA = 1,
   decimalsB = 1,
+  disabled = false,
 }: BidirectionalParamProps): React.JSX.Element {
   const idA = useId();
   const idB = useId();
@@ -269,6 +278,7 @@ export function BidirectionalParam({
             onInputChange={onInputChangeA}
             hasWarning={hasWarningA}
             warningText={warningTextA}
+            disabled={disabled}
           />
         ) : (
           <DerivedDisplay value={valueA} unit={unitA} decimals={decimalsA} />
@@ -282,10 +292,12 @@ export function BidirectionalParam({
             <Tooltip.Trigger asChild>
               <button
                 onClick={toggleMode}
+                disabled={disabled}
                 className="px-2 py-0.5 text-[10px] text-zinc-400 bg-zinc-800
                   border border-zinc-700 rounded hover:bg-zinc-700
                   hover:text-zinc-200 focus:outline-none focus:ring-1
-                  focus:ring-blue-500 transition-colors"
+                  focus:ring-blue-500 transition-colors
+                  disabled:opacity-50 disabled:cursor-not-allowed"
                 type="button"
                 aria-label={`Switch to editing ${aIsEditable ? labelB : labelA}`}
               >
@@ -338,6 +350,7 @@ export function BidirectionalParam({
             onInputChange={onInputChangeB}
             hasWarning={hasWarningB}
             warningText={warningTextB}
+            disabled={disabled}
           />
         ) : (
           <DerivedDisplay value={valueB} unit={unitB} decimals={decimalsB} />
