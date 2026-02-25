@@ -18,17 +18,24 @@ Containerized web app for designing 3D-printable RC aircraft. Users adjust param
 - Single Docker container serves both backend API and frontend static files
 - CadQuery runs in thread pool with `CapacityLimiter(4)` — shared across REST, WebSocket, export
 - WebSocket `/ws/preview` is primary communication channel (binary mesh protocol)
+- WebSocket uses `anyio.create_task_group()` with separate reader/generator tasks for non-blocking cancellation
+- Temp file cleanup runs at startup + every 30min via `backend/cleanup.py`
 - REST endpoints at `/api/*` as fallback
 - `StorageBackend` Protocol + `LocalStorage` implementation
 - Export writes temp ZIP to `/data/tmp/`, streams to client, then deletes
 - Frontend state in Zustand store with Zundo undo/redo
 
-## MVP Scope
-- 33 user-configurable params + 8 derived/read-only values
-- 3 presets: Trainer (1200mm), Sport (1000mm), Aerobatic (900mm)
-- STL export only (STEP/DXF deferred to 1.0)
-- Auto-sectioning with tongue-and-groove joints
-- 6 structural warnings (V01-V06) + 7 print warnings (V16-V23), all non-blocking
+## Current Scope
+- ~56 user-configurable params + 12 derived/read-only values (incl. weight estimates)
+- 6 presets: Trainer (1200mm), Sport (1000mm), Aerobatic (900mm), Glider, FlyingWing, Scale + custom save/load
+- Export: STL (sectioned), STEP, DXF, SVG + test joint print piece (`/api/export/test-joint`)
+- Auto-sectioning with smart split-point optimizer (avoids spar channels + wing junction)
+- 8 structural warnings (V01-V08) + 5 aero warnings (V09-V13) + 7 print warnings (V16-V23) + 5 printability warnings (V24-V28) + V29 multi-section + V30 control surfaces + V31 landing gear, all non-blocking
+- Bidirectional parameter editing (chord/aspect ratio)
+- Per-component print settings, weight estimation, full CG calculator
+- Multi-section wings (W08-W11): cranked/polyhedral planforms up to 4 panels
+- Control surfaces (C01-C24): ailerons, elevator, rudder, ruddervators, elevons with hinge cuts
+- Landing gear (L01-L11): tricycle, taildragger, or none
 
 ## Implementation Status
 - **Phase 0 (Scaffold):** Complete — project structure, models, types, stores, presets
@@ -36,7 +43,14 @@ Containerized web app for designing 3D-printable RC aircraft. Users adjust param
 - **Phase 2 (Integration):** Complete — WebSocket, generate, export routes wired. 166 tests passing.
 - **Phase 3 (Polish):** Complete — issues #39-#82 fixed. 228 backend + 42 frontend + 7 E2E tests.
 - **Phase 4 (Bugfix):** Complete — issues #83-#115 fixed. Backend/geometry fixes, frontend UX polish, responsive layout.
+- **v0.2 (Export Formats):** Complete — STEP/DXF/SVG export, export preview, aero-audit fixes. 271 tests.
+- **v0.3 (Advanced Params):** Complete — 6 params promoted, fuselage panel, bidirectional editing, per-component print settings. 283+53+7 tests.
+- **v0.4 (Templates):** Complete — Glider, FlyingWing, Scale presets + custom preset save/load.
+- **v0.5 (UX Polish):** Complete — 15 UX issues fixed (error boundary, disabled inputs, view shortcuts, preset UX). 70 Vitest tests.
+- **v0.6 (Validation):** Complete — Weight estimation, full CG calculator, V09-V13 structural, V24-V28 printability, WebSocket refactor, temp cleanup. 393 backend + 19 E2E tests.
+- **v0.7 (Advanced Geometry):** Complete — Multi-section wings W08-W11 (#143), control surfaces C01-C24 (#144), landing gear L01-L11 (#145), test joint export (#146), smart split optimizer (#147). 592 backend + 70 Vitest + 19 E2E tests. PRs #223-227.
 - **App is fully functional:** Geometry, preview, export, validation, Docker all working
+- **Active bugfixes (v0.7.x):** 12 issues (#212-#222, #228-#231) — geometry params not updating preview, flat-plate airfoil, pusher circle, panel selection, control surface preview, landing gear UI access
 
 ## Dev Scripts
 - `startup.ps1` — Builds frontend + starts both servers. Use `-r` for backend `--reload`.
@@ -58,7 +72,7 @@ Containerized web app for designing 3D-printable RC aircraft. Users adjust param
 - Python: snake_case, Pydantic models, type hints
 - TypeScript: strict mode, camelCase
 - **API naming:** `CamelModel` base class (Pydantic `alias_generator=to_camel`). Use `model_dump(by_alias=True)` for frontend. Backend storage stays snake_case.
-- **Validation:** Canonical module is `backend/validation.py` (V01-V06 structural, V16-V23 print). Never duplicate in engine.py.
+- **Validation:** Canonical module is `backend/validation.py` (V01-V08 structural, V09-V13 aero, V16-V23 print, V24-V28 printability, V29 multi-section wing, V30 control surfaces, V31 landing gear). Never duplicate in engine.py.
 - Parameter IDs use subsystem prefixes: G (Global), W (Wing), T (Tail), F (Fuselage), P (Propulsion), PR (Print/Export), D (Derived)
 - Pydantic model uses flat structure with snake_case field names matching parameter names
 
