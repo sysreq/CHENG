@@ -337,6 +337,9 @@ function ExportPreviewPanel({
 }) {
   const [bedX, bedY] = preview.bedDimensionsMm;
 
+  // Count how many cuts were adjusted by the smart split optimizer (#147)
+  const adjustedCutCount = preview.parts.filter((p) => p.cutAdjusted).length;
+
   return (
     <div>
       {/* Summary */}
@@ -356,6 +359,17 @@ function ExportPreviewPanel({
           </div>
         )}
       </div>
+
+      {/* Adjusted cuts warning banner (#147) */}
+      {adjustedCutCount > 0 && (
+        <div className="mb-3 px-3 py-2 text-[10px] text-amber-200 bg-amber-900/30
+          border border-amber-700/40 rounded leading-relaxed">
+          {adjustedCutCount} section cut{adjustedCutCount > 1 ? 's were' : ' was'} moved
+          from the ideal midpoint to avoid internal features. Check the{' '}
+          <span className="text-amber-400 font-medium">adjusted</span> markers
+          in the parts list below for details.
+        </div>
+      )}
 
       {/* Bed dimensions reminder */}
       <p className="text-[10px] text-zinc-500 mb-2">
@@ -401,6 +415,20 @@ function ExportPreviewPanel({
                 <div className="text-zinc-500 text-[10px]">
                   {part.printOrientation} &middot; #{part.assemblyOrder}
                 </div>
+                {/* Cut position info — Issue #147 */}
+                {part.cutPositionMm != null && (
+                  <div className="text-zinc-500 text-[10px]">
+                    Cut at {part.cutPositionMm.toFixed(1)} mm
+                    {part.cutAdjusted && (
+                      <span
+                        className="ml-1 text-amber-400"
+                        title={part.cutAdjustReason ?? 'Cut position was adjusted to avoid an internal feature'}
+                      >
+                        adjusted
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Fit badge */}
