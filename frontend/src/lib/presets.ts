@@ -39,6 +39,19 @@ const VTAIL_DEFAULTS = {
   vTailSweep: 0,
 };
 
+// Shared landing gear defaults — all presets default to 'None' (belly land)
+const LANDING_GEAR_DEFAULTS = {
+  landingGearType: 'None' as const,
+  mainGearPosition: 35,
+  mainGearHeight: 40,
+  mainGearTrack: 120,
+  mainWheelDiameter: 30,
+  noseGearHeight: 45,
+  noseWheelDiameter: 20,
+  tailWheelDiameter: 12,
+  tailGearPosition: 92,
+};
+
 // ---------------------------------------------------------------------------
 // Preset Factory Functions
 // ---------------------------------------------------------------------------
@@ -90,6 +103,9 @@ function createTrainerPreset(): AircraftDesign {
 
     // Fuselage wall
     wallThickness: 1.6,
+
+    // Landing gear (belly land by default)
+    ...LANDING_GEAR_DEFAULTS,
 
     // Print/Export
     ...PRINT_DEFAULTS,
@@ -143,6 +159,9 @@ function createSportPreset(): AircraftDesign {
     // Fuselage wall
     wallThickness: 1.5,
 
+    // Landing gear (belly land by default)
+    ...LANDING_GEAR_DEFAULTS,
+
     // Print/Export
     ...PRINT_DEFAULTS,
 
@@ -194,6 +213,9 @@ function createAerobaticPreset(): AircraftDesign {
 
     // Fuselage wall
     wallThickness: 1.5,
+
+    // Landing gear (belly land by default)
+    ...LANDING_GEAR_DEFAULTS,
 
     // Print/Export
     ...PRINT_DEFAULTS,
@@ -251,6 +273,9 @@ function createGliderPreset(): AircraftDesign {
     // Fuselage wall
     wallThickness: 1.2,
 
+    // Landing gear (belly land by default)
+    ...LANDING_GEAR_DEFAULTS,
+
     // Print/Export
     ...PRINT_DEFAULTS,
 
@@ -306,6 +331,9 @@ function createFlyingWingPreset(): AircraftDesign {
     // Fuselage wall
     wallThickness: 1.5,
 
+    // Landing gear (belly land by default)
+    ...LANDING_GEAR_DEFAULTS,
+
     // Print/Export
     ...PRINT_DEFAULTS,
 
@@ -357,6 +385,9 @@ function createScalePreset(): AircraftDesign {
 
     // Fuselage wall
     wallThickness: 1.5,
+
+    // Landing gear (belly land by default)
+    ...LANDING_GEAR_DEFAULTS,
 
     // Print/Export
     ...PRINT_DEFAULTS,

@@ -5,6 +5,7 @@ Implements:
   - 5 aerodynamic / structural analysis (V09-V13)  [v0.6]
   - 7 print / export warnings          (V16-V23)
   - 5 printability analysis warnings    (V24-V28)  [v0.6]
+  - 4 landing gear warnings             (V31)       [v0.7]
 
 All warnings are level="warn" and never block export.
 
@@ -681,6 +682,112 @@ def _check_v28(design: AircraftDesign, out: list[ValidationWarning]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Landing gear warnings  (V31)  [v0.7]
+# ---------------------------------------------------------------------------
+
+
+def _estimate_cg_x(design: AircraftDesign) -> float:
+    """Rough estimate of aircraft CG X position (mm from nose).
+
+    Uses the same logic as engine._compute_cg but simplified (no sweep offset)
+    to avoid a full weight computation here.  Intended only for relative comparisons
+    like 'is main gear ahead of / behind CG'.
+    """
+    from backend.geometry.engine import _WING_X_FRACTION
+    wing_x_frac = _WING_X_FRACTION.get(design.fuselage_preset, 0.30)
+    wing_x = design.fuselage_length * wing_x_frac
+    # CG is roughly at 25% MAC aft of wing leading edge
+    lam = design.wing_tip_root_ratio
+    mac = _mac(design)
+    cg_x = wing_x + 0.25 * mac
+    return cg_x
+
+
+def _check_v31(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V31: Landing gear validation rules.
+
+    V31a: Tricycle — main gear more than 10% of fuselage ahead of CG
+          (gear forward of CG → aircraft may tip onto tail on ground).
+    V31b: Taildragger — main gear behind estimated CG
+          (main gear aft of CG → unstable on ground, will tip forward/nose-over).
+    V31c: Prop ground clearance — when gear is installed and motor is Tractor,
+          check prop tip clears the ground:
+          clearance = main_gear_height - (prop_diameter/2 - fuselage_height/2)
+          Warn if clearance < 10 mm.
+    V31d: Gear track narrow relative to height — risk of crosswind tipover
+          if track < 0.4 * height.
+    """
+    if design.landing_gear_type == "None":
+        return
+
+    height = design.main_gear_height
+    track = design.main_gear_track
+    main_gear_x = design.fuselage_length * (design.main_gear_position / 100.0)
+    cg_x = _estimate_cg_x(design)
+
+    # V31a: Tricycle — main gear should be BEHIND CG
+    # If main gear is more than 10% of fuselage ahead of CG, warn.
+    if design.landing_gear_type == "Tricycle":
+        forward_limit = cg_x - 0.10 * design.fuselage_length
+        if main_gear_x < forward_limit:
+            out.append(
+                ValidationWarning(
+                    id="V31",
+                    message=(
+                        f"Main gear far forward of CG ({main_gear_x:.0f} mm vs "
+                        f"CG~{cg_x:.0f} mm from nose) — aircraft may tip tail-down on ground"
+                    ),
+                    fields=["main_gear_position"],
+                )
+            )
+
+    # V31b: Taildragger — main gear should be AT or AHEAD of CG
+    if design.landing_gear_type == "Taildragger":
+        if main_gear_x > cg_x:
+            out.append(
+                ValidationWarning(
+                    id="V31",
+                    message=(
+                        f"Taildragger main gear is aft of CG ({main_gear_x:.0f} mm vs "
+                        f"CG~{cg_x:.0f} mm from nose) — unstable on ground, risk of nose-over"
+                    ),
+                    fields=["main_gear_position"],
+                )
+            )
+
+    # V31c: Prop ground clearance (Tractor only — pusher motor is at tail, far from gear).
+    # Since prop_diameter is not a parameter in v0.7, we apply a simple absolute threshold:
+    # for tractor configurations, the gear strut should provide enough clearance that a
+    # typical prop (which is at least as wide as the fuselage) clears the ground.
+    # We warn only when main_gear_height < 30mm (clearly too short for any prop).
+    # This avoids unreliable heuristics that produce false positives.
+    if design.motor_config == "Tractor" and height < 30.0:
+        out.append(
+            ValidationWarning(
+                id="V31",
+                message=(
+                    f"Gear height ({height:.0f} mm) is very low for a tractor configuration — "
+                    f"the propeller may strike the ground (consider ≥ 30 mm strut height)"
+                ),
+                fields=["main_gear_height"],
+            )
+        )
+
+    # V31d: Narrow track — tipover risk
+    if track < 0.4 * height:
+        out.append(
+            ValidationWarning(
+                id="V31",
+                message=(
+                    f"Narrow gear track ({track:.0f} mm) relative to height ({height:.0f} mm) "
+                    f"— risk of tipover in crosswind landing (recommend track ≥ {0.4*height:.0f} mm)"
+                ),
+                fields=["main_gear_track", "main_gear_height"],
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -727,5 +834,8 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
     _check_v26(design, warnings)
     _check_v27(design, warnings)
     _check_v28(design, warnings)
+
+    # Landing gear (V31)
+    _check_v31(design, warnings)
 
     return warnings

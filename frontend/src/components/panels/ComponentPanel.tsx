@@ -10,6 +10,7 @@ import { WingPanel } from './WingPanel';
 import { TailConventionalPanel } from './TailConventionalPanel';
 import { TailVTailPanel } from './TailVTailPanel';
 import { FuselagePanel } from './FuselagePanel';
+import { LandingGearPanel } from './LandingGearPanel';
 
 /**
  * Routes to the correct detail panel based on:
@@ -46,6 +47,10 @@ export function ComponentPanel(): React.JSX.Element {
 
   if (selectedComponent === 'fuselage') {
     return <FuselagePanel />;
+  }
+
+  if (selectedComponent === 'landing_gear') {
+    return <LandingGearPanel />;
   }
 
   // Unreachable, but TypeScript exhaustiveness
