@@ -14,6 +14,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(frontendDir, 'src'),
+      '@testing-library/react': path.resolve(frontendDir, 'node_modules/@testing-library/react'),
     },
   },
 });
