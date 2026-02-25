@@ -24,12 +24,36 @@ const COMPONENT_COLORS: Record<string, string> = {
   wing: '#5c9ce6',
   fuselage: '#8b8b8b',
   tail: '#e6a65c',
+  // Control surfaces — amber (#144)
+  aileron_left: '#f59e0b',
+  aileron_right: '#f59e0b',
+  elevator_left: '#f59e0b',
+  elevator_right: '#f59e0b',
+  rudder: '#f59e0b',
+  ruddervator_left: '#f59e0b',
+  ruddervator_right: '#f59e0b',
+  elevon_left: '#f59e0b',
+  elevon_right: '#f59e0b',
   gear_main_left: '#22c55e',
   gear_main_right: '#22c55e',
   gear_nose: '#22c55e',
   gear_tail: '#22c55e',
 };
 const DEFAULT_COLOR = '#a0a0a8';
+
+/** All primary structural components (selectable). */
+const PRIMARY_COMPONENTS = ['fuselage', 'wing', 'tail'] as const;
+
+/** Control surface component keys (rendered but not top-level selectable). */
+const CONTROL_SURFACE_KEYS = [
+  'aileron_left', 'aileron_right',
+  'elevator_left', 'elevator_right',
+  'rudder',
+  'ruddervator_left', 'ruddervator_right',
+  'elevon_left', 'elevon_right',
+] as const;
+
+type ControlSurfaceKey = typeof CONTROL_SURFACE_KEYS[number];
 
 /** Human-readable labels for sub-elements. */
 const SUB_ELEMENT_LABELS: Record<string, string> = {
@@ -161,12 +185,29 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
 
     const ranges = meshData.componentRanges;
     const result: Partial<Record<
-      'fuselage' | 'wing' | 'tail' | 'gear_main_left' | 'gear_main_right' | 'gear_nose' | 'gear_tail',
+      'fuselage' | 'wing' | 'tail' | ControlSurfaceKey
+      | 'gear_main_left' | 'gear_main_right' | 'gear_nose' | 'gear_tail',
       THREE.BufferGeometry
     >> = {};
 
+    // Primary structural components
+    for (const key of PRIMARY_COMPONENTS) {
+      const range = ranges[key];
+      if (range) {
+        result[key] = createSubGeometry(fullGeometry, range[0], range[1]);
+      }
+    }
+
+    // Control surfaces
+    for (const key of CONTROL_SURFACE_KEYS) {
+      const range = ranges[key];
+      if (range) {
+        result[key] = createSubGeometry(fullGeometry, range[0], range[1]);
+      }
+    }
+
+    // Landing gear
     for (const key of [
-      'fuselage', 'wing', 'tail',
       'gear_main_left', 'gear_main_right', 'gear_nose', 'gear_tail',
     ] as const) {
       const range = ranges[key];
@@ -244,6 +285,15 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
       fuselage: 'Fuselage',
       wing: 'Wing',
       tail: 'Tail',
+      aileron_left: 'Left Aileron',
+      aileron_right: 'Right Aileron',
+      elevator_left: 'Left Elevator',
+      elevator_right: 'Right Elevator',
+      rudder: 'Rudder',
+      ruddervator_left: 'Left Ruddervator',
+      ruddervator_right: 'Right Ruddervator',
+      elevon_left: 'Left Elevon',
+      elevon_right: 'Right Elevon',
       gear_main_left: 'Landing Gear (Main Left)',
       gear_main_right: 'Landing Gear (Main Right)',
       gear_nose: 'Landing Gear (Nose)',
@@ -341,6 +391,64 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
                     border: '1px solid rgba(255,255,255,0.15)',
                   }}>
                     {tooltipText}
+                  </div>
+                </Html>
+              )}
+            </group>
+          );
+        })}
+
+        {/* Control surfaces — amber, non-selectable (#144) */}
+        {CONTROL_SURFACE_KEYS.map((key) => {
+          const geom = componentGeometries[key];
+          if (!geom) return null;
+
+          const label = componentLabels[key] ?? key;
+          const color = selectedComponent === null
+            ? (COMPONENT_COLORS[key] ?? DEFAULT_COLOR)
+            : UNSELECTED_COLOR;
+
+          return (
+            <group key={key}>
+              <mesh geometry={geom}>
+                <meshStandardMaterial
+                  color={color}
+                  emissive="#000000"
+                  emissiveIntensity={0}
+                  metalness={0.1}
+                  roughness={0.6}
+                  side={THREE.DoubleSide}
+                />
+              </mesh>
+              {/* Invisible hit-test mesh for hover tooltip only */}
+              <mesh
+                geometry={geom}
+                onPointerEnter={(e) => { e.stopPropagation(); setHoveredComponent(key as ComponentSelection); gl.domElement.style.cursor = 'default'; }}
+                onPointerLeave={(e) => { e.stopPropagation(); setHoveredComponent(null); gl.domElement.style.cursor = 'auto'; }}
+              >
+                <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+              </mesh>
+              {hoveredComponent === key && geom.boundingSphere && (
+                <Html
+                  position={[
+                    geom.boundingSphere.center.x,
+                    geom.boundingSphere.center.y + geom.boundingSphere.radius * 0.8,
+                    geom.boundingSphere.center.z,
+                  ]}
+                  center
+                  style={{ pointerEvents: 'none' }}
+                >
+                  <div style={{
+                    fontSize: 10,
+                    fontFamily: 'monospace',
+                    color: '#fff',
+                    backgroundColor: 'rgba(30, 30, 34, 0.9)',
+                    padding: '2px 8px',
+                    borderRadius: 3,
+                    whiteSpace: 'nowrap',
+                    border: '1px solid rgba(255, 159, 0, 0.5)',
+                  }}>
+                    {label}
                   </div>
                 </Html>
               )}

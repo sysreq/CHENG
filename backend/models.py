@@ -143,6 +143,33 @@ class AircraftDesign(CamelModel):
     battery_weight_g: float = Field(default=150.0, ge=0, le=2000)
     battery_position_frac: float = Field(default=0.30, ge=0.0, le=1.0)
 
+    # === Control Surfaces — Ailerons (C01-C05) ===
+    aileron_enable: bool = Field(default=False)
+    aileron_span_start: float = Field(default=55.0, ge=30.0, le=70.0)   # % half-span
+    aileron_span_end: float = Field(default=95.0, ge=70.0, le=98.0)     # % half-span
+    aileron_chord_percent: float = Field(default=25.0, ge=15.0, le=40.0)  # % chord
+
+    # === Control Surfaces — Elevator (C11-C13) ===
+    elevator_enable: bool = Field(default=False)
+    elevator_span_percent: float = Field(default=100.0, ge=50.0, le=100.0)  # % hstab span
+    elevator_chord_percent: float = Field(default=35.0, ge=20.0, le=50.0)   # % hstab chord
+
+    # === Control Surfaces — Rudder (C15-C17) ===
+    rudder_enable: bool = Field(default=False)
+    rudder_height_percent: float = Field(default=90.0, ge=50.0, le=100.0)  # % fin height
+    rudder_chord_percent: float = Field(default=35.0, ge=20.0, le=50.0)    # % fin chord
+
+    # === Control Surfaces — Ruddervators (C18-C20, V-tail only) ===
+    ruddervator_enable: bool = Field(default=False)
+    ruddervator_chord_percent: float = Field(default=35.0, ge=20.0, le=50.0)
+    ruddervator_span_percent: float = Field(default=90.0, ge=60.0, le=100.0)
+
+    # === Control Surfaces — Elevons (C21-C24, Flying-wing only) ===
+    elevon_enable: bool = Field(default=False)
+    elevon_span_start: float = Field(default=20.0, ge=10.0, le=40.0)   # % half-span
+    elevon_span_end: float = Field(default=90.0, ge=60.0, le=98.0)     # % half-span
+    elevon_chord_percent: float = Field(default=20.0, ge=15.0, le=35.0)
+
     # ── Landing Gear (L01-L11) ────────────────────────────────────────
     landing_gear_type: LandingGearType = "None"
 

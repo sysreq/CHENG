@@ -1,14 +1,49 @@
 // ============================================================================
 // CHENG — Tail Conventional Panel: H-stab + V-stab params
 // Used for Conventional, T-Tail, and Cruciform tail types
-// Issue #27
+// Issue #27, #144 (control surfaces)
 // ============================================================================
 
-import React, { useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useDesignStore } from '../../store/designStore';
 import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
 import { ParamSlider } from '../ui';
 import { PrintSettingsSection } from './PrintSettingsSection';
+
+// ---------------------------------------------------------------------------
+// Collapsible control surface section — local panel-only component
+// ---------------------------------------------------------------------------
+
+function ControlSurfaceSection({
+  title,
+  tooltip,
+  children,
+}: {
+  title: string;
+  tooltip?: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="mt-3">
+      <div className="border-t border-zinc-700/50 mb-2" />
+      <button
+        onClick={() => setIsOpen((v) => !v)}
+        type="button"
+        className="flex items-center justify-between w-full text-left
+          focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-0.5"
+        aria-expanded={isOpen}
+        title={tooltip}
+      >
+        <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+          {title}
+        </span>
+        <span className="text-xs text-zinc-500">{isOpen ? '▲' : '▼'}</span>
+      </button>
+      {isOpen && <div className="mt-2 space-y-0">{children}</div>}
+    </div>
+  );
+}
 
 export function TailConventionalPanel(): React.JSX.Element {
   const design = useDesignStore((s) => s.design);
@@ -70,6 +105,52 @@ export function TailConventionalPanel(): React.JSX.Element {
   );
   const setVStabRootChordInput = useCallback(
     (v: number) => setParam('vStabRootChord', v, 'text'),
+    [setParam],
+  );
+
+  // ── Elevator handlers ──────────────────────────────────────────────
+
+  const setElevatorEnable = useCallback(
+    (v: boolean) => setParam('elevatorEnable', v, 'immediate'),
+    [setParam],
+  );
+  const setElevatorSpanSlider = useCallback(
+    (v: number) => setParam('elevatorSpanPercent', v, 'slider'),
+    [setParam],
+  );
+  const setElevatorSpanInput = useCallback(
+    (v: number) => setParam('elevatorSpanPercent', v, 'text'),
+    [setParam],
+  );
+  const setElevatorChordSlider = useCallback(
+    (v: number) => setParam('elevatorChordPercent', v, 'slider'),
+    [setParam],
+  );
+  const setElevatorChordInput = useCallback(
+    (v: number) => setParam('elevatorChordPercent', v, 'text'),
+    [setParam],
+  );
+
+  // ── Rudder handlers ──────────────────────────────────────────────
+
+  const setRudderEnable = useCallback(
+    (v: boolean) => setParam('rudderEnable', v, 'immediate'),
+    [setParam],
+  );
+  const setRudderHeightSlider = useCallback(
+    (v: number) => setParam('rudderHeightPercent', v, 'slider'),
+    [setParam],
+  );
+  const setRudderHeightInput = useCallback(
+    (v: number) => setParam('rudderHeightPercent', v, 'text'),
+    [setParam],
+  );
+  const setRudderChordSlider = useCallback(
+    (v: number) => setParam('rudderChordPercent', v, 'slider'),
+    [setParam],
+  );
+  const setRudderChordInput = useCallback(
+    (v: number) => setParam('rudderChordPercent', v, 'text'),
     [setParam],
   );
 
@@ -139,6 +220,46 @@ export function TailConventionalPanel(): React.JSX.Element {
         hasWarning={fieldHasWarning(warnings, 'hStabIncidence')}
       />
 
+      {/* ── Elevator (C11-C13) ─────────────────────────────────────── */}
+      <ControlSurfaceSection title="Elevator">
+        <label className="flex items-center gap-2 text-xs text-zinc-300 mb-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={design.elevatorEnable}
+            onChange={(e) => setElevatorEnable(e.target.checked)}
+            className="w-3 h-3 rounded"
+          />
+          Enable Elevator
+        </label>
+        <ParamSlider
+          label="Elevator Span %"
+          unit="%"
+          value={design.elevatorSpanPercent}
+          min={50}
+          max={100}
+          step={1}
+          onSliderChange={setElevatorSpanSlider}
+          onInputChange={setElevatorSpanInput}
+          disabled={!design.elevatorEnable}
+          hasWarning={fieldHasWarning(warnings, 'elevatorSpanPercent')}
+          title="Elevator span as % of total H-stab span."
+        />
+        <ParamSlider
+          label="Elevator Chord %"
+          unit="%"
+          value={design.elevatorChordPercent}
+          min={20}
+          max={50}
+          step={1}
+          onSliderChange={setElevatorChordSlider}
+          onInputChange={setElevatorChordInput}
+          disabled={!design.elevatorEnable}
+          hasWarning={fieldHasWarning(warnings, 'elevatorChordPercent')}
+          warningText={warnText('elevatorChordPercent')}
+          title="Elevator chord as % of H-stab chord. 35% is typical."
+        />
+      </ControlSurfaceSection>
+
       {/* ── Vertical Stabilizer ────────────────────────────────────── */}
       <div className="border-t border-zinc-700/50 mt-3 mb-2" />
       <h4 className="text-[10px] font-medium text-zinc-500 uppercase mb-2">
@@ -170,6 +291,46 @@ export function TailConventionalPanel(): React.JSX.Element {
         onInputChange={setVStabRootChordInput}
         hasWarning={fieldHasWarning(warnings, 'vStabRootChord')}
       />
+
+      {/* ── Rudder (C15-C17) ───────────────────────────────────────── */}
+      <ControlSurfaceSection title="Rudder">
+        <label className="flex items-center gap-2 text-xs text-zinc-300 mb-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={design.rudderEnable}
+            onChange={(e) => setRudderEnable(e.target.checked)}
+            className="w-3 h-3 rounded"
+          />
+          Enable Rudder
+        </label>
+        <ParamSlider
+          label="Rudder Height %"
+          unit="%"
+          value={design.rudderHeightPercent}
+          min={50}
+          max={100}
+          step={1}
+          onSliderChange={setRudderHeightSlider}
+          onInputChange={setRudderHeightInput}
+          disabled={!design.rudderEnable}
+          hasWarning={fieldHasWarning(warnings, 'rudderHeightPercent')}
+          title="Rudder height as % of V-stab height."
+        />
+        <ParamSlider
+          label="Rudder Chord %"
+          unit="%"
+          value={design.rudderChordPercent}
+          min={20}
+          max={50}
+          step={1}
+          onSliderChange={setRudderChordSlider}
+          onInputChange={setRudderChordInput}
+          disabled={!design.rudderEnable}
+          hasWarning={fieldHasWarning(warnings, 'rudderChordPercent')}
+          warningText={warnText('rudderChordPercent')}
+          title="Rudder chord as % of fin root chord."
+        />
+      </ControlSurfaceSection>
 
       {/* ── Shared ─────────────────────────────────────────────────── */}
       <div className="border-t border-zinc-700/50 mt-3 mb-2" />

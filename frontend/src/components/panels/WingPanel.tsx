@@ -1,14 +1,49 @@
 // ============================================================================
 // CHENG — Wing Panel: Wing geometry + airfoil selection + derived values
-// Issue #26 | Multi-section wings #143
+// Issue #26 | Multi-section wings #143 | Control surfaces #144
 // ============================================================================
 
-import React, { useCallback, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useDesignStore } from '../../store/designStore';
 import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
 import { ParamSlider, ParamSelect, DerivedField } from '../ui';
 import { PrintSettingsSection } from './PrintSettingsSection';
 import type { WingAirfoil } from '../../types/design';
+
+// ---------------------------------------------------------------------------
+// Collapsible control surface section — local panel-only component
+// ---------------------------------------------------------------------------
+
+function ControlSurfaceSection({
+  title,
+  tooltip,
+  children,
+}: {
+  title: string;
+  tooltip?: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="mt-3">
+      <div className="border-t border-zinc-700/50 mb-2" />
+      <button
+        onClick={() => setIsOpen((v) => !v)}
+        type="button"
+        className="flex items-center justify-between w-full text-left
+          focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-0.5"
+        aria-expanded={isOpen}
+        title={tooltip}
+      >
+        <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+          {title}
+        </span>
+        <span className="text-xs text-zinc-500">{isOpen ? '▲' : '▼'}</span>
+      </button>
+      {isOpen && <div className="mt-2 space-y-0">{children}</div>}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Option Constants
@@ -224,6 +259,66 @@ export function WingPanel(): React.JSX.Element {
     [setParam],
   );
 
+  // ── Aileron handlers ────────────────────────────────────────────────
+  const setAileronEnable = useCallback(
+    (v: boolean) => setParam('aileronEnable', v, 'immediate'),
+    [setParam],
+  );
+  const setAileronSpanStartSlider = useCallback(
+    (v: number) => setParam('aileronSpanStart', v, 'slider'),
+    [setParam],
+  );
+  const setAileronSpanStartInput = useCallback(
+    (v: number) => setParam('aileronSpanStart', v, 'text'),
+    [setParam],
+  );
+  const setAileronSpanEndSlider = useCallback(
+    (v: number) => setParam('aileronSpanEnd', v, 'slider'),
+    [setParam],
+  );
+  const setAileronSpanEndInput = useCallback(
+    (v: number) => setParam('aileronSpanEnd', v, 'text'),
+    [setParam],
+  );
+  const setAileronChordSlider = useCallback(
+    (v: number) => setParam('aileronChordPercent', v, 'slider'),
+    [setParam],
+  );
+  const setAileronChordInput = useCallback(
+    (v: number) => setParam('aileronChordPercent', v, 'text'),
+    [setParam],
+  );
+
+  // ── Elevon handlers ─────────────────────────────────────────────────
+  const setElevonEnable = useCallback(
+    (v: boolean) => setParam('elevonEnable', v, 'immediate'),
+    [setParam],
+  );
+  const setElevonSpanStartSlider = useCallback(
+    (v: number) => setParam('elevonSpanStart', v, 'slider'),
+    [setParam],
+  );
+  const setElevonSpanStartInput = useCallback(
+    (v: number) => setParam('elevonSpanStart', v, 'text'),
+    [setParam],
+  );
+  const setElevonSpanEndSlider = useCallback(
+    (v: number) => setParam('elevonSpanEnd', v, 'slider'),
+    [setParam],
+  );
+  const setElevonSpanEndInput = useCallback(
+    (v: number) => setParam('elevonSpanEnd', v, 'text'),
+    [setParam],
+  );
+  const setElevonChordSlider = useCallback(
+    (v: number) => setParam('elevonChordPercent', v, 'slider'),
+    [setParam],
+  );
+  const setElevonChordInput = useCallback(
+    (v: number) => setParam('elevonChordPercent', v, 'text'),
+    [setParam],
+  );
+
   const warnText = (field: string) =>
     getFieldWarnings(warnings, field).map(formatWarning).join('\n') || undefined;
 
@@ -337,6 +432,115 @@ export function WingPanel(): React.JSX.Element {
         hasWarning={fieldHasWarning(warnings, 'wingSkinThickness')}
         warningText={warnText('wingSkinThickness')}
       />
+
+      {/* ── Control Surfaces (Issue #144) ─────────────────────────── */}
+      {design.fuselagePreset === 'Blended-Wing-Body' ? (
+        /* Elevons for flying-wing */
+        <ControlSurfaceSection
+          title="Elevons"
+          tooltip="For flying-wing/delta configurations. Elevons combine aileron and elevator function."
+        >
+          <label className="flex items-center gap-2 text-xs text-zinc-300 mb-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={design.elevonEnable}
+              onChange={(e) => setElevonEnable(e.target.checked)}
+              className="w-3 h-3 rounded"
+            />
+            Enable Elevons
+          </label>
+          <ParamSlider
+            label="Elevon Inboard"
+            unit="%"
+            value={design.elevonSpanStart}
+            min={10}
+            max={40}
+            step={1}
+            onSliderChange={setElevonSpanStartSlider}
+            onInputChange={setElevonSpanStartInput}
+            disabled={!design.elevonEnable}
+            hasWarning={fieldHasWarning(warnings, 'elevonSpanStart')}
+          />
+          <ParamSlider
+            label="Elevon Outboard"
+            unit="%"
+            value={design.elevonSpanEnd}
+            min={60}
+            max={98}
+            step={1}
+            onSliderChange={setElevonSpanEndSlider}
+            onInputChange={setElevonSpanEndInput}
+            disabled={!design.elevonEnable}
+            hasWarning={fieldHasWarning(warnings, 'elevonSpanEnd')}
+          />
+          <ParamSlider
+            label="Elevon Chord %"
+            unit="%"
+            value={design.elevonChordPercent}
+            min={15}
+            max={35}
+            step={1}
+            onSliderChange={setElevonChordSlider}
+            onInputChange={setElevonChordInput}
+            disabled={!design.elevonEnable}
+            hasWarning={fieldHasWarning(warnings, 'elevonChordPercent')}
+            warningText={warnText('elevonChordPercent')}
+          />
+        </ControlSurfaceSection>
+      ) : (
+        /* Ailerons for conventional/tailed aircraft */
+        <ControlSurfaceSection title="Ailerons">
+          <label className="flex items-center gap-2 text-xs text-zinc-300 mb-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={design.aileronEnable}
+              onChange={(e) => setAileronEnable(e.target.checked)}
+              className="w-3 h-3 rounded"
+            />
+            Enable Ailerons
+          </label>
+          <ParamSlider
+            label="Aileron Inboard"
+            unit="%"
+            value={design.aileronSpanStart}
+            min={30}
+            max={70}
+            step={1}
+            onSliderChange={setAileronSpanStartSlider}
+            onInputChange={setAileronSpanStartInput}
+            disabled={!design.aileronEnable}
+            hasWarning={fieldHasWarning(warnings, 'aileronSpanStart')}
+            title="Inboard edge of aileron as % of half-span from root. Must be less than outboard edge."
+          />
+          <ParamSlider
+            label="Aileron Outboard"
+            unit="%"
+            value={design.aileronSpanEnd}
+            min={70}
+            max={98}
+            step={1}
+            onSliderChange={setAileronSpanEndSlider}
+            onInputChange={setAileronSpanEndInput}
+            disabled={!design.aileronEnable}
+            hasWarning={fieldHasWarning(warnings, 'aileronSpanEnd')}
+            title="Outboard edge of aileron as % of half-span. 95% leaves a small wingtip gap."
+          />
+          <ParamSlider
+            label="Aileron Chord %"
+            unit="%"
+            value={design.aileronChordPercent}
+            min={15}
+            max={40}
+            step={1}
+            onSliderChange={setAileronChordSlider}
+            onInputChange={setAileronChordInput}
+            disabled={!design.aileronEnable}
+            hasWarning={fieldHasWarning(warnings, 'aileronChordPercent')}
+            warningText={warnText('aileronChordPercent')}
+            title="Aileron chord as % of the local wing chord at that spanwise station."
+          />
+        </ControlSurfaceSection>
+      )}
 
       {/* ── Wing Panel Breaks (conditional: wingSections > 1) (#143) ── */}
       {design.wingSections > 1 && (

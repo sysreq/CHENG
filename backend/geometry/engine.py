@@ -78,6 +78,13 @@ def assemble_aircraft(design: AircraftDesign) -> dict[str, cq.Workplane]:
     from backend.geometry.fuselage import build_fuselage
     from backend.geometry.wing import build_wing
     from backend.geometry.tail import build_tail
+    from backend.geometry.control_surfaces import (
+        cut_aileron,
+        cut_elevator,
+        cut_rudder,
+        cut_ruddervators,
+        cut_elevons,
+    )
     from backend.geometry.landing_gear import generate_landing_gear
 
     components: dict[str, cq.Workplane] = {}
@@ -102,16 +109,53 @@ def assemble_aircraft(design: AircraftDesign) -> dict[str, cq.Workplane]:
     wing_z = fuselage_height * wing_z_frac
 
     # Build wings and translate to mount position
-    wing_left = build_wing(design, side="left")
-    wing_right = build_wing(design, side="right")
+    wing_left_raw = build_wing(design, side="left")
+    wing_right_raw = build_wing(design, side="right")
+
+    # Apply control surface cuts BEFORE translation (in local wing frame)
+    is_flying_wing = design.fuselage_preset == "Blended-Wing-Body"
+    if is_flying_wing and design.elevon_enable:
+        wing_left_raw, elevon_left = cut_elevons(wing_left_raw, design, side="left")
+        wing_right_raw, elevon_right = cut_elevons(wing_right_raw, design, side="right")
+    elif not is_flying_wing and design.aileron_enable:
+        wing_left_raw, aileron_left = cut_aileron(wing_left_raw, design, side="left")
+        wing_right_raw, aileron_right = cut_aileron(wing_right_raw, design, side="right")
+    else:
+        aileron_left = aileron_right = None
+        elevon_left = elevon_right = None
 
     try:
-        components["wing_left"] = wing_left.translate((wing_x, 0, wing_z))
-        components["wing_right"] = wing_right.translate((wing_x, 0, wing_z))
+        components["wing_left"] = wing_left_raw.translate((wing_x, 0, wing_z))
+        components["wing_right"] = wing_right_raw.translate((wing_x, 0, wing_z))
     except Exception:
         # If translate fails (shouldn't, but safe), use untranslated
-        components["wing_left"] = wing_left
-        components["wing_right"] = wing_right
+        components["wing_left"] = wing_left_raw
+        components["wing_right"] = wing_right_raw
+
+    # Translate control surfaces along with their parent wing
+    if not is_flying_wing and design.aileron_enable:
+        if aileron_left is not None:
+            try:
+                components["aileron_left"] = aileron_left.translate((wing_x, 0, wing_z))
+            except Exception:
+                components["aileron_left"] = aileron_left
+        if aileron_right is not None:
+            try:
+                components["aileron_right"] = aileron_right.translate((wing_x, 0, wing_z))
+            except Exception:
+                components["aileron_right"] = aileron_right
+
+    if is_flying_wing and design.elevon_enable:
+        if elevon_left is not None:
+            try:
+                components["elevon_left"] = elevon_left.translate((wing_x, 0, wing_z))
+            except Exception:
+                components["elevon_left"] = elevon_left
+        if elevon_right is not None:
+            try:
+                components["elevon_right"] = elevon_right.translate((wing_x, 0, wing_z))
+            except Exception:
+                components["elevon_right"] = elevon_right
 
     # Cut wing-root saddle pocket from fuselage for a flush mount.
     fuselage = _cut_wing_saddle(cq, fuselage, design, wing_x, wing_z)
@@ -121,11 +165,82 @@ def assemble_aircraft(design: AircraftDesign) -> dict[str, cq.Workplane]:
     tail_x = wing_x + design.tail_arm
     tail_components = build_tail(design)
 
+    # Apply control surface cuts to tail components BEFORE translation
+    if design.tail_type == "V-Tail" and design.ruddervator_enable:
+        v_tail_left = tail_components.get("v_tail_left")
+        v_tail_right = tail_components.get("v_tail_right")
+        if v_tail_left is not None and v_tail_right is not None:
+            v_tail_left, v_tail_right, ruddervator_left, ruddervator_right = cut_ruddervators(
+                v_tail_left, v_tail_right, design
+            )
+            tail_components["v_tail_left"] = v_tail_left
+            tail_components["v_tail_right"] = v_tail_right
+        else:
+            ruddervator_left = ruddervator_right = None
+    else:
+        ruddervator_left = ruddervator_right = None
+
+    if design.tail_type not in ("V-Tail", "Cruciform") and design.elevator_enable:
+        h_stab_left = tail_components.get("h_stab_left")
+        h_stab_right = tail_components.get("h_stab_right")
+        if h_stab_left is not None:
+            tail_components["h_stab_left"], elevator_left = cut_elevator(
+                h_stab_left, design, side="left"
+            )
+        else:
+            elevator_left = None
+        if h_stab_right is not None:
+            tail_components["h_stab_right"], elevator_right = cut_elevator(
+                h_stab_right, design, side="right"
+            )
+        else:
+            elevator_right = None
+    else:
+        elevator_left = elevator_right = None
+
+    if design.tail_type not in ("V-Tail",) and design.rudder_enable:
+        v_stab = tail_components.get("v_stab")
+        if v_stab is not None:
+            tail_components["v_stab"], rudder = cut_rudder(v_stab, design)
+        else:
+            rudder = None
+    else:
+        rudder = None
+
     for name, solid in tail_components.items():
         try:
             components[name] = solid.translate((tail_x, 0, 0))
         except Exception:
             components[name] = solid
+
+    # Add translated tail control surfaces
+    if ruddervator_left is not None:
+        try:
+            components["ruddervator_left"] = ruddervator_left.translate((tail_x, 0, 0))
+        except Exception:
+            components["ruddervator_left"] = ruddervator_left
+    if ruddervator_right is not None:
+        try:
+            components["ruddervator_right"] = ruddervator_right.translate((tail_x, 0, 0))
+        except Exception:
+            components["ruddervator_right"] = ruddervator_right
+
+    if elevator_left is not None:
+        try:
+            components["elevator_left"] = elevator_left.translate((tail_x, 0, 0))
+        except Exception:
+            components["elevator_left"] = elevator_left
+    if elevator_right is not None:
+        try:
+            components["elevator_right"] = elevator_right.translate((tail_x, 0, 0))
+        except Exception:
+            components["elevator_right"] = elevator_right
+
+    if rudder is not None:
+        try:
+            components["rudder"] = rudder.translate((tail_x, 0, 0))
+        except Exception:
+            components["rudder"] = rudder
 
     # 4. Landing gear (separate components, not unioned with fuselage)
     # generate_landing_gear returns {} for 'None' type — zero overhead for existing designs.

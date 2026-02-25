@@ -5,6 +5,7 @@ Implements:
   - 5 aerodynamic / structural analysis (V09-V13)  [v0.6]
   - 7 print / export warnings          (V16-V23)
   - 5 printability analysis warnings    (V24-V28)  [v0.6]
+  - 3 control surface warnings          (V30)       [v0.7]
   - 1 multi-section wing analysis       (V29)      [v0.7]
   - 4 landing gear warnings             (V31)      [v0.7]
 
@@ -654,6 +655,112 @@ def _check_v27(design: AircraftDesign, out: list[ValidationWarning]) -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Control surface warnings  (V30)  [v0.7]
+# ---------------------------------------------------------------------------
+
+
+def _check_v30(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V30: Control surface sizing and geometry checks.
+
+    V30a: Aileron span order — aileron_span_start < aileron_span_end.
+    V30b: Elevator chord >= 45% risks leaving insufficient fixed stabilizer area.
+    V30c: Rudder chord >= 45% risks leaving insufficient fixed fin area.
+    V30d: Elevon chord area / wing area must be >= 8% for flying-wing pitch authority.
+    V30e: Control surface minimum printable span (> 3 * nozzle_diameter).
+    """
+    # V30a: Aileron span order
+    if design.aileron_enable:
+        if design.aileron_span_start >= design.aileron_span_end:
+            out.append(
+                ValidationWarning(
+                    id="V30",
+                    message=(
+                        f"Aileron span start ({design.aileron_span_start:.0f}%) must be "
+                        f"less than span end ({design.aileron_span_end:.0f}%)"
+                    ),
+                    fields=["aileron_span_start", "aileron_span_end"],
+                )
+            )
+
+        # V30e: minimum printable aileron span
+        half_span = design.wing_span / 2.0
+        aileron_span_mm = (
+            (design.aileron_span_end - design.aileron_span_start) / 100.0
+        ) * half_span
+        min_span_mm = 3 * design.nozzle_diameter
+        if aileron_span_mm < min_span_mm:
+            out.append(
+                ValidationWarning(
+                    id="V30",
+                    message=(
+                        f"Aileron span ({aileron_span_mm:.1f} mm) is below the minimum "
+                        f"printable span ({min_span_mm:.1f} mm = 3 x nozzle)"
+                    ),
+                    fields=["aileron_span_start", "aileron_span_end", "nozzle_diameter"],
+                )
+            )
+
+    # V30b: Elevator chord >= 45% leaves very little fixed stabilizer area
+    if design.elevator_enable and design.elevator_chord_percent >= 45.0:
+        out.append(
+            ValidationWarning(
+                id="V30",
+                message=(
+                    f"Elevator chord ({design.elevator_chord_percent:.0f}%) is >= 45% — "
+                    f"consider reducing to leave adequate fixed stabilizer area"
+                ),
+                fields=["elevator_chord_percent"],
+            )
+        )
+
+    # V30c: Rudder chord >= 45% leaves very little fixed fin area
+    if design.rudder_enable and design.rudder_chord_percent >= 45.0:
+        out.append(
+            ValidationWarning(
+                id="V30",
+                message=(
+                    f"Rudder chord ({design.rudder_chord_percent:.0f}%) is >= 45% — "
+                    f"consider reducing to leave adequate fixed fin area"
+                ),
+                fields=["rudder_chord_percent"],
+            )
+        )
+
+    # V30d: Elevon chord area / wing area for flying-wing
+    is_flying_wing = design.fuselage_preset == "Blended-Wing-Body"
+    if is_flying_wing and design.elevon_enable:
+        tip_chord = design.wing_chord * design.wing_tip_root_ratio
+        half_span = design.wing_span / 2.0
+        wing_area_mm2 = 0.5 * (design.wing_chord + tip_chord) * design.wing_span
+
+        elevon_span_frac = (design.elevon_span_end - design.elevon_span_start) / 100.0
+        y_inboard = (design.elevon_span_start / 100.0) * half_span
+        y_outboard = (design.elevon_span_end / 100.0) * half_span
+        chord_at_inboard = design.wing_chord + (tip_chord - design.wing_chord) * (y_inboard / half_span)
+        chord_at_outboard = design.wing_chord + (tip_chord - design.wing_chord) * (y_outboard / half_span)
+        elevon_area_mm2 = (
+            0.5 * (chord_at_inboard + chord_at_outboard)
+            * (y_outboard - y_inboard)
+            * (design.elevon_chord_percent / 100.0)
+            * 2  # both sides
+        )
+
+        if wing_area_mm2 > 0:
+            elevon_fraction = elevon_area_mm2 / wing_area_mm2
+            if elevon_fraction < 0.08:
+                out.append(
+                    ValidationWarning(
+                        id="V30",
+                        message=(
+                            f"Elevon area ({elevon_fraction * 100:.1f}% of wing area) is below "
+                            f"the 8% minimum for adequate pitch authority on a flying wing"
+                        ),
+                        fields=["elevon_span_start", "elevon_span_end", "elevon_chord_percent"],
+                    )
+                )
+
+
 def _check_v28(design: AircraftDesign, out: list[ValidationWarning]) -> None:
     """V28: Layer adhesion warning for thin walls.
 
@@ -876,7 +983,8 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
 
     Returns a list of ValidationWarning objects.  Each warning has a unique
     ID (V01-V08 structural, V09-V13 aero/structural, V16-V23 print,
-    V24-V28 printability, V29 multi-section wing), a human-readable message,
+    V24-V28 printability, V30 control surfaces, V29 multi-section wing,
+    V31 landing gear), a human-readable message,
     and the list of affected parameter field names.
     """
     warnings: list[ValidationWarning] = []
@@ -913,6 +1021,9 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
     _check_v26(design, warnings)
     _check_v27(design, warnings)
     _check_v28(design, warnings)
+
+    # Control surface warnings (V30) [v0.7]
+    _check_v30(design, warnings)
 
     # Multi-section wing analysis (V29)
     _check_v29(design, warnings)

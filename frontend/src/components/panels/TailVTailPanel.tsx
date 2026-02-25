@@ -1,14 +1,49 @@
 // ============================================================================
 // CHENG — Tail V-Tail Panel: V-tail specific parameters
 // Shown when tailType === 'V-Tail'
-// Issue #27
+// Issue #27, #144 (control surfaces — ruddervators)
 // ============================================================================
 
-import React, { useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useDesignStore } from '../../store/designStore';
 import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
 import { ParamSlider } from '../ui';
 import { PrintSettingsSection } from './PrintSettingsSection';
+
+// ---------------------------------------------------------------------------
+// Collapsible control surface section — local panel-only component
+// ---------------------------------------------------------------------------
+
+function ControlSurfaceSection({
+  title,
+  tooltip,
+  children,
+}: {
+  title: string;
+  tooltip?: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="mt-3">
+      <div className="border-t border-zinc-700/50 mb-2" />
+      <button
+        onClick={() => setIsOpen((v) => !v)}
+        type="button"
+        className="flex items-center justify-between w-full text-left
+          focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-1 py-0.5"
+        aria-expanded={isOpen}
+        title={tooltip}
+      >
+        <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+          {title}
+        </span>
+        <span className="text-xs text-zinc-500">{isOpen ? '▲' : '▼'}</span>
+      </button>
+      {isOpen && <div className="mt-2 space-y-0">{children}</div>}
+    </div>
+  );
+}
 
 export function TailVTailPanel(): React.JSX.Element {
   const design = useDesignStore((s) => s.design);
@@ -59,6 +94,29 @@ export function TailVTailPanel(): React.JSX.Element {
   );
   const setVTailSweepInput = useCallback(
     (v: number) => setParam('vTailSweep', v, 'text'),
+    [setParam],
+  );
+
+  // ── Ruddervator handlers ──────────────────────────────────────────
+
+  const setRuddervatorEnable = useCallback(
+    (v: boolean) => setParam('ruddervatorEnable', v, 'immediate'),
+    [setParam],
+  );
+  const setRuddervatorChordSlider = useCallback(
+    (v: number) => setParam('ruddervatorChordPercent', v, 'slider'),
+    [setParam],
+  );
+  const setRuddervatorChordInput = useCallback(
+    (v: number) => setParam('ruddervatorChordPercent', v, 'text'),
+    [setParam],
+  );
+  const setRuddervatorSpanSlider = useCallback(
+    (v: number) => setParam('ruddervatorSpanPercent', v, 'slider'),
+    [setParam],
+  );
+  const setRuddervatorSpanInput = useCallback(
+    (v: number) => setParam('ruddervatorSpanPercent', v, 'text'),
     [setParam],
   );
 
@@ -146,6 +204,49 @@ export function TailVTailPanel(): React.JSX.Element {
         onInputChange={setVTailSweepInput}
         hasWarning={fieldHasWarning(warnings, 'vTailSweep')}
       />
+
+      {/* ── Ruddervators (C18-C20) ─────────────────────────────────── */}
+      <ControlSurfaceSection
+        title="Ruddervators"
+        tooltip="Ruddervators combine elevator and rudder function on V-tail surfaces."
+      >
+        <label className="flex items-center gap-2 text-xs text-zinc-300 mb-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={design.ruddervatorEnable}
+            onChange={(e) => setRuddervatorEnable(e.target.checked)}
+            className="w-3 h-3 rounded"
+          />
+          Enable Ruddervators
+        </label>
+        <ParamSlider
+          label="Ruddervator Span %"
+          unit="%"
+          value={design.ruddervatorSpanPercent}
+          min={60}
+          max={100}
+          step={1}
+          onSliderChange={setRuddervatorSpanSlider}
+          onInputChange={setRuddervatorSpanInput}
+          disabled={!design.ruddervatorEnable}
+          hasWarning={fieldHasWarning(warnings, 'ruddervatorSpanPercent')}
+          title="Ruddervator span as % of total V-tail span."
+        />
+        <ParamSlider
+          label="Ruddervator Chord %"
+          unit="%"
+          value={design.ruddervatorChordPercent}
+          min={20}
+          max={50}
+          step={1}
+          onSliderChange={setRuddervatorChordSlider}
+          onInputChange={setRuddervatorChordInput}
+          disabled={!design.ruddervatorEnable}
+          hasWarning={fieldHasWarning(warnings, 'ruddervatorChordPercent')}
+          warningText={warnText('ruddervatorChordPercent')}
+          title="Ruddervator chord as % of V-tail chord. 35% is typical."
+        />
+      </ControlSurfaceSection>
 
       {/* ── Shared ─────────────────────────────────────────────────── */}
       <div className="border-t border-zinc-700/50 mt-3 mb-2" />
