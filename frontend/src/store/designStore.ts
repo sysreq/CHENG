@@ -264,20 +264,9 @@ export const useDesignStore = create<DesignStore>()(
       },
 
       commitSliderChange: () => {
-        // Force a Zundo history snapshot of the current design state.
-        // We do this by re-setting the lastAction field with the current value,
-        // which triggers Zustand setState → Zundo records the current state.
-        // This is called after resume() so Zundo IS tracking again.
-        const current = get();
-        set(
-          produce((state: DesignStore) => {
-            // Re-apply current state values — this is a no-op for the design
-            // but it DOES trigger Zustand setState, which Zundo intercepts to
-            // record a snapshot (since isTracking is now true after resume()).
-            state.lastAction = current.lastAction;
-            state.lastChangeSource = 'immediate';
-          }),
-        );
+        // No-op: the equality function in Zundo config now ensures snapshots
+        // are only recorded when design data actually changes. Slider commits
+        // are handled transparently — no spurious trigger needed.
       },
 
       // ── Multi-Section Wing Panel Array Actions (#143) ──────────────────
@@ -488,12 +477,19 @@ export const useDesignStore = create<DesignStore>()(
       },
     }),
     {
-      // Zundo: only track design params and preset for undo/redo
+      // Zundo: track design params, preset, and action label for undo/redo.
+      // lastAction is display metadata stored in the snapshot so the history
+      // panel can show a human-readable label for each past/future state.
       partialize: (state): UndoableState => ({
         design: state.design,
         activePreset: state.activePreset,
         lastAction: state.lastAction,
       }),
+      // Only record a snapshot when design data actually changes (#246).
+      // This prevents lastAction-only changes from creating spurious history
+      // entries (e.g. commitSliderChange() re-setting lastAction to the same
+      // value).
+      equality: (a, b) => JSON.stringify(a.design) === JSON.stringify(b.design),
       limit: 50,
     },
   ),

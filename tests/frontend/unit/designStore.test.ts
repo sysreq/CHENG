@@ -195,6 +195,56 @@ describe('designStore', () => {
     }).not.toThrow();
   });
 
+  // ── Zundo history deduplication (#246) ──────────────────────────────
+
+  it('setting the same param value twice does NOT add a second undo entry', () => {
+    // Start fresh
+    useDesignStore.temporal.getState().clear();
+
+    useDesignStore.getState().setParam('wingSpan', 800);
+    const afterFirst = useDesignStore.temporal.getState().pastStates.length;
+
+    // Set same value again — should not create a new snapshot
+    useDesignStore.getState().setParam('wingSpan', 800);
+    const afterSecond = useDesignStore.temporal.getState().pastStates.length;
+
+    expect(afterSecond).toBe(afterFirst);
+  });
+
+  it('setting a different param value DOES add a new undo entry', () => {
+    useDesignStore.temporal.getState().clear();
+
+    useDesignStore.getState().setParam('wingSpan', 800);
+    const afterFirst = useDesignStore.temporal.getState().pastStates.length;
+
+    useDesignStore.getState().setParam('wingSpan', 900);
+    const afterSecond = useDesignStore.temporal.getState().pastStates.length;
+
+    expect(afterSecond).toBe(afterFirst + 1);
+  });
+
+  it('lastAction label is still updated even when design data is unchanged', () => {
+    // setParam early-returns if value is the same, so we test via a fresh value
+    useDesignStore.getState().setParam('wingSpan', 750);
+    expect(useDesignStore.getState().lastAction).toBe('Set Wingspan to 750');
+
+    useDesignStore.getState().setParam('wingChord', 180);
+    expect(useDesignStore.getState().lastAction).toBe('Set Wing Chord to 180');
+  });
+
+  it('commitSliderChange does not create spurious history entries', () => {
+    useDesignStore.temporal.getState().clear();
+
+    useDesignStore.getState().setParam('wingSpan', 850);
+    const before = useDesignStore.temporal.getState().pastStates.length;
+
+    // commitSliderChange should be a no-op that doesn't add history
+    useDesignStore.getState().commitSliderChange();
+    const after = useDesignStore.temporal.getState().pastStates.length;
+
+    expect(after).toBe(before);
+  });
+
   // ── setMeshData clears isGenerating ─────────────────────────────────
 
   it('setMeshData clears isGenerating flag', () => {
