@@ -10,8 +10,11 @@ Also provides STEP, DXF, and SVG export builders.
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
 import tempfile
+import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +25,8 @@ from backend.export.section import SectionPart
 
 if TYPE_CHECKING:
     import cadquery as cq
+
+logger = logging.getLogger("cheng.package")
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -35,15 +40,41 @@ EXPORT_TMP_DIR: Path = Path(os.environ.get("CHENG_DATA_DIR", tempfile.gettempdir
 # ---------------------------------------------------------------------------
 
 
+def _sanitize_filename(name: str) -> str:
+    """Sanitize a user-supplied name for safe use as a filesystem filename component.
+
+    Removes path separators, leading dots, and any characters outside
+    word characters, hyphens, and dots.  Falls back to 'export' if the
+    result is empty.
+    """
+    # Strip leading dots and path separator characters first
+    name = name.lstrip("./\\ ")
+    # Replace spaces with underscores before further sanitization
+    name = name.replace(" ", "_")
+    # Keep only safe characters (word chars, hyphen, dot)
+    name = re.sub(r"[^\w\-.]", "_", name)
+    # Strip any remaining leading dots or underscores from path traversal attempts
+    name = name.lstrip("._")
+    return name or "export"
+
+
 def _make_temp_zip(design: AircraftDesign) -> tuple[Path, Path]:
     """Create a temp file for ZIP writing and compute final path.
 
     Returns (tmp_path, zip_path). tmp_path is closed and ready for writing.
+
+    The ZIP filename is sanitized (#258) and includes a UUID suffix (#259)
+    to prevent path traversal and filename collisions on concurrent exports.
     """
     tmp_dir = EXPORT_TMP_DIR
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    zip_filename = f"cheng_{design.name.replace(' ', '_')}_{design.id[:8] if design.id else 'export'}.zip"
+    # #258: sanitize design.name to prevent path traversal
+    safe_name = _sanitize_filename(design.name)
+    design_id = design.id[:8] if design.id else "export"
+    # #259: append UUID suffix to prevent concurrent-export filename collisions
+    unique_suffix = uuid.uuid4().hex[:8]
+    zip_filename = f"cheng_{safe_name}_{design_id}_{unique_suffix}.zip"
     zip_path = tmp_dir / zip_filename
 
     tmp_file = tempfile.NamedTemporaryFile(
@@ -263,9 +294,11 @@ def build_dxf_zip(
                     zf.writestr(dxf_filename, dxf_bytes)
                     manifest["files"].append(dxf_filename)
                     manifest["total_files"] += 1
-                except Exception:
+                except Exception as e:
                     # Cross-section may fail at some stations (e.g. near tips)
-                    pass
+                    logger.warning(
+                        "DXF export failed for %s: %s", dxf_filename, e, exc_info=True
+                    )
                 finally:
                     dxf_tmp_path.unlink(missing_ok=True)
 
@@ -332,9 +365,11 @@ def build_svg_zip(
                     zf.writestr(svg_filename, svg_bytes)
                     manifest["files"].append(svg_filename)
                     manifest["total_files"] += 1
-                except Exception:
+                except Exception as e:
                     # SVG export may fail for some geometries
-                    pass
+                    logger.warning(
+                        "SVG export failed for %s: %s", svg_filename, e, exc_info=True
+                    )
                 finally:
                     svg_tmp_path.unlink(missing_ok=True)
 
