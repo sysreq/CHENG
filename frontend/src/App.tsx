@@ -33,9 +33,10 @@ export default function App() {
   const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
-  // When disconnected, disable parameter panels (read-only mode)
+  // When disconnected, dim panels visually but keep them scrollable (#194).
+  // Individual inputs are disabled via the disabled prop (#178).
   const panelStyle = !isConnected
-    ? { opacity: 0.5, pointerEvents: 'none' as const }
+    ? { opacity: 0.5 }
     : {};
 
   return (
