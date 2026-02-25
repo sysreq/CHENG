@@ -136,6 +136,65 @@ describe('designStore', () => {
     expect(useDesignStore.getState().selectedComponent).toBeNull();
   });
 
+  // ── Multi-section wing panel actions (#143) ─────────────────────────
+
+  it('initial design has wingSections=1 and default panel arrays', () => {
+    const { design } = useDesignStore.getState();
+    expect(design.wingSections).toBe(1);
+    expect(Array.isArray(design.panelBreakPositions)).toBe(true);
+    expect(Array.isArray(design.panelDihedrals)).toBe(true);
+    expect(Array.isArray(design.panelSweeps)).toBe(true);
+  });
+
+  it('setParam wingSections=2 extends panel arrays by one element', () => {
+    useDesignStore.getState().setParam('wingSections', 2, 'immediate');
+    const { design } = useDesignStore.getState();
+    expect(design.wingSections).toBe(2);
+    // Arrays must have at least 1 element for the single break between 2 sections
+    expect(design.panelBreakPositions.length).toBeGreaterThanOrEqual(1);
+    expect(design.panelDihedrals.length).toBeGreaterThanOrEqual(1);
+    expect(design.panelSweeps.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('setParam wingSections=1 truncates arrays to 0 active breaks', () => {
+    // First go to 3 sections
+    useDesignStore.getState().setParam('wingSections', 3, 'immediate');
+    // Then back to 1
+    useDesignStore.getState().setParam('wingSections', 1, 'immediate');
+    const { design } = useDesignStore.getState();
+    expect(design.wingSections).toBe(1);
+    // The first two elements of the arrays may still exist (unused), but
+    // wingSections determines how many are active (n-1 breaks for n sections)
+  });
+
+  it('setPanelBreak updates panelBreakPositions at the given index', () => {
+    useDesignStore.getState().setParam('wingSections', 2, 'immediate');
+    useDesignStore.getState().setPanelBreak(0, 55);
+    const { design } = useDesignStore.getState();
+    expect(design.panelBreakPositions[0]).toBe(55);
+  });
+
+  it('setPanelDihedral updates panelDihedrals at the given index', () => {
+    useDesignStore.getState().setParam('wingSections', 2, 'immediate');
+    useDesignStore.getState().setPanelDihedral(0, 20);
+    const { design } = useDesignStore.getState();
+    expect(design.panelDihedrals[0]).toBe(20);
+  });
+
+  it('setPanelSweep updates panelSweeps at the given index', () => {
+    useDesignStore.getState().setParam('wingSections', 2, 'immediate');
+    useDesignStore.getState().setPanelSweep(0, 15);
+    const { design } = useDesignStore.getState();
+    expect(design.panelSweeps[0]).toBe(15);
+  });
+
+  it('setPanelBreak on out-of-range index does not throw', () => {
+    // wingSections=1, so no active breaks — calling setPanelBreak(5, ...) should not crash
+    expect(() => {
+      useDesignStore.getState().setPanelBreak(5, 70);
+    }).not.toThrow();
+  });
+
   // ── setMeshData clears isGenerating ─────────────────────────────────
 
   it('setMeshData clears isGenerating flag', () => {

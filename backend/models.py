@@ -26,6 +26,7 @@ FuselagePreset = Literal["Pod", "Conventional", "Blended-Wing-Body"]
 MotorConfig = Literal["Tractor", "Pusher"]
 WingMountType = Literal["High-Wing", "Mid-Wing", "Low-Wing", "Shoulder-Wing"]
 TailType = Literal["Conventional", "T-Tail", "V-Tail", "Cruciform"]
+LandingGearType = Literal["None", "Tricycle", "Taildragger"]
 WingAirfoil = Literal[
     "Flat-Plate", "NACA-0012", "NACA-2412", "NACA-4412", "NACA-6412",
     "Clark-Y", "Eppler-193", "Eppler-387", "Selig-1223", "AG-25",
@@ -78,6 +79,24 @@ class AircraftDesign(CamelModel):
     wing_skin_thickness: float = Field(default=1.2, ge=0.8, le=3.0)
     wing_incidence: float = Field(default=2.0, ge=-5, le=15)
     wing_twist: float = Field(default=0.0, ge=-5, le=5)
+
+    # ── Multi-section wing (W08-W11) ──────────────────────────────────
+    # W08: number of spanwise panels per half-wing (1 = single panel, classic)
+    wing_sections: int = Field(default=1, ge=1, le=4)
+    # W09: break positions as % of half-span (index 0 = break between panel 1 and 2).
+    # Store 3 values (max for 4-panel wing); only first wing_sections-1 are used.
+    panel_break_positions: list[float] = Field(
+        default_factory=lambda: [60.0, 80.0, 90.0]
+    )
+    # W10: dihedral angle for panels 2, 3, 4 (panel 1 uses wing_dihedral).
+    panel_dihedrals: list[float] = Field(
+        default_factory=lambda: [10.0, 5.0, 5.0]
+    )
+    # W11: sweep angle override for panels 2, 3, 4 (panel 1 uses wing_sweep).
+    # NaN encodes "inherit panel 1 sweep" — stored as 0.0 by default here.
+    panel_sweeps: list[float] = Field(
+        default_factory=lambda: [0.0, 0.0, 0.0]
+    )
 
     # ── Tail (Conventional / T-Tail / Cruciform) ──────────────────────
     h_stab_span: float = Field(default=350, ge=100, le=1200)
@@ -151,6 +170,23 @@ class AircraftDesign(CamelModel):
     elevon_span_end: float = Field(default=90.0, ge=60.0, le=98.0)     # % half-span
     elevon_chord_percent: float = Field(default=20.0, ge=15.0, le=35.0)
 
+    # ── Landing Gear (L01-L11) ────────────────────────────────────────
+    landing_gear_type: LandingGearType = "None"
+
+    # Main gear (L03-L06) — applies to both Tricycle and Taildragger
+    main_gear_position: float = Field(default=35.0, ge=25.0, le=55.0)   # % fuselage length
+    main_gear_height: float = Field(default=40.0, ge=15.0, le=150.0)    # mm
+    main_gear_track: float = Field(default=120.0, ge=30.0, le=400.0)    # mm
+    main_wheel_diameter: float = Field(default=30.0, ge=10.0, le=80.0)  # mm
+
+    # Nose gear (L08-L09) — Tricycle only
+    nose_gear_height: float = Field(default=45.0, ge=15.0, le=150.0)    # mm
+    nose_wheel_diameter: float = Field(default=20.0, ge=8.0, le=60.0)   # mm
+
+    # Tail wheel (L10-L11) — Taildragger only
+    tail_wheel_diameter: float = Field(default=12.0, ge=5.0, le=40.0)   # mm
+    tail_gear_position: float = Field(default=92.0, ge=85.0, le=98.0)   # % fuselage length
+
 
 # ---------------------------------------------------------------------------
 # Derived Values — computed by geometry engine, read-only
@@ -216,6 +252,10 @@ class ExportPreviewPart(CamelModel):
     print_orientation: str
     assembly_order: int
     fits_bed: bool
+    # ── Issue #147: Smart split metadata (optional — only present for multi-section parts) ──
+    cut_position_mm: float | None = None    # actual cut coordinate along split axis
+    cut_adjusted: bool = False              # True if optimizer moved from midpoint
+    cut_adjust_reason: str = ""             # e.g. "Avoided wing root zone"
 
 
 class ExportPreviewResponse(CamelModel):
@@ -249,3 +289,16 @@ class SavePresetRequest(CamelModel):
 
     name: str
     design: AircraftDesign
+
+
+class TestJointExportRequest(CamelModel):
+    """Request body for POST /api/export/test-joint.
+
+    Subset of AircraftDesign containing only the parameters that affect
+    the joint geometry — no full design needed for this calibration print.
+    """
+
+    joint_type: JointType = "Tongue-and-Groove"   # PR10
+    joint_tolerance: float = Field(default=0.15, ge=0.05, le=0.5)   # PR11, mm
+    section_overlap: float = Field(default=15.0, ge=5.0, le=30.0)   # PR05, mm
+    nozzle_diameter: float = Field(default=0.4, ge=0.2, le=1.0)     # PR06, mm

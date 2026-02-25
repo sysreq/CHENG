@@ -33,8 +33,11 @@ export type JointType = 'Tongue-and-Groove' | 'Dowel-Pin' | 'Flat-with-Alignment
 /** 3D print support generation strategy. */
 export type SupportStrategy = 'none' | 'minimal' | 'full';
 
+/** Landing gear configuration. */
+export type LandingGearType = 'None' | 'Tricycle' | 'Taildragger';
+
 /** Selectable component in the 3D viewport. */
-export type ComponentSelection = 'wing' | 'tail' | 'fuselage' | null;
+export type ComponentSelection = 'wing' | 'tail' | 'fuselage' | 'landing_gear' | null;
 
 /** Sub-element within a wing component. */
 export type WingSubElement = 'left-panel' | 'right-panel';
@@ -45,11 +48,14 @@ export type FuselageSubElement = 'nose' | 'cabin' | 'tail-cone';
 /** Union of all sub-element types. */
 export type SubElementSelection = WingSubElement | TailSubElement | FuselageSubElement | null;
 
-/** Sub-elements available for each component. */
+/** Sub-elements available for each component.
+ *  Wing includes multi-section panel labels for #143 (extra entries are harmless
+ *  when only single-section is active — cycler only traverses those that exist). */
 export const COMPONENT_SUB_ELEMENTS: Record<Exclude<ComponentSelection, null>, readonly string[]> = {
-  wing: ['left-panel', 'right-panel'] as const,
+  wing: ['left-panel', 'right-panel', 'inner-panel', 'mid-panel', 'outer-panel'] as const,
   tail: ['h-stab', 'v-stab'] as const,
   fuselage: ['nose', 'cabin', 'tail-cone'] as const,
+  landing_gear: ['main_left', 'main_right', 'nose_gear', 'tail_wheel'] as const,
 };
 
 /** Infill density hint for per-component print settings. */
@@ -66,7 +72,7 @@ export interface ComponentPrintSettings {
 }
 
 /** Map of component name to its print settings overrides. */
-export type PerComponentPrintSettings = Partial<Record<'wing' | 'tail' | 'fuselage', ComponentPrintSettings>>;
+export type PerComponentPrintSettings = Partial<Record<'wing' | 'tail' | 'fuselage' | 'landing_gear', ComponentPrintSettings>>;
 
 /** Source of a parameter change — controls debounce/throttle timing. */
 export type ChangeSource = 'slider' | 'text' | 'immediate';
@@ -121,6 +127,24 @@ export interface AircraftDesign {
   wingIncidence: number;
   /** Wing twist (washout at tip). @unit deg @min -5 @max 5 @default 0.0 */
   wingTwist: number;
+
+  // ── Multi-Section Wing (Issue #143) ───────────────────────────────
+  /** Number of spanwise panels per half-wing. 1 = straight, 2–4 = polyhedral/cranked.
+   *  @min 1 @max 4 @default 1 @integer */
+  wingSections: number;
+  /** Break positions as % of half-span where panel n meets panel n+1.
+   *  Array length >= wingSections - 1. Values must be strictly increasing 10–90%.
+   *  e.g. [60] for 2-section, [40, 70] for 3-section.
+   *  @unit % @min 10 @max 90 */
+  panelBreakPositions: number[];
+  /** Dihedral angle per panel starting from panel 2 (panel 1 uses global wingDihedral).
+   *  Array length >= wingSections - 1.
+   *  @unit deg @min -10 @max 45 */
+  panelDihedrals: number[];
+  /** Sweep angle override per panel starting from panel 2 (panel 1 uses global wingSweep).
+   *  Array length >= wingSections - 1.
+   *  @unit deg @min -10 @max 45 */
+  panelSweeps: number[];
 
   // ── Tail (Conventional / T-Tail / Cruciform) ──────────────────────
   /** H-stab span. @unit mm @min 100 @max 1200 @default 350 */
@@ -208,6 +232,28 @@ export interface AircraftDesign {
   /** Elevon chord as % of local wing chord. @unit % @min 15 @max 35 @default 20 */
   elevonChordPercent: number;
 
+  // ── Landing Gear (L01-L11) ────────────────────────────────────────
+  /** Landing gear configuration. @default 'None' */
+  landingGearType: LandingGearType;
+  /** Main gear longitudinal position as % of fuselage length from nose.
+   *  @unit % @min 25 @max 55 @default 35 */
+  mainGearPosition: number;
+  /** Main gear strut height (ground clearance). @unit mm @min 15 @max 150 @default 40 */
+  mainGearHeight: number;
+  /** Lateral distance between left and right main wheels. @unit mm @min 30 @max 400 @default 120 */
+  mainGearTrack: number;
+  /** Main wheel diameter. @unit mm @min 10 @max 80 @default 30 */
+  mainWheelDiameter: number;
+  /** Nose gear strut height (Tricycle only). @unit mm @min 15 @max 150 @default 45 */
+  noseGearHeight: number;
+  /** Nose wheel diameter (Tricycle only). @unit mm @min 8 @max 60 @default 20 */
+  noseWheelDiameter: number;
+  /** Tail wheel diameter (Taildragger only). @unit mm @min 5 @max 40 @default 12 */
+  tailWheelDiameter: number;
+  /** Tail gear longitudinal position as % of fuselage length from nose (Taildragger only).
+   *  @unit % @min 85 @max 98 @default 92 */
+  tailGearPosition: number;
+
   // ── Export / Print ────────────────────────────────────────────────
   /** Printer bed X. @unit mm @min 100 @max 500 @default 220 */
   printBedX: number;
@@ -265,8 +311,18 @@ export interface DerivedValues {
 export type StructuralWarningId = 'V01' | 'V02' | 'V03' | 'V04' | 'V05' | 'V06' | 'V07' | 'V08';
 /** Print warning IDs (V16-V23). */
 export type PrintWarningId = 'V16' | 'V17' | 'V18' | 'V20' | 'V21' | 'V22' | 'V23';
+/** Aero analysis warning IDs (V09-V13). */
+export type AeroWarningId = 'V09' | 'V10' | 'V11' | 'V12' | 'V13';
+/** Printability warning IDs (V24-V28). */
+export type PrintabilityWarningId = 'V24' | 'V25' | 'V26' | 'V27' | 'V28';
+/** Multi-section wing warning IDs (V29). */
+export type MultiSectionWarningId = 'V29';
+/** Control surface warning IDs (V30). */
+export type ControlSurfaceWarningId = 'V30';
+/** Landing gear warning IDs (V31). */
+export type LandingGearWarningId = 'V31';
 /** All warning IDs. */
-export type WarningId = StructuralWarningId | PrintWarningId;
+export type WarningId = StructuralWarningId | PrintWarningId | AeroWarningId | PrintabilityWarningId | MultiSectionWarningId | ControlSurfaceWarningId | LandingGearWarningId;
 
 /** Non-blocking validation warning from the backend. */
 export interface ValidationWarning {
@@ -281,14 +337,17 @@ export interface ValidationWarning {
 // MeshData — parsed from WebSocket binary frame
 // ---------------------------------------------------------------------------
 
-/** Per-component face index ranges for selection highlighting. */
+/** Per-component face index ranges for selection highlighting.
+ *  Includes control surfaces, multi-section wing panel sub-keys, and landing gear. */
 export type ComponentRanges = Partial<Record<
   | 'fuselage' | 'wing' | 'tail'
   | 'aileron_left' | 'aileron_right'
   | 'elevator_left' | 'elevator_right'
   | 'rudder'
   | 'ruddervator_left' | 'ruddervator_right'
-  | 'elevon_left' | 'elevon_right',
+  | 'elevon_left' | 'elevon_right'
+  | 'wing_panel_1' | 'wing_panel_2' | 'wing_panel_3' | 'wing_panel_4'
+  | 'gear_main_left' | 'gear_main_right' | 'gear_nose' | 'gear_tail',
   [number, number]
 >>;
 
@@ -354,6 +413,14 @@ export interface ExportPreviewPart {
   printOrientation: string;
   assemblyOrder: number;
   fitsBed: boolean;
+  /** Actual cut position in mm from the component bounding-box origin.
+   *  Only present for components with multiple sections. (Issue #147) */
+  cutPositionMm?: number | null;
+  /** Whether this cut was adjusted away from the midpoint to avoid an
+   *  internal feature (spar channel, wing root, fuselage saddle). (Issue #147) */
+  cutAdjusted?: boolean;
+  /** Human-readable reason for the cut adjustment. (Issue #147) */
+  cutAdjustReason?: string;
 }
 
 /** Response from POST /api/export/preview. */

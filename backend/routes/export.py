@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
 from backend.geometry.engine import assemble_aircraft, _cadquery_limiter
-from backend.export.section import auto_section, auto_section_with_axis, create_section_parts, SectionPart
+from backend.export.section import auto_section, auto_section_with_axis, auto_section_with_meta, create_section_parts, SectionPart
 from backend.export.joints import add_tongue_and_groove
 from backend.export.package import build_zip, build_step_zip, build_dxf_zip, build_svg_zip, EXPORT_TMP_DIR
 from backend.models import (
@@ -26,6 +26,7 @@ from backend.models import (
     ExportRequest,
     ExportPreviewPart,
     ExportPreviewResponse,
+    TestJointExportRequest,
 )
 
 logger = logging.getLogger("cheng.export")
@@ -98,15 +99,19 @@ def _generate_sections(design: AircraftDesign) -> list[SectionPart]:
         if comp_category in ("h", "v"):
             comp_category = comp_name.replace("_left", "").replace("_right", "")
 
-        # Use auto_section_with_axis to get split axis info (#163)
-        pieces_with_axis = auto_section_with_axis(
+        # Use auto_section_with_meta to get split axis + smart split metadata (#147)
+        pieces_with_meta = auto_section_with_meta(
             solid,
             bed_x=design.print_bed_x,
             bed_y=design.print_bed_y,
             bed_z=design.print_bed_z,
+            design=design,
+            component=comp_category,
         )
-        pieces = [p[0] for p in pieces_with_axis]
-        split_axes = [p[1] for p in pieces_with_axis]
+        pieces = [p[0] for p in pieces_with_meta]
+        split_axes = [p[1] for p in pieces_with_meta]
+        split_positions = [p[2] for p in pieces_with_meta]
+        avoidance_hits = [p[3] for p in pieces_with_meta]
 
         section_parts = create_section_parts(
             comp_category,
@@ -114,6 +119,8 @@ def _generate_sections(design: AircraftDesign) -> list[SectionPart]:
             pieces,
             start_assembly_order=assembly_order,
             split_axes=split_axes,
+            split_positions=split_positions,
+            avoidance_hits=avoidance_hits,
         )
 
         all_sections.extend(section_parts)
@@ -146,6 +153,52 @@ def _fits_on_bed(
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+
+@router.post("/export/test-joint")
+async def export_test_joint(request: TestJointExportRequest) -> FileResponse:
+    """Generate a test joint print piece and return as ZIP.
+
+    Produces two small STL files (plug + socket) that replicate the production
+    tongue-and-groove joint profile.  Useful for printer fit calibration before
+    committing to a full aircraft print.
+
+    ZIP contents:
+      test_joint_plug.stl    — tongue side (40 x overlap x 40 mm)
+      test_joint_socket.stl  — groove side (40 x overlap x 40 mm)
+      manifest.json          — joint settings + instructions
+
+    Pipeline:
+      1. generate_test_joint_pieces() in thread pool (CadQuery limiter)
+      2. tessellate + ZIP in same thread
+      3. stream FileResponse with background cleanup
+    """
+    from backend.export.test_joint import build_test_joint_zip
+
+    EXPORT_TMP_DIR.mkdir(parents=True, exist_ok=True)
+
+    try:
+        zip_path = await anyio.to_thread.run_sync(
+            lambda: build_test_joint_zip(
+                section_overlap=request.section_overlap,
+                joint_tolerance=request.joint_tolerance,
+                nozzle_diameter=request.nozzle_diameter,
+                tmp_dir=EXPORT_TMP_DIR,
+                joint_type=request.joint_type,
+            ),
+            limiter=_cadquery_limiter,
+            abandon_on_cancel=True,
+        )
+    except Exception as exc:
+        logger.exception("Test joint export failed")
+        raise HTTPException(status_code=500, detail=f"Test joint export failed: {exc}") from exc
+
+    return FileResponse(
+        path=str(zip_path),
+        media_type="application/zip",
+        filename="test_joint.zip",
+        background=BackgroundTask(lambda: zip_path.unlink(missing_ok=True)),
+    )
 
 
 @router.post("/export")
@@ -220,6 +273,21 @@ async def export_preview(request: ExportRequest) -> ExportPreviewResponse:
 
 
 # ---------------------------------------------------------------------------
+# Issue #147: Smart split reason helper
+# ---------------------------------------------------------------------------
+
+
+def _smart_split_reason(component: str) -> str:
+    """Return a human-readable reason string for an adjusted cut position."""
+    comp = component.lower()
+    if "wing" in comp and "stab" not in comp:
+        return "Avoided wing root / tip zone"
+    if comp == "fuselage":
+        return "Avoided wing-mount saddle"
+    return "Avoided internal feature"
+
+
+# ---------------------------------------------------------------------------
 # Blocking pipelines (run in thread pool)
 # ---------------------------------------------------------------------------
 
@@ -236,6 +304,11 @@ def _preview_blocking(design: AircraftDesign) -> list[ExportPreviewPart]:
             design.print_bed_y,
             design.print_bed_z,
         )
+        # Build human-readable adjust reason for Issue #147
+        adjust_reason = ""
+        if sp.avoidance_zone_hit:
+            adjust_reason = _smart_split_reason(sp.component)
+
         all_parts.append(
             ExportPreviewPart(
                 filename=sp.filename,
@@ -247,6 +320,10 @@ def _preview_blocking(design: AircraftDesign) -> list[ExportPreviewPart]:
                 print_orientation=sp.print_orientation,
                 assembly_order=sp.assembly_order,
                 fits_bed=fits,
+                # Issue #147: smart split metadata
+                cut_position_mm=sp.split_position_mm if sp.total_sections > 1 else None,
+                cut_adjusted=sp.avoidance_zone_hit,
+                cut_adjust_reason=adjust_reason,
             )
         )
 

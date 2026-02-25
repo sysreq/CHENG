@@ -37,6 +37,10 @@ const PRESET_COMPARE_KEYS: (keyof AircraftDesign)[] = [
   'rudderEnable', 'rudderHeightPercent', 'rudderChordPercent',
   'ruddervatorEnable', 'ruddervatorChordPercent', 'ruddervatorSpanPercent',
   'elevonEnable', 'elevonSpanStart', 'elevonSpanEnd', 'elevonChordPercent',
+  'wingSections',
+  'landingGearType', 'mainGearPosition', 'mainGearHeight', 'mainGearTrack',
+  'mainWheelDiameter', 'noseGearHeight', 'noseWheelDiameter',
+  'tailWheelDiameter', 'tailGearPosition',
 ];
 
 function detectPreset(design: AircraftDesign): PresetName {
@@ -56,6 +60,7 @@ function detectPreset(design: AircraftDesign): PresetName {
 const PARAM_LABELS: Partial<Record<keyof AircraftDesign, string>> = {
   wingSpan: 'Wingspan',
   wingChord: 'Wing Chord',
+  wingSections: 'Wing Sections',
   fuselageLength: 'Fuselage Length',
   tailType: 'Tail Type',
   wingAirfoil: 'Airfoil',
@@ -109,6 +114,15 @@ const PARAM_LABELS: Partial<Record<keyof AircraftDesign, string>> = {
   elevonSpanStart: 'Elevon Inboard',
   elevonSpanEnd: 'Elevon Outboard',
   elevonChordPercent: 'Elevon Chord %',
+  landingGearType: 'Landing Gear Type',
+  mainGearPosition: 'Main Gear Position',
+  mainGearHeight: 'Main Gear Height',
+  mainGearTrack: 'Main Gear Track',
+  mainWheelDiameter: 'Main Wheel Dia',
+  noseGearHeight: 'Nose Gear Height',
+  noseWheelDiameter: 'Nose Wheel Dia',
+  tailWheelDiameter: 'Tail Wheel Dia',
+  tailGearPosition: 'Tail Gear Position',
 };
 
 export interface DesignStore {
@@ -125,6 +139,14 @@ export interface DesignStore {
     source?: ChangeSource,
   ) => void;
   loadPreset: (name: Exclude<PresetName, 'Custom'>) => void;
+
+  // ── Multi-Section Wing Panel Array Actions (#143) ────────────────
+  /** Set a specific panel break position by index (0-based). */
+  setPanelBreak: (index: number, value: number) => void;
+  /** Set a specific panel dihedral by index (0-based, panel 2+ only). */
+  setPanelDihedral: (index: number, value: number) => void;
+  /** Set a specific panel sweep by index (0-based, panel 2+ only). */
+  setPanelSweep: (index: number, value: number) => void;
 
   // ── Derived Values (from backend, read-only) ────────────────────
   derived: DerivedValues | null;
@@ -143,10 +165,10 @@ export interface DesignStore {
   // ── Per-Component Print Settings (#128) ────────────────────────
   componentPrintSettings: PerComponentPrintSettings;
   setComponentPrintSetting: (
-    component: 'wing' | 'tail' | 'fuselage',
+    component: 'wing' | 'tail' | 'fuselage' | 'landing_gear',
     settings: Partial<ComponentPrintSettings>,
   ) => void;
-  clearComponentPrintSettings: (component: 'wing' | 'tail' | 'fuselage') => void;
+  clearComponentPrintSettings: (component: 'wing' | 'tail' | 'fuselage' | 'landing_gear') => void;
 
   // ── Viewport Selection ──────────────────────────────────────────
   selectedComponent: ComponentSelection;
@@ -208,9 +230,66 @@ export const useDesignStore = create<DesignStore>()(
             state.lastChangeSource = source;
             state.lastAction = `Set ${label} to ${String(value)}`;
             state.isDirty = true;
+
+            // Side-effect: resize panel arrays when wingSections changes (#143)
+            if (key === 'wingSections') {
+              const newN = value as number;
+              const targetLen = Math.max(0, newN - 1);
+              const oldBreaks = state.design.panelBreakPositions;
+              const oldDihedrals = state.design.panelDihedrals;
+              const oldSweeps = state.design.panelSweeps;
+
+              if (oldBreaks.length < targetLen) {
+                // Append default entries for new panels
+                for (let i = oldBreaks.length; i < targetLen; i++) {
+                  const breakPct = Math.min(90, 60 + i * 15);
+                  oldBreaks.push(breakPct);
+                  oldDihedrals.push(10);
+                  oldSweeps.push(state.design.wingSweep);
+                }
+              }
+              // Truncate arrays (Immer splice is fine here)
+              state.design.panelBreakPositions = oldBreaks.slice(0, targetLen);
+              state.design.panelDihedrals = oldDihedrals.slice(0, targetLen);
+              state.design.panelSweeps = oldSweeps.slice(0, targetLen);
+            }
           }),
         );
       },
+
+      // ── Multi-Section Wing Panel Array Actions (#143) ──────────────────
+      setPanelBreak: (index, value) =>
+        set(
+          produce((state: DesignStore) => {
+            state.design.panelBreakPositions[index] = value;
+            state.activePreset = 'Custom';
+            state.lastChangeSource = 'immediate';
+            state.lastAction = `Set Panel ${index + 2} Break to ${value}%`;
+            state.isDirty = true;
+          }),
+        ),
+
+      setPanelDihedral: (index, value) =>
+        set(
+          produce((state: DesignStore) => {
+            state.design.panelDihedrals[index] = value;
+            state.activePreset = 'Custom';
+            state.lastChangeSource = 'immediate';
+            state.lastAction = `Set Panel ${index + 2} Dihedral to ${value}°`;
+            state.isDirty = true;
+          }),
+        ),
+
+      setPanelSweep: (index, value) =>
+        set(
+          produce((state: DesignStore) => {
+            state.design.panelSweeps[index] = value;
+            state.activePreset = 'Custom';
+            state.lastChangeSource = 'immediate';
+            state.lastAction = `Set Panel ${index + 2} Sweep to ${value}°`;
+            state.isDirty = true;
+          }),
+        ),
 
       loadPreset: (name) =>
         set(
@@ -243,14 +322,14 @@ export const useDesignStore = create<DesignStore>()(
       setComponentPrintSetting: (component, settings) =>
         set(
           produce((state: DesignStore) => {
-            const existing = state.componentPrintSettings[component] ?? {};
-            state.componentPrintSettings[component] = { ...existing, ...settings };
+            const existing = state.componentPrintSettings[component as 'wing' | 'tail' | 'fuselage' | 'landing_gear'] ?? {};
+            state.componentPrintSettings[component as 'wing' | 'tail' | 'fuselage' | 'landing_gear'] = { ...existing, ...settings };
           }),
         ),
       clearComponentPrintSettings: (component) =>
         set(
           produce((state: DesignStore) => {
-            delete state.componentPrintSettings[component];
+            delete state.componentPrintSettings[component as 'wing' | 'tail' | 'fuselage' | 'landing_gear'];
           }),
         ),
 

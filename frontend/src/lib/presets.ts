@@ -60,6 +60,27 @@ const CONTROL_SURFACE_DEFAULTS = {
   elevonChordPercent: 20,
 };
 
+// Multi-section wing defaults (single panel — no breaks active)
+const MULTI_SECTION_DEFAULTS = {
+  wingSections: 1,
+  panelBreakPositions: [60.0, 80.0, 90.0],
+  panelDihedrals: [10.0, 5.0, 5.0],
+  panelSweeps: [0.0, 0.0, 0.0],
+};
+
+// Shared landing gear defaults — all presets default to 'None' (belly land)
+const LANDING_GEAR_DEFAULTS = {
+  landingGearType: 'None' as const,
+  mainGearPosition: 35,
+  mainGearHeight: 40,
+  mainGearTrack: 120,
+  mainWheelDiameter: 30,
+  noseGearHeight: 45,
+  noseWheelDiameter: 20,
+  tailWheelDiameter: 12,
+  tailGearPosition: 92,
+};
+
 // ---------------------------------------------------------------------------
 // Preset Factory Functions
 // ---------------------------------------------------------------------------
@@ -112,6 +133,9 @@ function createTrainerPreset(): AircraftDesign {
     // Fuselage wall
     wallThickness: 1.6,
 
+    // Landing gear (belly land by default)
+    ...LANDING_GEAR_DEFAULTS,
+
     // Print/Export
     ...PRINT_DEFAULTS,
 
@@ -120,6 +144,9 @@ function createTrainerPreset(): AircraftDesign {
 
     // Support strategy
     supportStrategy: 'minimal',
+
+    // Multi-section wing defaults (single panel)
+    ...MULTI_SECTION_DEFAULTS,
   };
 }
 
@@ -167,6 +194,9 @@ function createSportPreset(): AircraftDesign {
     // Fuselage wall
     wallThickness: 1.5,
 
+    // Landing gear (belly land by default)
+    ...LANDING_GEAR_DEFAULTS,
+
     // Print/Export
     ...PRINT_DEFAULTS,
 
@@ -175,6 +205,9 @@ function createSportPreset(): AircraftDesign {
 
     // Support strategy
     supportStrategy: 'minimal',
+
+    // Multi-section wing defaults (single panel)
+    ...MULTI_SECTION_DEFAULTS,
   };
 }
 
@@ -222,6 +255,9 @@ function createAerobaticPreset(): AircraftDesign {
     // Fuselage wall
     wallThickness: 1.5,
 
+    // Landing gear (belly land by default)
+    ...LANDING_GEAR_DEFAULTS,
+
     // Print/Export
     ...PRINT_DEFAULTS,
 
@@ -230,6 +266,9 @@ function createAerobaticPreset(): AircraftDesign {
 
     // Support strategy
     supportStrategy: 'none',
+
+    // Multi-section wing defaults (single panel)
+    ...MULTI_SECTION_DEFAULTS,
   };
 }
 
@@ -281,6 +320,9 @@ function createGliderPreset(): AircraftDesign {
     // Fuselage wall
     wallThickness: 1.2,
 
+    // Landing gear (belly land by default)
+    ...LANDING_GEAR_DEFAULTS,
+
     // Print/Export
     ...PRINT_DEFAULTS,
 
@@ -289,6 +331,12 @@ function createGliderPreset(): AircraftDesign {
 
     // Support strategy
     supportStrategy: 'none',
+
+    // Multi-section wing: Glider uses 2-panel polyhedral (inner flat, outer angled)
+    wingSections: 2,
+    panelBreakPositions: [60.0, 80.0, 90.0],
+    panelDihedrals: [10.0, 5.0, 5.0],
+    panelSweeps: [0.0, 0.0, 0.0],
   };
 }
 
@@ -339,6 +387,9 @@ function createFlyingWingPreset(): AircraftDesign {
     // Fuselage wall
     wallThickness: 1.5,
 
+    // Landing gear (belly land by default)
+    ...LANDING_GEAR_DEFAULTS,
+
     // Print/Export
     ...PRINT_DEFAULTS,
 
@@ -347,6 +398,9 @@ function createFlyingWingPreset(): AircraftDesign {
 
     // Support strategy
     supportStrategy: 'minimal',
+
+    // Multi-section wing defaults (single panel)
+    ...MULTI_SECTION_DEFAULTS,
   };
 }
 
@@ -394,6 +448,9 @@ function createScalePreset(): AircraftDesign {
     // Fuselage wall
     wallThickness: 1.5,
 
+    // Landing gear (belly land by default)
+    ...LANDING_GEAR_DEFAULTS,
+
     // Print/Export
     ...PRINT_DEFAULTS,
 
@@ -402,6 +459,9 @@ function createScalePreset(): AircraftDesign {
 
     // Support strategy
     supportStrategy: 'minimal',
+
+    // Multi-section wing defaults (single panel)
+    ...MULTI_SECTION_DEFAULTS,
   };
 }
 
