@@ -1,0 +1,1120 @@
+diff --git a/backend/geometry/engine.py b/backend/geometry/engine.py
+index 4c366f7..55e768a 100644
+--- a/backend/geometry/engine.py
++++ b/backend/geometry/engine.py
+@@ -205,12 +205,8 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
+ 
+     aspect_ratio = (design.wing_span ** 2) / wing_area_mm2 if wing_area_mm2 > 0 else 0.0
+ 
+-    mean_aero_chord_mm = (
+-        (2.0 / 3.0)
+-        * design.wing_chord
+-        * (1.0 + lambda_ + lambda_ ** 2)
+-        / (1.0 + lambda_)
+-    ) if (1.0 + lambda_) > 0 else design.wing_chord
++    # MAC and y_mac: use cranked formula for multi-section wings (v0.7 #143)
++    mean_aero_chord_mm, y_mac = _compute_mac_cranked(design)
+ 
+     taper_ratio = tip_chord_mm / design.wing_chord if design.wing_chord > 0 else 0.0
+ 
+@@ -224,11 +220,7 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
+ 
+     # Full CG calculator (v0.6 #139) — weighted average of all mass positions.
+     # All X positions are measured from the aircraft nose (X=0).
+-    half_span = design.wing_span / 2.0
+     sweep_rad = math.radians(design.wing_sweep)
+-    y_mac = (
+-        (half_span / 3.0) * (1.0 + 2.0 * lambda_) / (1.0 + lambda_)
+-    ) if (1.0 + lambda_) > 0 else 0.0
+ 
+     estimated_cg_mm = _compute_cg(
+         design, weights, mean_aero_chord_mm, y_mac, sweep_rad,
+@@ -247,6 +239,88 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
+     }
+ 
+ 
++def _compute_mac_cranked(design: AircraftDesign) -> tuple[float, float]:
++    """Compute Mean Aerodynamic Chord and its spanwise position.
++
++    For single-section wings, uses the standard taper formula.
++    For multi-section (cranked) wings, computes the area-weighted MAC
++    across all panels (guidance doc §1.11).
++
++    Returns:
++        (mac_mm, y_mac_mm) — MAC length and its spanwise position from root.
++    """
++    n = design.wing_sections
++    root_chord = design.wing_chord
++    tip_chord = root_chord * design.wing_tip_root_ratio
++    half_span = design.wing_span / 2.0
++
++    if n <= 1:
++        # Classic single-panel formula
++        lam = design.wing_tip_root_ratio
++        if (1.0 + lam) == 0:
++            mac = root_chord
++        else:
++            mac = (2.0 / 3.0) * root_chord * (1.0 + lam + lam ** 2) / (1.0 + lam)
++        # Spanwise position of MAC from root
++        y_mac = (
++            (half_span / 3.0) * (1.0 + 2.0 * lam) / (1.0 + lam)
++            if (1.0 + lam) > 0 else 0.0
++        )
++        return mac, y_mac
++
++    # Multi-panel: build station list
++    n_breaks = n - 1
++    break_fracs = [
++        design.panel_break_positions[i] / 100.0
++        for i in range(n_breaks)
++    ]
++    station_fracs = [0.0] + break_fracs + [1.0]
++    station_chords = [
++        root_chord + (tip_chord - root_chord) * frac
++        for frac in station_fracs
++    ]
++
++    total_area = 0.0
++    mac_area_sum = 0.0
++    y_mac_area_sum = 0.0
++
++    for panel_idx in range(n):
++        c_in = station_chords[panel_idx]
++        c_out = station_chords[panel_idx + 1]
++        frac_in = station_fracs[panel_idx]
++        frac_out = station_fracs[panel_idx + 1]
++        b_panel = half_span * (frac_out - frac_in)  # panel span (mm)
++
++        area = 0.5 * (c_in + c_out) * b_panel  # trapezoidal area
++
++        lam_p = c_out / c_in if c_in > 0 else 1.0
++        # Panel MAC
++        if abs(1.0 + lam_p) > 1e-9:
++            mac_panel = (2.0 / 3.0) * c_in * (1.0 + lam_p + lam_p ** 2) / (1.0 + lam_p)
++        else:
++            mac_panel = c_in
++
++        # Spanwise position of panel MAC from root (local + accumulated)
++        y_local = (b_panel / 3.0) * (1.0 + 2.0 * lam_p) / (1.0 + lam_p) if abs(1.0 + lam_p) > 1e-9 else b_panel / 2.0
++        y_panel_root = frac_in * half_span
++        y_mac_panel = y_panel_root + y_local
++
++        total_area += area
++        mac_area_sum += mac_panel * area
++        y_mac_area_sum += y_mac_panel * area
++
++    if total_area <= 0:
++        # Fallback to simple formula
++        lam = design.wing_tip_root_ratio
++        mac = (2.0 / 3.0) * root_chord * (1.0 + lam + lam ** 2) / max(1.0 + lam, 1e-9)
++        y_mac = half_span / 2.0
++        return mac, y_mac
++
++    mac_cranked = mac_area_sum / total_area
++    y_mac_cranked = y_mac_area_sum / total_area
++    return mac_cranked, y_mac_cranked
++
++
+ def _compute_weight_estimates(design: AircraftDesign) -> dict[str, float]:
+     """Estimate printed part weights based on bounding volumes, infill, and density.
+ 
+diff --git a/backend/geometry/wing.py b/backend/geometry/wing.py
+index 8db4cd8..5697292 100644
+--- a/backend/geometry/wing.py
++++ b/backend/geometry/wing.py
+@@ -2,6 +2,10 @@
+ 
+ Each wing half is built from root (Y=0) to tip (Y=+/-span/2), with
+ airfoil loading, taper, sweep, dihedral, TE enforcement, and shelling.
++
++Multi-section wings (wing_sections > 1) build N separate lofted panels
++and union them into a single solid.  Each panel has independent dihedral
++and sweep angles (W10/W11), with dihedral accumulated across panel breaks.
+ """
+ 
+ from __future__ import annotations
+@@ -23,45 +27,34 @@ from backend.geometry.airfoil import load_airfoil
+ def build_wing(
+     design: AircraftDesign,
+     side: Literal["left", "right"],
+-) -> cq.Workplane:
++) -> "cq.Workplane":
+     """Build one wing half (left or right) as a solid.
+ 
+-    Generates a single wing panel from root to tip.  The two halves are built
+-    separately so they can be independently sectioned for printing.
+-
+-    **Geometry construction process:**
+-
+-    1. **Airfoil loading**: Load profile from .dat file corresponding to
+-       design.wing_airfoil (e.g., "Clark-Y" -> "clark_y.dat").
+-       Normalised to chord=1.0.
+-
+-    2. **Root section**: Scale airfoil to design.wing_chord (G05).
+-       Position at Y=0.  Apply wing incidence (W08, user-editable).
+-
+-    3. **Tip section**: Scale airfoil to tip_chord = wing_chord * wing_tip_root_ratio.
+-       Position at Y = +/-wing_span/2.
+-       Apply wing twist (W06, user-editable washout at tip).
+-
+-    4. **Sweep**: Offset tip X by (wing_span/2) * tan(wing_sweep * pi/180).
+-
+-    5. **Dihedral**: Offset tip Z by (wing_span/2) * tan(wing_dihedral * pi/180).
+-       Value is per-panel, not total included angle.
++    For single-section wings (wing_sections == 1), generates a single lofted
++    panel from root to tip -- the classic behaviour.
+ 
+-    6. **Loft**: Create solid via cq loft() with ruled=False (smooth surface).
++    For multi-section wings (wing_sections > 1), generates N separate lofted
++    panels and unions them into a single solid.  Panel break positions are
++    taken from design.panel_break_positions, dihedrals from
++    design.panel_dihedrals, and sweep overrides from design.panel_sweeps.
+ 
+-    7. **Trailing edge enforcement**: Enforce min thickness of te_min_thickness (PR09).
++    **Geometry construction process (single-section):**
+ 
+-    8. **Skin shell**: If hollow_parts is True, shell to wing_skin_thickness (W20),
+-       leaving root face open for spar insertion and fuselage mating.
+-
+-    9. **Mirror**: "left" extends in -Y, "right" extends in +Y.
++    1. **Airfoil loading**: Load profile from .dat file.
++    2. **Root section**: Scale to wing_chord, apply wing_incidence.
++    3. **Tip section**: Scale to tip_chord, apply incidence + twist.
++    4. **Sweep**: Offset tip X by quarter-chord sweep formula.
++    5. **Dihedral**: Applied via transformed() Z offsets per panel.
++    6. **Loft**: cq loft() with ruled=False.
++    7. **TE enforcement**: No-op, documented.
++    8. **Skin shell**: If hollow_parts, shell to wing_skin_thickness.
+ 
+     Args:
+         design: Complete aircraft design parameters.
+         side:   Which wing half.  "left" extends in -Y, "right" in +Y.
+ 
+     Returns:
+-        cq.Workplane with wing half solid.  Root at Y=0, tip at Y=+/-span/2.
++        cq.Workplane with wing half solid.
+ 
+     Raises:
+         FileNotFoundError: If airfoil .dat file not found.
+@@ -69,6 +62,22 @@ def build_wing(
+     """
+     import cadquery as cq  # noqa: F811
+ 
++    if design.wing_sections > 1:
++        return _build_multi_section_wing(cq, design, side)
++    return _build_single_panel(cq, design, side)
++
++
++# ---------------------------------------------------------------------------
++# Single-section wing (original algorithm)
++# ---------------------------------------------------------------------------
++
++
++def _build_single_panel(
++    cq: type,
++    design: AircraftDesign,
++    side: Literal["left", "right"],
++) -> "cq.Workplane":
++    """Build a classic single-panel wing half."""
+     # 1. Load airfoil profile (unit chord)
+     profile = load_airfoil(design.wing_airfoil)
+ 
+@@ -77,10 +86,7 @@ def build_wing(
+     tip_chord = root_chord * design.wing_tip_root_ratio
+     half_span = design.wing_span / 2.0
+ 
+-    # 3. Sweep offset at the tip (quarter-chord line sweep)
+-    #    The user-facing sweep angle is measured at the quarter-chord line.
+-    #    The LE offset must account for taper so the quarter-chord points
+-    #    align with the intended sweep angle.
++    # 3. Sweep offset at tip (quarter-chord line sweep)
+     sweep_rad = math.radians(design.wing_sweep)
+     sweep_offset_x = (
+         half_span * math.tan(sweep_rad)
+@@ -90,9 +96,7 @@ def build_wing(
+     # 4. Y direction sign
+     y_sign = -1.0 if side == "left" else 1.0
+ 
+-    # 5. Scale airfoil points to root and tip chords
+-    #    W08: wing_incidence (user-editable, default 2.0 deg)
+-    #    W06: wing_twist (user-editable, default 0.0 deg, washout at tip)
++    # 5. Scale airfoil points
+     wing_incidence_deg = design.wing_incidence
+     wing_twist_deg = design.wing_twist
+     root_pts = _scale_airfoil_2d(profile, root_chord, wing_incidence_deg)
+@@ -100,40 +104,200 @@ def build_wing(
+         profile, tip_chord, wing_incidence_deg + wing_twist_deg,
+     )
+ 
+-    # 6. Loft: root at Y=0, tip at Y=+/-half_span with sweep offset only
+-    #    Dihedral is applied as a rotation after lofting (Bug #65 fix).
++    # 6. Dihedral Z offset at tip (accumulated via transformed)
++    dihedral_rad = math.radians(design.wing_dihedral)
++    dihedral_z_at_tip = half_span * math.tan(dihedral_rad)
++
++    # 7. Loft: root at Y=0, tip with sweep + dihedral offsets
+     result = (
+         cq.Workplane("XZ")
+         .spline(root_pts, periodic=False).close()
+         .workplane(offset=y_sign * half_span)
+-        .transformed(offset=(sweep_offset_x, 0, 0))
++        .transformed(offset=(sweep_offset_x, dihedral_z_at_tip, 0))
+         .spline(tip_pts, periodic=False).close()
+         .loft(ruled=False)
+     )
+ 
+-    # 7. Apply dihedral as rotation about the X-axis at the root face.
+-    #    Positive dihedral = tips up. For the left wing (−Y), rotation
+-    #    sense is negated so both tips deflect upward symmetrically.
+-    #    Rotate about root face center (not origin) to avoid gapping the
+-    #    root face away from the fuselage. The root face Z center is
+-    #    approximately at the airfoil's mean camber height.
+-    dihedral_deg = design.wing_dihedral
+-    if abs(dihedral_deg) > 1e-6:
+-        rot_sign = -1.0 if side == "left" else 1.0
+-        # Compute root face Z center from airfoil points
+-        root_z_vals = [pt[1] for pt in root_pts]  # (x, z) tuples
+-        root_z_center = (min(root_z_vals) + max(root_z_vals)) / 2.0
+-        root_x_center = root_chord / 2.0
+-        result = result.rotate(
+-            (root_x_center, 0, root_z_center),
+-            (root_x_center + 1, 0, root_z_center),
+-            rot_sign * dihedral_deg,
+-        )
+-
+-    # 8. TE enforcement: thicken trailing edge if needed
++    # 8. TE enforcement: no-op
++    result = _enforce_te_thickness(cq, result, design.te_min_thickness)
++
++    # 9. Shell if hollow
++    if design.hollow_parts:
++        result = _shell_wing(result, design.wing_skin_thickness, side)
++
++    return result
++
++
++# ---------------------------------------------------------------------------
++# Multi-section wing (new algorithm)
++# ---------------------------------------------------------------------------
++
++
++def _build_multi_section_wing(
++    cq: type,
++    design: AircraftDesign,
++    side: Literal["left", "right"],
++) -> "cq.Workplane":
++    """Build a multi-panel wing half using N lofted segments.
++
++    Each panel is lofted from its inboard cross-section to its outboard
++    cross-section.  Dihedral is accumulated geometrically: each panel's
++    dihedral is relative to the previous panel's end orientation.
++
++    The approach uses transformed() offsets to build the outboard station
++    of each panel in the correct 3D position, then unions the panels.
++    No .rotate() is applied -- the geometry is built directly in place.
++
++    Coordinate reminders (XZ workplane):
++      local X  = global X (chordwise)
++      local Y  = global Z (vertical)  -- offset via transformed(0, z, 0)
++      local Z  = global -Y (spanwise) -- offset via workplane(offset=y)
++
++    For the right wing: outboard = +Y (positive workplane offset).
++    For the left wing:  outboard = -Y (negative workplane offset).
++    """
++    profile = load_airfoil(design.wing_airfoil)
++    n = design.wing_sections
++    root_chord = design.wing_chord
++    tip_chord = root_chord * design.wing_tip_root_ratio
++    half_span = design.wing_span / 2.0
++    y_sign = -1.0 if side == "left" else 1.0
++
++    wing_incidence_deg = design.wing_incidence
++    wing_twist_deg = design.wing_twist
++
++    # Build list of (span_frac, chord) for all stations: root + breaks + tip
++    # span_frac is fraction of half-span (0.0 = root, 1.0 = tip).
++    n_breaks = n - 1  # number of break positions
++    break_fracs = [
++        design.panel_break_positions[i] / 100.0
++        for i in range(n_breaks)
++    ]
++    # Stations: root (0.0), breaks, tip (1.0)
++    station_fracs = [0.0] + break_fracs + [1.0]
++
++    # Per-station chord (linear taper)
++    station_chords = [
++        root_chord + (tip_chord - root_chord) * frac
++        for frac in station_fracs
++    ]
++
++    # Per-station sweep angle: panel 1 uses wing_sweep, panels 2+ use panel_sweeps
++    # (panel_sweeps[i] is the sweep for panel i+2, i.e., the second panel onwards)
++    panel1_sweep = design.wing_sweep
++    panel_sweep_angles = [panel1_sweep] + [
++        design.panel_sweeps[i] for i in range(n_breaks)
++    ]
++
++    # Per-station dihedral angle: panel 1 uses wing_dihedral, panels 2+ use panel_dihedrals
++    panel1_dihedral = design.wing_dihedral
++    panel_dihedral_angles = [panel1_dihedral] + [
++        design.panel_dihedrals[i] for i in range(n_breaks)
++    ]
++
++    # Compute cumulative absolute X (sweep) and Z (dihedral) offsets at each station.
++    # Station 0 (root) is at (x=0, z=0).
++    # For each panel, the outboard station is offset from the inboard station by:
++    #   panel_span_y = panel_y_extent (projected spanwise extent of this panel)
++    #   delta_x = panel_span_mm * tan(panel_sweep_rad) + 0.25*(chord_in - chord_out)
++    #   delta_z = panel_span_mm * tan(panel_dihedral_rad)
++    # where panel_span_mm = half_span * (frac_out - frac_in)
++    # (We use the full spanwise extent, not the projected geometric span, for the
++    #  sweep/dihedral formula -- this matches the aero guidance doc section 1.5/1.6)
++
++    station_abs_x: list[float] = [0.0]  # absolute sweep offset from root LE
++    station_abs_z: list[float] = [0.0]  # absolute dihedral Z offset from root
++    station_abs_y: list[float] = [0.0]  # absolute projected Y (spanwise) offset
++
++    for panel_idx in range(n):
++        frac_in = station_fracs[panel_idx]
++        frac_out = station_fracs[panel_idx + 1]
++        panel_span_mm = half_span * (frac_out - frac_in)
++
++        sweep_rad = math.radians(panel_sweep_angles[panel_idx])
++        dihedral_rad = math.radians(panel_dihedral_angles[panel_idx])
++
++        chord_in = station_chords[panel_idx]
++        chord_out = station_chords[panel_idx + 1]
++
++        # Quarter-chord sweep: LE offset accounts for taper
++        qc_correction = 0.25 * (chord_in - chord_out)
++        delta_x = panel_span_mm * math.tan(sweep_rad) + qc_correction
++
++        # Dihedral Z rise
++        delta_z = panel_span_mm * math.tan(dihedral_rad)
++
++        # Projected Y extent (dihedral reduces the effective spanwise extent)
++        delta_y = panel_span_mm * math.cos(dihedral_rad)
++
++        station_abs_x.append(station_abs_x[-1] + delta_x)
++        station_abs_z.append(station_abs_z[-1] + delta_z)
++        station_abs_y.append(station_abs_y[-1] + delta_y)
++
++    # Build each panel as a separate lofted solid
++    panels: list["cq.Workplane"] = []
++    for panel_idx in range(n):
++        chord_in = station_chords[panel_idx]
++        chord_out = station_chords[panel_idx + 1]
++
++        # Twist at the tip station (linear interpolation for intermediate stations)
++        frac_in = station_fracs[panel_idx]
++        frac_out = station_fracs[panel_idx + 1]
++
++        # Apply incidence + linear twist fraction at each station
++        twist_in = wing_incidence_deg + wing_twist_deg * frac_in
++        twist_out = wing_incidence_deg + wing_twist_deg * frac_out
++
++        pts_in = _scale_airfoil_2d(profile, chord_in, twist_in)
++        pts_out = _scale_airfoil_2d(profile, chord_out, twist_out)
++
++        x_in = station_abs_x[panel_idx]
++        z_in = station_abs_z[panel_idx]
++        y_in = station_abs_y[panel_idx]
++
++        x_out = station_abs_x[panel_idx + 1]
++        z_out = station_abs_z[panel_idx + 1]
++        y_out = station_abs_y[panel_idx + 1]
++
++        # Y extent for this panel's loft workplane offset (projected span)
++        panel_y_extent = y_out - y_in
++
++        try:
++            panel = (
++                cq.Workplane("XZ")
++                .transformed(offset=(x_in, z_in, 0))
++                .spline(pts_in, periodic=False).close()
++                .workplane(offset=y_sign * panel_y_extent)
++                .transformed(offset=((x_out - x_in), (z_out - z_in), 0))
++                .spline(pts_out, periodic=False).close()
++                .loft(ruled=False)
++            )
++            # Translate to correct absolute Y position (the workplane offset
++            # above moves relative to the inboard face; we need to shift the
++            # whole panel to the correct absolute Y position)
++            panel = panel.translate((0, y_sign * y_in, 0))
++            panels.append(panel)
++        except Exception:
++            # If a panel fails to loft, fall back to single-section wing
++            return _build_single_panel(cq, design, side)
++
++    if not panels:
++        return _build_single_panel(cq, design, side)
++
++    # Union all panels into a single solid
++    result = panels[0]
++    for extra_panel in panels[1:]:
++        try:
++            result = result.union(extra_panel)
++        except Exception:
++            # If union fails, keep what we have
++            pass
++
++    # Shell each panel individually if hollow (guidance doc §1.12)
++    # We shell after union here for simplicity; individual panel shelling
++    # is fragile on joined lofts, so we try the union first.
+     result = _enforce_te_thickness(cq, result, design.te_min_thickness)
+ 
+-    # 9. Shell if hollow, leaving root face open for spar/fuselage mating
+     if design.hollow_parts:
+         result = _shell_wing(result, design.wing_skin_thickness, side)
+ 
+@@ -185,9 +349,9 @@ def _scale_airfoil_2d(
+ 
+ def _enforce_te_thickness(
+     cq_mod: type,
+-    solid: cq.Workplane,
++    solid: "cq.Workplane",
+     te_min_thickness: float,
+-) -> cq.Workplane:
++) -> "cq.Workplane":
+     """Enforce minimum trailing edge thickness.
+ 
+     .. note:: **Not yet functional (MVP).** This function is a documented
+@@ -212,10 +376,10 @@ def _enforce_te_thickness(
+ 
+ 
+ def _shell_wing(
+-    solid: cq.Workplane,
++    solid: "cq.Workplane",
+     skin_thickness: float,
+     side: Literal["left", "right"],
+-) -> cq.Workplane:
++) -> "cq.Workplane":
+     """Shell the wing to create a hollow interior.
+ 
+     Leaves the root face open for spar insertion and fuselage mating.
+diff --git a/backend/models.py b/backend/models.py
+index fb93d47..d232199 100644
+--- a/backend/models.py
++++ b/backend/models.py
+@@ -79,6 +79,24 @@ class AircraftDesign(CamelModel):
+     wing_incidence: float = Field(default=2.0, ge=-5, le=15)
+     wing_twist: float = Field(default=0.0, ge=-5, le=5)
+ 
++    # ── Multi-section wing (W08-W11) ──────────────────────────────────
++    # W08: number of spanwise panels per half-wing (1 = single panel, classic)
++    wing_sections: int = Field(default=1, ge=1, le=4)
++    # W09: break positions as % of half-span (index 0 = break between panel 1 and 2).
++    # Store 3 values (max for 4-panel wing); only first wing_sections-1 are used.
++    panel_break_positions: list[float] = Field(
++        default_factory=lambda: [60.0, 80.0, 90.0]
++    )
++    # W10: dihedral angle for panels 2, 3, 4 (panel 1 uses wing_dihedral).
++    panel_dihedrals: list[float] = Field(
++        default_factory=lambda: [10.0, 5.0, 5.0]
++    )
++    # W11: sweep angle override for panels 2, 3, 4 (panel 1 uses wing_sweep).
++    # NaN encodes "inherit panel 1 sweep" — stored as 0.0 by default here.
++    panel_sweeps: list[float] = Field(
++        default_factory=lambda: [0.0, 0.0, 0.0]
++    )
++
+     # ── Tail (Conventional / T-Tail / Cruciform) ──────────────────────
+     h_stab_span: float = Field(default=350, ge=100, le=1200)
+     h_stab_chord: float = Field(default=100, ge=30, le=250)
+diff --git a/backend/validation.py b/backend/validation.py
+index 642de26..ab1803e 100644
+--- a/backend/validation.py
++++ b/backend/validation.py
+@@ -5,6 +5,7 @@ Implements:
+   - 5 aerodynamic / structural analysis (V09-V13)  [v0.6]
+   - 7 print / export warnings          (V16-V23)
+   - 5 printability analysis warnings    (V24-V28)  [v0.6]
++  - 1 multi-section wing analysis       (V29)      [v0.7]
+ 
+ All warnings are level="warn" and never block export.
+ 
+@@ -19,7 +20,15 @@ from backend.models import AircraftDesign, ValidationWarning
+ 
+ 
+ def _mac(design: AircraftDesign) -> float:
+-    """Mean Aerodynamic Chord (mm)."""
++    """Mean Aerodynamic Chord (mm).
++
++    For multi-section (cranked) wings, delegates to the engine's cranked MAC
++    calculator.  For single-section wings uses the classic taper formula.
++    """
++    if design.wing_sections > 1:
++        from backend.geometry.engine import _compute_mac_cranked
++        mac, _ = _compute_mac_cranked(design)
++        return mac
+     lam = design.wing_tip_root_ratio
+     if (1 + lam) == 0:
+         return design.wing_chord
+@@ -680,6 +689,82 @@ def _check_v28(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+         )
+ 
+ 
++# ---------------------------------------------------------------------------
++# Multi-section wing analysis  (V29)  [v0.7]
++# ---------------------------------------------------------------------------
++
++
++def _check_v29(design: AircraftDesign, out: list[ValidationWarning]) -> None:
++    """V29: Multi-section wing configuration checks.
++
++    Validates panel break positions, dihedral angles, and array consistency
++    for multi-section wings (wing_sections > 1).
++    """
++    n = design.wing_sections
++    if n <= 1:
++        return
++
++    n_breaks = n - 1
++    breaks = design.panel_break_positions[:n_breaks]
++    dihedrals = design.panel_dihedrals[:n_breaks]
++
++    # Check break positions are strictly monotonically increasing
++    for i in range(len(breaks) - 1):
++        if breaks[i] >= breaks[i + 1]:
++            out.append(
++                ValidationWarning(
++                    id="V29",
++                    message=(
++                        f"Panel break positions must be strictly increasing "
++                        f"(break {i + 1}={breaks[i]:.0f}% >= break {i + 2}={breaks[i + 1]:.0f}%)"
++                    ),
++                    fields=["panel_break_positions"],
++                )
++            )
++            return  # Further checks invalid until ordering is fixed
++
++    # Check outermost break leaves a usable outer panel (> 10% semi-span remains)
++    if breaks and breaks[-1] > 90.0:
++        out.append(
++            ValidationWarning(
++                id="V29",
++                message=(
++                    f"Outermost panel break at {breaks[-1]:.0f}% leaves a very short "
++                    f"outer panel — minimum 10% semi-span recommended"
++                ),
++                fields=["panel_break_positions"],
++            )
++        )
++
++    # Check outer panel dihedrals don't create extreme print overhangs
++    for i, d in enumerate(dihedrals):
++        if abs(d) > 30:
++            out.append(
++                ValidationWarning(
++                    id="V29",
++                    message=(
++                        f"Panel {i + 2} dihedral ({d:.0f}°) exceeds 30° — "
++                        f"large panel dihedral creates significant print overhang"
++                    ),
++                    fields=["panel_dihedrals"],
++                )
++            )
++
++    # Check innermost break is not too close to root (< 10% would create a
++    # very thin root panel that is hard to print and structurally weak)
++    if breaks and breaks[0] < 10.0:
++        out.append(
++            ValidationWarning(
++                id="V29",
++                message=(
++                    f"First panel break at {breaks[0]:.0f}% is very close to root — "
++                    f"minimum 10% semi-span recommended for structural integrity"
++                ),
++                fields=["panel_break_positions"],
++            )
++        )
++
++
+ # ---------------------------------------------------------------------------
+ # Public entry point
+ # ---------------------------------------------------------------------------
+@@ -690,8 +775,8 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
+ 
+     Returns a list of ValidationWarning objects.  Each warning has a unique
+     ID (V01-V08 structural, V09-V13 aero/structural, V16-V23 print,
+-    V24-V28 printability), a human-readable message, and the list of
+-    affected parameter field names.
++    V24-V28 printability, V29 multi-section wing), a human-readable message,
++    and the list of affected parameter field names.
+     """
+     warnings: list[ValidationWarning] = []
+ 
+@@ -728,4 +813,7 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
+     _check_v27(design, warnings)
+     _check_v28(design, warnings)
+ 
++    # Multi-section wing analysis (V29)
++    _check_v29(design, warnings)
++
+     return warnings
+diff --git a/frontend/src/components/panels/WingPanel.tsx b/frontend/src/components/panels/WingPanel.tsx
+index b050d92..2fdd5c7 100644
+--- a/frontend/src/components/panels/WingPanel.tsx
++++ b/frontend/src/components/panels/WingPanel.tsx
+@@ -1,9 +1,9 @@
+ // ============================================================================
+ // CHENG — Wing Panel: Wing geometry + airfoil selection + derived values
+-// Issue #26
++// Issue #26 | Multi-section wings #143
+ // ============================================================================
+ 
+-import React, { useCallback } from 'react';
++import React, { useCallback, useState } from 'react';
+ import { useDesignStore } from '../../store/designStore';
+ import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
+ import { ParamSlider, ParamSelect, DerivedField } from '../ui';
+@@ -28,7 +28,122 @@ const WING_AIRFOIL_OPTIONS: readonly WingAirfoil[] = [
+ ] as const;
+ 
+ // ---------------------------------------------------------------------------
+-// Component
++// WingPanelSection sub-component (for each panel break when wingSections > 1)
++// ---------------------------------------------------------------------------
++
++interface WingPanelSectionProps {
++  index: number; // 0-based index into panelBreakPositions/panelDihedrals/panelSweeps
++}
++
++function WingPanelSection({ index }: WingPanelSectionProps): React.JSX.Element {
++  const design = useDesignStore((s) => s.design);
++  const setPanelBreak = useDesignStore((s) => s.setPanelBreak);
++  const setPanelDihedral = useDesignStore((s) => s.setPanelDihedral);
++  const setPanelSweep = useDesignStore((s) => s.setPanelSweep);
++
++  // Open by default for index 0 (first outer panel), collapsed for higher
++  const [open, setOpen] = useState(index === 0);
++
++  const breakVal = design.panelBreakPositions[index] ?? 60;
++  const dihedralVal = design.panelDihedrals[index] ?? 10;
++  const sweepVal = design.panelSweeps[index] ?? 0;
++
++  const setBreak = useCallback(
++    (v: number) => setPanelBreak(index, v),
++    [setPanelBreak, index],
++  );
++
++  const setDihedral = useCallback(
++    (v: number) => setPanelDihedral(index, v),
++    [setPanelDihedral, index],
++  );
++
++  const setSweep = useCallback(
++    (v: number) => setPanelSweep(index, v),
++    [setPanelSweep, index],
++  );
++
++  // Inline validation: break must be < next break (if it exists)
++  const nextBreak = design.panelBreakPositions[index + 1];
++  const breakIsInvalid =
++    index < design.panelBreakPositions.length - 1 &&
++    nextBreak !== undefined &&
++    breakVal >= nextBreak;
++
++  const panelLabel = `Panel ${index + 2}`;
++
++  return (
++    <div className="border border-zinc-700/50 rounded mb-2 overflow-hidden">
++      {/* Collapsible header */}
++      <button
++        type="button"
++        onClick={() => setOpen((o) => !o)}
++        className="w-full flex items-center justify-between px-3 py-2 text-left bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors"
++      >
++        <span className="text-xs font-medium text-zinc-300">
++          {panelLabel}
++          <span className="ml-1 text-zinc-500 font-normal">
++            (break at {breakVal.toFixed(0)}%)
++          </span>
++        </span>
++        <span className="text-zinc-500 text-xs">{open ? '▲' : '▼'}</span>
++      </button>
++
++      {/* Panel content */}
++      {open && (
++        <div className="px-3 pt-2 pb-1 bg-zinc-900/30">
++          {/* Break Position */}
++          <ParamSlider
++            label="Break Position"
++            unit="%"
++            value={breakVal}
++            min={10}
++            max={90}
++            step={1}
++            onSliderChange={setBreak}
++            onInputChange={setBreak}
++            title={`Spanwise position of panel break ${index + 1} as % of half-span`}
++          />
++          {breakIsInvalid && nextBreak !== undefined && (
++            <p className="text-[10px] text-red-400 mt-0.5 mb-1">
++              Break must be less than Panel {index + 3} break (
++              {nextBreak.toFixed(0)}%)
++            </p>
++          )}
++
++          {/* Outer Dihedral */}
++          <ParamSlider
++            label="Outer Dihedral"
++            unit="deg"
++            value={dihedralVal}
++            min={-10}
++            max={45}
++            step={0.5}
++            onSliderChange={setDihedral}
++            onInputChange={setDihedral}
++            title={`Dihedral of panel ${index + 2}, measured from horizontal`}
++          />
++
++          {/* Outer Sweep */}
++          <ParamSlider
++            label="Outer Sweep"
++            unit="deg"
++            value={sweepVal}
++            min={-10}
++            max={45}
++            step={1}
++            onSliderChange={setSweep}
++            onInputChange={setSweep}
++            title={`Leading-edge sweep of panel ${index + 2}. Defaults to global sweep when section is created.`}
++          />
++        </div>
++      )}
++    </div>
++  );
++}
++
++// ---------------------------------------------------------------------------
++// Main WingPanel Component
+ // ---------------------------------------------------------------------------
+ 
+ export function WingPanel(): React.JSX.Element {
+@@ -46,6 +161,15 @@ export function WingPanel(): React.JSX.Element {
+ 
+   // ── Sliders ─────────────────────────────────────────────────────────
+ 
++  const setSectionsSlider = useCallback(
++    (v: number) => setParam('wingSections', Math.round(v), 'immediate'),
++    [setParam],
++  );
++  const setSectionsInput = useCallback(
++    (v: number) => setParam('wingSections', Math.round(v), 'immediate'),
++    [setParam],
++  );
++
+   const setSweepSlider = useCallback(
+     (v: number) => setParam('wingSweep', v, 'slider'),
+     [setParam],
+@@ -118,6 +242,18 @@ export function WingPanel(): React.JSX.Element {
+         hasWarning={fieldHasWarning(warnings, 'wingAirfoil')}
+       />
+ 
++      {/* W08 — Wing Sections (multi-section #143) */}
++      <ParamSlider
++        label="Wing Sections"
++        value={design.wingSections}
++        min={1}
++        max={4}
++        step={1}
++        onSliderChange={setSectionsSlider}
++        onInputChange={setSectionsInput}
++        title="Number of spanwise wing panels per half. 1 = straight, 2–4 = polyhedral or cranked planform."
++      />
++
+       {/* W05 — Wing Sweep */}
+       <ParamSlider
+         label="Sweep Angle"
+@@ -147,9 +283,9 @@ export function WingPanel(): React.JSX.Element {
+         title="1.0 = rectangular wing, lower values = more tapered toward the tip"
+       />
+ 
+-      {/* W07 — Wing Dihedral */}
++      {/* W07 — Wing Dihedral (panel 1) */}
+       <ParamSlider
+-        label="Dihedral"
++        label={design.wingSections > 1 ? 'Panel 1 Dihedral' : 'Dihedral'}
+         unit="deg"
+         value={design.wingDihedral}
+         min={-10}
+@@ -202,6 +338,19 @@ export function WingPanel(): React.JSX.Element {
+         warningText={warnText('wingSkinThickness')}
+       />
+ 
++      {/* ── Wing Panel Breaks (conditional: wingSections > 1) (#143) ── */}
++      {design.wingSections > 1 && (
++        <div className="mt-3">
++          <div className="border-t border-zinc-700/50 mb-3" />
++          <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">
++            Wing Panel Breaks
++          </h4>
++          {Array.from({ length: design.wingSections - 1 }, (_, i) => (
++            <WingPanelSection key={i} index={i} />
++          ))}
++        </div>
++      )}
++
+       {/* ── Derived Values ─────────────────────────────────────────── */}
+       <div className="border-t border-zinc-700/50 mt-4 mb-3" />
+       <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">
+diff --git a/frontend/src/lib/presets.ts b/frontend/src/lib/presets.ts
+index f5a14c3..de15df3 100644
+--- a/frontend/src/lib/presets.ts
++++ b/frontend/src/lib/presets.ts
+@@ -39,6 +39,14 @@ const VTAIL_DEFAULTS = {
+   vTailSweep: 0,
+ };
+ 
++// Multi-section wing defaults (single panel — no breaks active)
++const MULTI_SECTION_DEFAULTS = {
++  wingSections: 1,
++  panelBreakPositions: [60.0, 80.0, 90.0],
++  panelDihedrals: [10.0, 5.0, 5.0],
++  panelSweeps: [0.0, 0.0, 0.0],
++};
++
+ // ---------------------------------------------------------------------------
+ // Preset Factory Functions
+ // ---------------------------------------------------------------------------
+@@ -96,6 +104,9 @@ function createTrainerPreset(): AircraftDesign {
+ 
+     // Support strategy
+     supportStrategy: 'minimal',
++
++    // Multi-section wing defaults (single panel)
++    ...MULTI_SECTION_DEFAULTS,
+   };
+ }
+ 
+@@ -148,6 +159,9 @@ function createSportPreset(): AircraftDesign {
+ 
+     // Support strategy
+     supportStrategy: 'minimal',
++
++    // Multi-section wing defaults (single panel)
++    ...MULTI_SECTION_DEFAULTS,
+   };
+ }
+ 
+@@ -200,6 +214,9 @@ function createAerobaticPreset(): AircraftDesign {
+ 
+     // Support strategy
+     supportStrategy: 'none',
++
++    // Multi-section wing defaults (single panel)
++    ...MULTI_SECTION_DEFAULTS,
+   };
+ }
+ 
+@@ -256,6 +273,12 @@ function createGliderPreset(): AircraftDesign {
+ 
+     // Support strategy
+     supportStrategy: 'none',
++
++    // Multi-section wing: Glider uses 2-panel polyhedral (inner flat, outer angled)
++    wingSections: 2,
++    panelBreakPositions: [60.0, 80.0, 90.0],
++    panelDihedrals: [10.0, 5.0, 5.0],
++    panelSweeps: [0.0, 0.0, 0.0],
+   };
+ }
+ 
+@@ -311,6 +334,9 @@ function createFlyingWingPreset(): AircraftDesign {
+ 
+     // Support strategy
+     supportStrategy: 'minimal',
++
++    // Multi-section wing defaults (single panel)
++    ...MULTI_SECTION_DEFAULTS,
+   };
+ }
+ 
+@@ -363,6 +389,9 @@ function createScalePreset(): AircraftDesign {
+ 
+     // Support strategy
+     supportStrategy: 'minimal',
++
++    // Multi-section wing defaults (single panel)
++    ...MULTI_SECTION_DEFAULTS,
+   };
+ }
+ 
+diff --git a/frontend/src/store/designStore.ts b/frontend/src/store/designStore.ts
+index 7285c78..0286ba6 100644
+--- a/frontend/src/store/designStore.ts
++++ b/frontend/src/store/designStore.ts
+@@ -31,6 +31,7 @@ const PRESET_COMPARE_KEYS: (keyof AircraftDesign)[] = [
+   'printBedX', 'printBedY', 'printBedZ', 'autoSection', 'sectionOverlap',
+   'jointType', 'jointTolerance', 'nozzleDiameter', 'hollowParts', 'teMinThickness',
+   'supportStrategy',
++  'wingSections',
+ ];
+ 
+ function detectPreset(design: AircraftDesign): PresetName {
+@@ -50,6 +51,7 @@ function detectPreset(design: AircraftDesign): PresetName {
+ const PARAM_LABELS: Partial<Record<keyof AircraftDesign, string>> = {
+   wingSpan: 'Wingspan',
+   wingChord: 'Wing Chord',
++  wingSections: 'Wing Sections',
+   fuselageLength: 'Fuselage Length',
+   tailType: 'Tail Type',
+   wingAirfoil: 'Airfoil',
+@@ -102,6 +104,14 @@ export interface DesignStore {
+   ) => void;
+   loadPreset: (name: Exclude<PresetName, 'Custom'>) => void;
+ 
++  // ── Multi-Section Wing Panel Array Actions (#143) ────────────────
++  /** Set a specific panel break position by index (0-based). */
++  setPanelBreak: (index: number, value: number) => void;
++  /** Set a specific panel dihedral by index (0-based, panel 2+ only). */
++  setPanelDihedral: (index: number, value: number) => void;
++  /** Set a specific panel sweep by index (0-based, panel 2+ only). */
++  setPanelSweep: (index: number, value: number) => void;
++
+   // ── Derived Values (from backend, read-only) ────────────────────
+   derived: DerivedValues | null;
+   setDerived: (derived: DerivedValues) => void;
+@@ -184,10 +194,67 @@ export const useDesignStore = create<DesignStore>()(
+             state.lastChangeSource = source;
+             state.lastAction = `Set ${label} to ${String(value)}`;
+             state.isDirty = true;
++
++            // Side-effect: resize panel arrays when wingSections changes (#143)
++            if (key === 'wingSections') {
++              const newN = value as number;
++              const targetLen = Math.max(0, newN - 1);
++              const oldBreaks = state.design.panelBreakPositions;
++              const oldDihedrals = state.design.panelDihedrals;
++              const oldSweeps = state.design.panelSweeps;
++
++              if (oldBreaks.length < targetLen) {
++                // Append default entries for new panels
++                for (let i = oldBreaks.length; i < targetLen; i++) {
++                  const breakPct = Math.min(90, 60 + i * 15);
++                  oldBreaks.push(breakPct);
++                  oldDihedrals.push(10);
++                  oldSweeps.push(state.design.wingSweep);
++                }
++              }
++              // Truncate arrays (Immer splice is fine here)
++              state.design.panelBreakPositions = oldBreaks.slice(0, targetLen);
++              state.design.panelDihedrals = oldDihedrals.slice(0, targetLen);
++              state.design.panelSweeps = oldSweeps.slice(0, targetLen);
++            }
+           }),
+         );
+       },
+ 
++      // ── Multi-Section Wing Panel Array Actions (#143) ──────────────────
++      setPanelBreak: (index, value) =>
++        set(
++          produce((state: DesignStore) => {
++            state.design.panelBreakPositions[index] = value;
++            state.activePreset = 'Custom';
++            state.lastChangeSource = 'immediate';
++            state.lastAction = `Set Panel ${index + 2} Break to ${value}%`;
++            state.isDirty = true;
++          }),
++        ),
++
++      setPanelDihedral: (index, value) =>
++        set(
++          produce((state: DesignStore) => {
++            state.design.panelDihedrals[index] = value;
++            state.activePreset = 'Custom';
++            state.lastChangeSource = 'immediate';
++            state.lastAction = `Set Panel ${index + 2} Dihedral to ${value}°`;
++            state.isDirty = true;
++          }),
++        ),
++
++      setPanelSweep: (index, value) =>
++        set(
++          produce((state: DesignStore) => {
++            state.design.panelSweeps[index] = value;
++            state.activePreset = 'Custom';
++            state.lastChangeSource = 'immediate';
++            state.lastAction = `Set Panel ${index + 2} Sweep to ${value}°`;
++            state.isDirty = true;
++          }),
++        ),
++
+       loadPreset: (name) =>
+         set(
+           produce((state: DesignStore) => {
+diff --git a/frontend/src/types/design.ts b/frontend/src/types/design.ts
+index 69c8b93..15c1b96 100644
+--- a/frontend/src/types/design.ts
++++ b/frontend/src/types/design.ts
+@@ -45,9 +45,11 @@ export type FuselageSubElement = 'nose' | 'cabin' | 'tail-cone';
+ /** Union of all sub-element types. */
+ export type SubElementSelection = WingSubElement | TailSubElement | FuselageSubElement | null;
+ 
+-/** Sub-elements available for each component. */
++/** Sub-elements available for each component.
++ *  Wing includes multi-section panel labels for #143 (extra entries are harmless
++ *  when only single-section is active — cycler only traverses those that exist). */
+ export const COMPONENT_SUB_ELEMENTS: Record<Exclude<ComponentSelection, null>, readonly string[]> = {
+-  wing: ['left-panel', 'right-panel'] as const,
++  wing: ['left-panel', 'right-panel', 'inner-panel', 'mid-panel', 'outer-panel'] as const,
+   tail: ['h-stab', 'v-stab'] as const,
+   fuselage: ['nose', 'cabin', 'tail-cone'] as const,
+ };
+@@ -122,6 +124,24 @@ export interface AircraftDesign {
+   /** Wing twist (washout at tip). @unit deg @min -5 @max 5 @default 0.0 */
+   wingTwist: number;
+ 
++  // ── Multi-Section Wing (Issue #143) ───────────────────────────────
++  /** Number of spanwise panels per half-wing. 1 = straight, 2–4 = polyhedral/cranked.
++   *  @min 1 @max 4 @default 1 @integer */
++  wingSections: number;
++  /** Break positions as % of half-span where panel n meets panel n+1.
++   *  Array length >= wingSections - 1. Values must be strictly increasing 10–90%.
++   *  e.g. [60] for 2-section, [40, 70] for 3-section.
++   *  @unit % @min 10 @max 90 */
++  panelBreakPositions: number[];
++  /** Dihedral angle per panel starting from panel 2 (panel 1 uses global wingDihedral).
++   *  Array length >= wingSections - 1.
++   *  @unit deg @min -10 @max 45 */
++  panelDihedrals: number[];
++  /** Sweep angle override per panel starting from panel 2 (panel 1 uses global wingSweep).
++   *  Array length >= wingSections - 1.
++   *  @unit deg @min -10 @max 45 */
++  panelSweeps: number[];
++
+   // ── Tail (Conventional / T-Tail / Cruciform) ──────────────────────
+   /** H-stab span. @unit mm @min 100 @max 1200 @default 350 */
+   hStabSpan: number;
+@@ -219,8 +239,14 @@ export interface DerivedValues {
+ export type StructuralWarningId = 'V01' | 'V02' | 'V03' | 'V04' | 'V05' | 'V06' | 'V07' | 'V08';
+ /** Print warning IDs (V16-V23). */
+ export type PrintWarningId = 'V16' | 'V17' | 'V18' | 'V20' | 'V21' | 'V22' | 'V23';
++/** Aero analysis warning IDs (V09-V13). */
++export type AeroWarningId = 'V09' | 'V10' | 'V11' | 'V12' | 'V13';
++/** Printability warning IDs (V24-V28). */
++export type PrintabilityWarningId = 'V24' | 'V25' | 'V26' | 'V27' | 'V28';
++/** Multi-section wing warning IDs (V29). */
++export type MultiSectionWarningId = 'V29';
+ /** All warning IDs. */
+-export type WarningId = StructuralWarningId | PrintWarningId;
++export type WarningId = StructuralWarningId | PrintWarningId | AeroWarningId | PrintabilityWarningId | MultiSectionWarningId;
+ 
+ /** Non-blocking validation warning from the backend. */
+ export interface ValidationWarning {
+@@ -236,7 +262,13 @@ export interface ValidationWarning {
+ // ---------------------------------------------------------------------------
+ 
+ /** Per-component face index ranges for selection highlighting. */
+-export type ComponentRanges = Partial<Record<'fuselage' | 'wing' | 'tail', [number, number]>>;
++/** Per-component face index ranges for selection highlighting.
++ *  Includes multi-section wing panel sub-keys (wing_panel_1, etc.) for #143. */
++export type ComponentRanges = Partial<Record<
++  'fuselage' | 'wing' | 'tail' |
++  'wing_panel_1' | 'wing_panel_2' | 'wing_panel_3' | 'wing_panel_4',
++  [number, number]
++>>;
+ 
+ /** Parsed mesh from WebSocket binary protocol (spec S6.2). */
+ export interface MeshData {

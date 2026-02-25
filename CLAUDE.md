@@ -53,9 +53,9 @@ Containerized web app for designing 3D-printable RC aircraft. Users adjust param
 - **App is fully functional:** Geometry, preview, export, validation, Docker all working
 
 ## Dev Scripts
-- `startup.ps1` — Builds frontend + starts both servers. Use `-r` for backend `--reload`.
+- `bootup.ps1` — Builds frontend + starts both servers. Use `-r` for backend `--reload`.
 - `shutdown.ps1` — Kills processes on ports 8000/5173.
-- Run: `powershell -ExecutionPolicy Bypass -File .\startup.ps1`
+- Run: `powershell -ExecutionPolicy Bypass -File .\bootup.ps1`
 - **Env vars:** `CHENG_DATA_DIR` (storage path, default `/data/designs`), `VITE_API_URL` (proxy target, default `http://localhost:8000`)
 
 ## CadQuery Gotchas
@@ -79,7 +79,7 @@ Containerized web app for designing 3D-printable RC aircraft. Users adjust param
 ## Testing
 - **Backend:** `python -m pytest tests/backend/ -v` (NOT `backend/tests/`)
 - **Frontend Vitest:** `cd frontend && pnpm test`
-- **Playwright E2E:** `cd frontend && NODE_PATH=./node_modules npx playwright test` (requires app running via `startup.ps1`)
+- **Playwright E2E:** `cd frontend && NODE_PATH=./node_modules npx playwright test` (requires app running via `bootup.ps1`)
 - E2E targets `localhost:5173` locally (Vite dev), `localhost:8000` in Docker (set `PLAYWRIGHT_BASE_URL`)
 - WebSocket binary frame: header(12B) + vertices(N*12) + normals(N*12) + faces(M*12) + JSON trailer (componentRanges, derived, warnings)
 

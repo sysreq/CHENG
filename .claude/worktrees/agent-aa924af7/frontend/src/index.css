@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   CHENG — Dark Theme Custom Properties
+   ============================================================================ */
+
+:root {
+  /* Surface colors */
+  --color-bg-primary: #1e1e22;
+  --color-bg-secondary: #2a2a2e;
+  --color-bg-tertiary: #35353a;
+  --color-bg-elevated: #3e3e44;
+
+  /* Text colors */
+  --color-text-primary: #e4e4e8;
+  --color-text-secondary: #a0a0a8;
+  --color-text-muted: #6e6e78;
+
+  /* Accent colors */
+  --color-accent: #4a9eff;
+  --color-accent-hover: #6bb3ff;
+  --color-accent-muted: #4a9eff33;
+
+  /* Status colors */
+  --color-success: #4caf50;
+  --color-warning: #ffb74d;
+  --color-error: #ef5350;
+
+  /* Component highlight colors */
+  --color-wing: #5c9ce6;
+  --color-fuselage: #8b8b8b;
+  --color-tail: #e6a65c;
+
+  /* Panel dimensions */
+  --sidebar-width: min(320px, 30vw);
+  --toolbar-height: 48px;
+  --statusbar-height: 32px;
+
+  /* Borders */
+  --color-border: #404048;
+}
+
+/* ============================================================================
+   Base Styles
+   ============================================================================ */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-bg-elevated);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* ============================================================================
+   Generating Spinner — lightweight CSS animation for viewport overlay
+   ============================================================================ */
+
+.generating-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================================
+   Responsive Layout — Collapse sidebar below 768px
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 0px;
+  }
+
+  .sidebar-toggle {
+    display: flex;
+  }
+
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 320px;
+    max-width: 85vw;
+    z-index: 30;
+    transform: translateX(100%);
+    transition: transform 0.2s ease;
+  }
+
+  .app-sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-backdrop {
+    display: block;
+  }
+}
+
+@media (min-width: 769px) {
+  .sidebar-toggle {
+    display: none;
+  }
+
+  .sidebar-backdrop {
+    display: none;
+  }
+}
