@@ -80,6 +80,24 @@ class AircraftDesign(CamelModel):
     wing_incidence: float = Field(default=2.0, ge=-5, le=15)
     wing_twist: float = Field(default=0.0, ge=-5, le=5)
 
+    # ── Multi-section wing (W08-W11) ──────────────────────────────────
+    # W08: number of spanwise panels per half-wing (1 = single panel, classic)
+    wing_sections: int = Field(default=1, ge=1, le=4)
+    # W09: break positions as % of half-span (index 0 = break between panel 1 and 2).
+    # Store 3 values (max for 4-panel wing); only first wing_sections-1 are used.
+    panel_break_positions: list[float] = Field(
+        default_factory=lambda: [60.0, 80.0, 90.0]
+    )
+    # W10: dihedral angle for panels 2, 3, 4 (panel 1 uses wing_dihedral).
+    panel_dihedrals: list[float] = Field(
+        default_factory=lambda: [10.0, 5.0, 5.0]
+    )
+    # W11: sweep angle override for panels 2, 3, 4 (panel 1 uses wing_sweep).
+    # NaN encodes "inherit panel 1 sweep" — stored as 0.0 by default here.
+    panel_sweeps: list[float] = Field(
+        default_factory=lambda: [0.0, 0.0, 0.0]
+    )
+
     # ── Tail (Conventional / T-Tail / Cruciform) ──────────────────────
     h_stab_span: float = Field(default=350, ge=100, le=1200)
     h_stab_chord: float = Field(default=100, ge=30, le=250)

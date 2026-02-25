@@ -12,6 +12,8 @@ const ALL_PARAM_KEYS: (keyof AircraftDesign)[] = [
   'wingMountType', 'fuselageLength', 'tailType', 'wingAirfoil', 'wingSweep',
   'wingTipRootRatio', 'wingDihedral', 'wingSkinThickness',
   'wingIncidence', 'wingTwist',
+  // Multi-section wing params (#143)
+  'wingSections', 'panelBreakPositions', 'panelDihedrals', 'panelSweeps',
   'hStabSpan', 'hStabChord', 'hStabIncidence', 'vStabHeight', 'vStabRootChord',
   'vTailDihedral', 'vTailSpan', 'vTailChord', 'vTailIncidence', 'vTailSweep',
   'tailArm',
@@ -163,6 +165,33 @@ describe('presets', () => {
     const d = createDesignFromPreset('Scale');
     expect(d.fuselageNoseLength + d.fuselageCabinLength + d.fuselageTailLength)
       .toBe(d.fuselageLength);
+  });
+
+  // ── Multi-section wing presets (#143) ───────────────────────────────
+
+  it('Glider preset has wingSections=2 (polyhedral)', () => {
+    const d = createDesignFromPreset('Glider');
+    expect(d.wingSections).toBe(2);
+    expect(d.panelBreakPositions).toHaveLength(3);
+    expect(d.panelBreakPositions[0]).toBe(60.0);
+    expect(d.panelDihedrals).toHaveLength(3);
+    expect(d.panelSweeps).toHaveLength(3);
+  });
+
+  it('all non-Glider presets have wingSections=1 (single panel)', () => {
+    for (const name of ['Trainer', 'Sport', 'Aerobatic', 'FlyingWing', 'Scale'] as const) {
+      const d = createDesignFromPreset(name);
+      expect(d.wingSections, `${name} should have wingSections=1`).toBe(1);
+    }
+  });
+
+  it('all presets have panelBreakPositions, panelDihedrals, panelSweeps arrays', () => {
+    for (const name of ALL_PRESET_NAMES) {
+      const d = createDesignFromPreset(name);
+      expect(Array.isArray(d.panelBreakPositions), `${name} panelBreakPositions should be array`).toBe(true);
+      expect(Array.isArray(d.panelDihedrals), `${name} panelDihedrals should be array`).toBe(true);
+      expect(Array.isArray(d.panelSweeps), `${name} panelSweeps should be array`).toBe(true);
+    }
   });
 
   // ── Cross-cutting tests ──────────────────────────────────────────────

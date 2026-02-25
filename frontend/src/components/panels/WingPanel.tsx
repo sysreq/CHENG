@@ -1,9 +1,9 @@
 // ============================================================================
 // CHENG — Wing Panel: Wing geometry + airfoil selection + derived values
-// Issue #26
+// Issue #26 | Multi-section wings #143
 // ============================================================================
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useDesignStore } from '../../store/designStore';
 import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
 import { ParamSlider, ParamSelect, DerivedField } from '../ui';
@@ -28,7 +28,122 @@ const WING_AIRFOIL_OPTIONS: readonly WingAirfoil[] = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// Component
+// WingPanelSection sub-component (for each panel break when wingSections > 1)
+// ---------------------------------------------------------------------------
+
+interface WingPanelSectionProps {
+  index: number; // 0-based index into panelBreakPositions/panelDihedrals/panelSweeps
+}
+
+function WingPanelSection({ index }: WingPanelSectionProps): React.JSX.Element {
+  const design = useDesignStore((s) => s.design);
+  const setPanelBreak = useDesignStore((s) => s.setPanelBreak);
+  const setPanelDihedral = useDesignStore((s) => s.setPanelDihedral);
+  const setPanelSweep = useDesignStore((s) => s.setPanelSweep);
+
+  // Open by default for index 0 (first outer panel), collapsed for higher
+  const [open, setOpen] = useState(index === 0);
+
+  const breakVal = design.panelBreakPositions[index] ?? 60;
+  const dihedralVal = design.panelDihedrals[index] ?? 10;
+  const sweepVal = design.panelSweeps[index] ?? 0;
+
+  const setBreak = useCallback(
+    (v: number) => setPanelBreak(index, v),
+    [setPanelBreak, index],
+  );
+
+  const setDihedral = useCallback(
+    (v: number) => setPanelDihedral(index, v),
+    [setPanelDihedral, index],
+  );
+
+  const setSweep = useCallback(
+    (v: number) => setPanelSweep(index, v),
+    [setPanelSweep, index],
+  );
+
+  // Inline validation: break must be < next break (if it exists)
+  const nextBreak = design.panelBreakPositions[index + 1];
+  const breakIsInvalid =
+    index < design.panelBreakPositions.length - 1 &&
+    nextBreak !== undefined &&
+    breakVal >= nextBreak;
+
+  const panelLabel = `Panel ${index + 2}`;
+
+  return (
+    <div className="border border-zinc-700/50 rounded mb-2 overflow-hidden">
+      {/* Collapsible header */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 text-left bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors"
+      >
+        <span className="text-xs font-medium text-zinc-300">
+          {panelLabel}
+          <span className="ml-1 text-zinc-500 font-normal">
+            (break at {breakVal.toFixed(0)}%)
+          </span>
+        </span>
+        <span className="text-zinc-500 text-xs">{open ? '▲' : '▼'}</span>
+      </button>
+
+      {/* Panel content */}
+      {open && (
+        <div className="px-3 pt-2 pb-1 bg-zinc-900/30">
+          {/* Break Position */}
+          <ParamSlider
+            label="Break Position"
+            unit="%"
+            value={breakVal}
+            min={10}
+            max={90}
+            step={1}
+            onSliderChange={setBreak}
+            onInputChange={setBreak}
+            title={`Spanwise position of panel break ${index + 1} as % of half-span`}
+          />
+          {breakIsInvalid && nextBreak !== undefined && (
+            <p className="text-[10px] text-red-400 mt-0.5 mb-1">
+              Break must be less than Panel {index + 3} break (
+              {nextBreak.toFixed(0)}%)
+            </p>
+          )}
+
+          {/* Outer Dihedral */}
+          <ParamSlider
+            label="Outer Dihedral"
+            unit="deg"
+            value={dihedralVal}
+            min={-10}
+            max={45}
+            step={0.5}
+            onSliderChange={setDihedral}
+            onInputChange={setDihedral}
+            title={`Dihedral of panel ${index + 2}, measured from horizontal`}
+          />
+
+          {/* Outer Sweep */}
+          <ParamSlider
+            label="Outer Sweep"
+            unit="deg"
+            value={sweepVal}
+            min={-10}
+            max={45}
+            step={1}
+            onSliderChange={setSweep}
+            onInputChange={setSweep}
+            title={`Leading-edge sweep of panel ${index + 2}. Defaults to global sweep when section is created.`}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main WingPanel Component
 // ---------------------------------------------------------------------------
 
 export function WingPanel(): React.JSX.Element {
@@ -45,6 +160,15 @@ export function WingPanel(): React.JSX.Element {
   );
 
   // ── Sliders ─────────────────────────────────────────────────────────
+
+  const setSectionsSlider = useCallback(
+    (v: number) => setParam('wingSections', Math.round(v), 'immediate'),
+    [setParam],
+  );
+  const setSectionsInput = useCallback(
+    (v: number) => setParam('wingSections', Math.round(v), 'immediate'),
+    [setParam],
+  );
 
   const setSweepSlider = useCallback(
     (v: number) => setParam('wingSweep', v, 'slider'),
@@ -118,6 +242,18 @@ export function WingPanel(): React.JSX.Element {
         hasWarning={fieldHasWarning(warnings, 'wingAirfoil')}
       />
 
+      {/* W08 — Wing Sections (multi-section #143) */}
+      <ParamSlider
+        label="Wing Sections"
+        value={design.wingSections}
+        min={1}
+        max={4}
+        step={1}
+        onSliderChange={setSectionsSlider}
+        onInputChange={setSectionsInput}
+        title="Number of spanwise wing panels per half. 1 = straight, 2–4 = polyhedral or cranked planform."
+      />
+
       {/* W05 — Wing Sweep */}
       <ParamSlider
         label="Sweep Angle"
@@ -147,9 +283,9 @@ export function WingPanel(): React.JSX.Element {
         title="1.0 = rectangular wing, lower values = more tapered toward the tip"
       />
 
-      {/* W07 — Wing Dihedral */}
+      {/* W07 — Wing Dihedral (panel 1) */}
       <ParamSlider
-        label="Dihedral"
+        label={design.wingSections > 1 ? 'Panel 1 Dihedral' : 'Dihedral'}
         unit="deg"
         value={design.wingDihedral}
         min={-10}
@@ -201,6 +337,19 @@ export function WingPanel(): React.JSX.Element {
         hasWarning={fieldHasWarning(warnings, 'wingSkinThickness')}
         warningText={warnText('wingSkinThickness')}
       />
+
+      {/* ── Wing Panel Breaks (conditional: wingSections > 1) (#143) ── */}
+      {design.wingSections > 1 && (
+        <div className="mt-3">
+          <div className="border-t border-zinc-700/50 mb-3" />
+          <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">
+            Wing Panel Breaks
+          </h4>
+          {Array.from({ length: design.wingSections - 1 }, (_, i) => (
+            <WingPanelSection key={i} index={i} />
+          ))}
+        </div>
+      )}
 
       {/* ── Derived Values ─────────────────────────────────────────── */}
       <div className="border-t border-zinc-700/50 mt-4 mb-3" />

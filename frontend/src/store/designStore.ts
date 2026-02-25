@@ -31,6 +31,7 @@ const PRESET_COMPARE_KEYS: (keyof AircraftDesign)[] = [
   'printBedX', 'printBedY', 'printBedZ', 'autoSection', 'sectionOverlap',
   'jointType', 'jointTolerance', 'nozzleDiameter', 'hollowParts', 'teMinThickness',
   'supportStrategy',
+  'wingSections',
   'landingGearType', 'mainGearPosition', 'mainGearHeight', 'mainGearTrack',
   'mainWheelDiameter', 'noseGearHeight', 'noseWheelDiameter',
   'tailWheelDiameter', 'tailGearPosition',
@@ -53,6 +54,7 @@ function detectPreset(design: AircraftDesign): PresetName {
 const PARAM_LABELS: Partial<Record<keyof AircraftDesign, string>> = {
   wingSpan: 'Wingspan',
   wingChord: 'Wing Chord',
+  wingSections: 'Wing Sections',
   fuselageLength: 'Fuselage Length',
   tailType: 'Tail Type',
   wingAirfoil: 'Airfoil',
@@ -113,6 +115,14 @@ export interface DesignStore {
     source?: ChangeSource,
   ) => void;
   loadPreset: (name: Exclude<PresetName, 'Custom'>) => void;
+
+  // ── Multi-Section Wing Panel Array Actions (#143) ────────────────
+  /** Set a specific panel break position by index (0-based). */
+  setPanelBreak: (index: number, value: number) => void;
+  /** Set a specific panel dihedral by index (0-based, panel 2+ only). */
+  setPanelDihedral: (index: number, value: number) => void;
+  /** Set a specific panel sweep by index (0-based, panel 2+ only). */
+  setPanelSweep: (index: number, value: number) => void;
 
   // ── Derived Values (from backend, read-only) ────────────────────
   derived: DerivedValues | null;
@@ -196,9 +206,66 @@ export const useDesignStore = create<DesignStore>()(
             state.lastChangeSource = source;
             state.lastAction = `Set ${label} to ${String(value)}`;
             state.isDirty = true;
+
+            // Side-effect: resize panel arrays when wingSections changes (#143)
+            if (key === 'wingSections') {
+              const newN = value as number;
+              const targetLen = Math.max(0, newN - 1);
+              const oldBreaks = state.design.panelBreakPositions;
+              const oldDihedrals = state.design.panelDihedrals;
+              const oldSweeps = state.design.panelSweeps;
+
+              if (oldBreaks.length < targetLen) {
+                // Append default entries for new panels
+                for (let i = oldBreaks.length; i < targetLen; i++) {
+                  const breakPct = Math.min(90, 60 + i * 15);
+                  oldBreaks.push(breakPct);
+                  oldDihedrals.push(10);
+                  oldSweeps.push(state.design.wingSweep);
+                }
+              }
+              // Truncate arrays (Immer splice is fine here)
+              state.design.panelBreakPositions = oldBreaks.slice(0, targetLen);
+              state.design.panelDihedrals = oldDihedrals.slice(0, targetLen);
+              state.design.panelSweeps = oldSweeps.slice(0, targetLen);
+            }
           }),
         );
       },
+
+      // ── Multi-Section Wing Panel Array Actions (#143) ──────────────────
+      setPanelBreak: (index, value) =>
+        set(
+          produce((state: DesignStore) => {
+            state.design.panelBreakPositions[index] = value;
+            state.activePreset = 'Custom';
+            state.lastChangeSource = 'immediate';
+            state.lastAction = `Set Panel ${index + 2} Break to ${value}%`;
+            state.isDirty = true;
+          }),
+        ),
+
+      setPanelDihedral: (index, value) =>
+        set(
+          produce((state: DesignStore) => {
+            state.design.panelDihedrals[index] = value;
+            state.activePreset = 'Custom';
+            state.lastChangeSource = 'immediate';
+            state.lastAction = `Set Panel ${index + 2} Dihedral to ${value}°`;
+            state.isDirty = true;
+          }),
+        ),
+
+      setPanelSweep: (index, value) =>
+        set(
+          produce((state: DesignStore) => {
+            state.design.panelSweeps[index] = value;
+            state.activePreset = 'Custom';
+            state.lastChangeSource = 'immediate';
+            state.lastAction = `Set Panel ${index + 2} Sweep to ${value}°`;
+            state.isDirty = true;
+          }),
+        ),
 
       loadPreset: (name) =>
         set(

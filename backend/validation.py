@@ -5,7 +5,8 @@ Implements:
   - 5 aerodynamic / structural analysis (V09-V13)  [v0.6]
   - 7 print / export warnings          (V16-V23)
   - 5 printability analysis warnings    (V24-V28)  [v0.6]
-  - 4 landing gear warnings             (V31)       [v0.7]
+  - 1 multi-section wing analysis       (V29)      [v0.7]
+  - 4 landing gear warnings             (V31)      [v0.7]
 
 All warnings are level="warn" and never block export.
 
@@ -20,7 +21,15 @@ from backend.models import AircraftDesign, ValidationWarning
 
 
 def _mac(design: AircraftDesign) -> float:
-    """Mean Aerodynamic Chord (mm)."""
+    """Mean Aerodynamic Chord (mm).
+
+    For multi-section (cranked) wings, delegates to the engine's cranked MAC
+    calculator.  For single-section wings uses the classic taper formula.
+    """
+    if design.wing_sections > 1:
+        from backend.geometry.engine import _compute_mac_cranked
+        mac, _ = _compute_mac_cranked(design)
+        return mac
     lam = design.wing_tip_root_ratio
     if (1 + lam) == 0:
         return design.wing_chord
@@ -682,6 +691,82 @@ def _check_v28(design: AircraftDesign, out: list[ValidationWarning]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Multi-section wing analysis  (V29)  [v0.7]
+# ---------------------------------------------------------------------------
+
+
+def _check_v29(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V29: Multi-section wing configuration checks.
+
+    Validates panel break positions, dihedral angles, and array consistency
+    for multi-section wings (wing_sections > 1).
+    """
+    n = design.wing_sections
+    if n <= 1:
+        return
+
+    n_breaks = n - 1
+    breaks = design.panel_break_positions[:n_breaks]
+    dihedrals = design.panel_dihedrals[:n_breaks]
+
+    # Check break positions are strictly monotonically increasing
+    for i in range(len(breaks) - 1):
+        if breaks[i] >= breaks[i + 1]:
+            out.append(
+                ValidationWarning(
+                    id="V29",
+                    message=(
+                        f"Panel break positions must be strictly increasing "
+                        f"(break {i + 1}={breaks[i]:.0f}% >= break {i + 2}={breaks[i + 1]:.0f}%)"
+                    ),
+                    fields=["panel_break_positions"],
+                )
+            )
+            return  # Further checks invalid until ordering is fixed
+
+    # Check outermost break leaves a usable outer panel (> 10% semi-span remains)
+    if breaks and breaks[-1] > 90.0:
+        out.append(
+            ValidationWarning(
+                id="V29",
+                message=(
+                    f"Outermost panel break at {breaks[-1]:.0f}% leaves a very short "
+                    f"outer panel — minimum 10% semi-span recommended"
+                ),
+                fields=["panel_break_positions"],
+            )
+        )
+
+    # Check outer panel dihedrals don't create extreme print overhangs
+    for i, d in enumerate(dihedrals):
+        if abs(d) > 30:
+            out.append(
+                ValidationWarning(
+                    id="V29",
+                    message=(
+                        f"Panel {i + 2} dihedral ({d:.0f}°) exceeds 30° — "
+                        f"large panel dihedral creates significant print overhang"
+                    ),
+                    fields=["panel_dihedrals"],
+                )
+            )
+
+    # Check innermost break is not too close to root (< 10% would create a
+    # very thin root panel that is hard to print and structurally weak)
+    if breaks and breaks[0] < 10.0:
+        out.append(
+            ValidationWarning(
+                id="V29",
+                message=(
+                    f"First panel break at {breaks[0]:.0f}% is very close to root — "
+                    f"minimum 10% semi-span recommended for structural integrity"
+                ),
+                fields=["panel_break_positions"],
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
 # Landing gear warnings  (V31)  [v0.7]
 # ---------------------------------------------------------------------------
 
@@ -726,7 +811,6 @@ def _check_v31(design: AircraftDesign, out: list[ValidationWarning]) -> None:
     cg_x = _estimate_cg_x(design)
 
     # V31a: Tricycle — main gear should be BEHIND CG
-    # If main gear is more than 10% of fuselage ahead of CG, warn.
     if design.landing_gear_type == "Tricycle":
         forward_limit = cg_x - 0.10 * design.fuselage_length
         if main_gear_x < forward_limit:
@@ -755,12 +839,7 @@ def _check_v31(design: AircraftDesign, out: list[ValidationWarning]) -> None:
                 )
             )
 
-    # V31c: Prop ground clearance (Tractor only — pusher motor is at tail, far from gear).
-    # Since prop_diameter is not a parameter in v0.7, we apply a simple absolute threshold:
-    # for tractor configurations, the gear strut should provide enough clearance that a
-    # typical prop (which is at least as wide as the fuselage) clears the ground.
-    # We warn only when main_gear_height < 30mm (clearly too short for any prop).
-    # This avoids unreliable heuristics that produce false positives.
+    # V31c: Prop ground clearance (Tractor only)
     if design.motor_config == "Tractor" and height < 30.0:
         out.append(
             ValidationWarning(
@@ -797,8 +876,8 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
 
     Returns a list of ValidationWarning objects.  Each warning has a unique
     ID (V01-V08 structural, V09-V13 aero/structural, V16-V23 print,
-    V24-V28 printability), a human-readable message, and the list of
-    affected parameter field names.
+    V24-V28 printability, V29 multi-section wing), a human-readable message,
+    and the list of affected parameter field names.
     """
     warnings: list[ValidationWarning] = []
 
@@ -834,6 +913,9 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
     _check_v26(design, warnings)
     _check_v27(design, warnings)
     _check_v28(design, warnings)
+
+    # Multi-section wing analysis (V29)
+    _check_v29(design, warnings)
 
     # Landing gear (V31)
     _check_v31(design, warnings)

@@ -39,6 +39,14 @@ const VTAIL_DEFAULTS = {
   vTailSweep: 0,
 };
 
+// Multi-section wing defaults (single panel — no breaks active)
+const MULTI_SECTION_DEFAULTS = {
+  wingSections: 1,
+  panelBreakPositions: [60.0, 80.0, 90.0],
+  panelDihedrals: [10.0, 5.0, 5.0],
+  panelSweeps: [0.0, 0.0, 0.0],
+};
+
 // Shared landing gear defaults — all presets default to 'None' (belly land)
 const LANDING_GEAR_DEFAULTS = {
   landingGearType: 'None' as const,
@@ -112,6 +120,9 @@ function createTrainerPreset(): AircraftDesign {
 
     // Support strategy
     supportStrategy: 'minimal',
+
+    // Multi-section wing defaults (single panel)
+    ...MULTI_SECTION_DEFAULTS,
   };
 }
 
@@ -167,6 +178,9 @@ function createSportPreset(): AircraftDesign {
 
     // Support strategy
     supportStrategy: 'minimal',
+
+    // Multi-section wing defaults (single panel)
+    ...MULTI_SECTION_DEFAULTS,
   };
 }
 
@@ -222,6 +236,9 @@ function createAerobaticPreset(): AircraftDesign {
 
     // Support strategy
     supportStrategy: 'none',
+
+    // Multi-section wing defaults (single panel)
+    ...MULTI_SECTION_DEFAULTS,
   };
 }
 
@@ -281,6 +298,12 @@ function createGliderPreset(): AircraftDesign {
 
     // Support strategy
     supportStrategy: 'none',
+
+    // Multi-section wing: Glider uses 2-panel polyhedral (inner flat, outer angled)
+    wingSections: 2,
+    panelBreakPositions: [60.0, 80.0, 90.0],
+    panelDihedrals: [10.0, 5.0, 5.0],
+    panelSweeps: [0.0, 0.0, 0.0],
   };
 }
 
@@ -339,6 +362,9 @@ function createFlyingWingPreset(): AircraftDesign {
 
     // Support strategy
     supportStrategy: 'minimal',
+
+    // Multi-section wing defaults (single panel)
+    ...MULTI_SECTION_DEFAULTS,
   };
 }
 
@@ -394,6 +420,9 @@ function createScalePreset(): AircraftDesign {
 
     // Support strategy
     supportStrategy: 'minimal',
+
+    // Multi-section wing defaults (single panel)
+    ...MULTI_SECTION_DEFAULTS,
   };
 }
 

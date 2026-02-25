@@ -48,9 +48,11 @@ export type FuselageSubElement = 'nose' | 'cabin' | 'tail-cone';
 /** Union of all sub-element types. */
 export type SubElementSelection = WingSubElement | TailSubElement | FuselageSubElement | null;
 
-/** Sub-elements available for each component. */
+/** Sub-elements available for each component.
+ *  Wing includes multi-section panel labels for #143 (extra entries are harmless
+ *  when only single-section is active — cycler only traverses those that exist). */
 export const COMPONENT_SUB_ELEMENTS: Record<Exclude<ComponentSelection, null>, readonly string[]> = {
-  wing: ['left-panel', 'right-panel'] as const,
+  wing: ['left-panel', 'right-panel', 'inner-panel', 'mid-panel', 'outer-panel'] as const,
   tail: ['h-stab', 'v-stab'] as const,
   fuselage: ['nose', 'cabin', 'tail-cone'] as const,
   landing_gear: ['main_left', 'main_right', 'nose_gear', 'tail_wheel'] as const,
@@ -125,6 +127,24 @@ export interface AircraftDesign {
   wingIncidence: number;
   /** Wing twist (washout at tip). @unit deg @min -5 @max 5 @default 0.0 */
   wingTwist: number;
+
+  // ── Multi-Section Wing (Issue #143) ───────────────────────────────
+  /** Number of spanwise panels per half-wing. 1 = straight, 2–4 = polyhedral/cranked.
+   *  @min 1 @max 4 @default 1 @integer */
+  wingSections: number;
+  /** Break positions as % of half-span where panel n meets panel n+1.
+   *  Array length >= wingSections - 1. Values must be strictly increasing 10–90%.
+   *  e.g. [60] for 2-section, [40, 70] for 3-section.
+   *  @unit % @min 10 @max 90 */
+  panelBreakPositions: number[];
+  /** Dihedral angle per panel starting from panel 2 (panel 1 uses global wingDihedral).
+   *  Array length >= wingSections - 1.
+   *  @unit deg @min -10 @max 45 */
+  panelDihedrals: number[];
+  /** Sweep angle override per panel starting from panel 2 (panel 1 uses global wingSweep).
+   *  Array length >= wingSections - 1.
+   *  @unit deg @min -10 @max 45 */
+  panelSweeps: number[];
 
   // ── Tail (Conventional / T-Tail / Cruciform) ──────────────────────
   /** H-stab span. @unit mm @min 100 @max 1200 @default 350 */
@@ -245,10 +265,16 @@ export interface DerivedValues {
 export type StructuralWarningId = 'V01' | 'V02' | 'V03' | 'V04' | 'V05' | 'V06' | 'V07' | 'V08';
 /** Print warning IDs (V16-V23). */
 export type PrintWarningId = 'V16' | 'V17' | 'V18' | 'V20' | 'V21' | 'V22' | 'V23';
+/** Aero analysis warning IDs (V09-V13). */
+export type AeroWarningId = 'V09' | 'V10' | 'V11' | 'V12' | 'V13';
+/** Printability warning IDs (V24-V28). */
+export type PrintabilityWarningId = 'V24' | 'V25' | 'V26' | 'V27' | 'V28';
+/** Multi-section wing warning IDs (V29). */
+export type MultiSectionWarningId = 'V29';
 /** Landing gear warning IDs (V31). */
 export type LandingGearWarningId = 'V31';
 /** All warning IDs. */
-export type WarningId = StructuralWarningId | PrintWarningId | LandingGearWarningId;
+export type WarningId = StructuralWarningId | PrintWarningId | AeroWarningId | PrintabilityWarningId | MultiSectionWarningId | LandingGearWarningId;
 
 /** Non-blocking validation warning from the backend. */
 export interface ValidationWarning {
@@ -263,9 +289,12 @@ export interface ValidationWarning {
 // MeshData — parsed from WebSocket binary frame
 // ---------------------------------------------------------------------------
 
-/** Per-component face index ranges for selection highlighting. */
+/** Per-component face index ranges for selection highlighting.
+ *  Includes multi-section wing panel sub-keys (wing_panel_1, etc.) and landing gear. */
 export type ComponentRanges = Partial<Record<
-  'fuselage' | 'wing' | 'tail' | 'gear_main_left' | 'gear_main_right' | 'gear_nose' | 'gear_tail',
+  | 'fuselage' | 'wing' | 'tail'
+  | 'wing_panel_1' | 'wing_panel_2' | 'wing_panel_3' | 'wing_panel_4'
+  | 'gear_main_left' | 'gear_main_right' | 'gear_nose' | 'gear_tail',
   [number, number]
 >>;
 
