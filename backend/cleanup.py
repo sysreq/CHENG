@@ -70,6 +70,7 @@ async def periodic_cleanup(
     while True:
         await anyio.sleep(interval)
         try:
-            cleanup_tmp_files(tmp_dir, max_age_seconds)
+            # Run blocking I/O in a worker thread to avoid blocking the event loop
+            await anyio.to_thread.run_sync(cleanup_tmp_files, tmp_dir, max_age_seconds)
         except Exception:
             logger.exception("Periodic temp cleanup failed")
