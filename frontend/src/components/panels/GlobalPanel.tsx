@@ -37,6 +37,16 @@ const PRESET_OPTIONS: readonly (Exclude<PresetName, 'Custom'>)[] = [
   'Scale',
 ] as const;
 
+/** Display labels for preset names — handles multi-word names like FlyingWing (#197). */
+const PRESET_DISPLAY_LABELS: Record<Exclude<PresetName, 'Custom'>, string> = {
+  Trainer: 'Trainer',
+  Sport: 'Sport',
+  Aerobatic: 'Aerobatic',
+  Glider: 'Glider',
+  FlyingWing: 'Flying Wing',
+  Scale: 'Scale',
+};
+
 const FUSELAGE_PRESET_OPTIONS: readonly FuselagePreset[] = [
   'Pod',
   'Conventional',
@@ -276,7 +286,7 @@ export function GlobalPanel(): React.JSX.Element {
         >
           {PRESET_OPTIONS.map((name) => (
             <option key={name} value={name}>
-              {name}
+              {PRESET_DISPLAY_LABELS[name]}
             </option>
           ))}
           {activePreset === 'Custom' && (
@@ -300,7 +310,7 @@ export function GlobalPanel(): React.JSX.Element {
                 Load Preset
               </AlertDialog.Title>
               <AlertDialog.Description className="text-xs text-zinc-400 mb-4">
-                Load <span className="text-zinc-200 font-medium">{pendingPreset}</span> preset?
+                Load <span className="text-zinc-200 font-medium">{pendingPreset ? PRESET_DISPLAY_LABELS[pendingPreset] : ''}</span> preset?
                 This will replace all parameters.
               </AlertDialog.Description>
               <div className="flex justify-end gap-2">
