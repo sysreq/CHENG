@@ -14,7 +14,7 @@ API Naming Contract:
 from __future__ import annotations
 
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
 
@@ -63,8 +63,28 @@ class AircraftDesign(CamelModel):
 
     # ── Global / Fuselage ─────────────────────────────────────────────
     fuselage_preset: FuselagePreset = "Conventional"
-    engine_count: int = Field(default=1, ge=0, le=4)
+    # P01: 0 = no motor/glider, 1 = single motor. Values 2-4 are reserved for
+    # future multi-engine nacelle support. TODO v0.8: multi-engine nacelles (engine_count 2-4)
+    engine_count: int = Field(default=1, ge=0, le=1)
     motor_config: MotorConfig = "Tractor"
+
+    @field_validator("engine_count", mode="before")
+    @classmethod
+    def clamp_engine_count(cls, v: object) -> int:
+        """Clamp legacy engine_count values 2-4 to 1 for backward compatibility.
+
+        Designs saved before v0.7.1 may have engine_count=2, 3, or 4.
+        Rather than rejecting them outright, we silently promote to 1 (single motor).
+        This prevents HTTP 422 errors when loading old JSON files.
+        """
+        try:
+            n = int(v)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return v  # type: ignore[return-value]  # let Pydantic raise the type error
+        if n > 1:
+            return 1
+        return n
+
     wing_span: float = Field(default=1000, ge=300, le=3000)
     wing_chord: float = Field(default=180, ge=50, le=500)
     wing_mount_type: WingMountType = "High-Wing"

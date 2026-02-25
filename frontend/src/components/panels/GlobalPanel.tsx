@@ -201,14 +201,14 @@ export function GlobalPanel(): React.JSX.Element {
     [setParam],
   );
 
-  // ── Engine count (number input — text source) ───────────────────────
+  // ── Motor toggle (boolean: 0 = no motor, 1 = single motor) ─────────
+  // engine_count is restricted to 0/1 in v0.7.1 (#240).
+  // Multi-engine nacelles (2-4) are not implemented; using a toggle prevents
+  // users from setting values that have no visible effect.
 
-  const handleEngineCountChange = useCallback(
+  const handleMotorToggle = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = parseInt(e.target.value, 10);
-      if (!Number.isNaN(val) && val >= 0 && val <= 4) {
-        setParam('engineCount', val, 'text');
-      }
+      setParam('engineCount', e.target.checked ? 1 : 0, 'immediate');
     },
     [setParam],
   );
@@ -494,23 +494,39 @@ export function GlobalPanel(): React.JSX.Element {
         hasWarning={fieldHasWarning(warnings, 'fuselagePreset')}
       />
 
-      {/* G02 — Engine Count */}
-      <div className="mb-3">
-        <label className="block text-xs font-medium text-zinc-300 mb-1">
-          Engine Count
+      {/* G02 — Motor (toggle: engineCount 0 = no motor, 1 = single motor) */}
+      <div className="mb-3 flex items-center justify-between">
+        <label
+          htmlFor="motor-toggle"
+          className="text-xs font-medium text-zinc-300 cursor-pointer"
+        >
+          Motor
         </label>
-        <input
-          type="number"
-          min={0}
-          max={4}
-          step={1}
-          value={design.engineCount}
-          onChange={handleEngineCountChange}
-          className="w-full px-2 py-1 text-xs text-zinc-100 bg-zinc-800
-            border border-zinc-700 rounded focus:outline-none focus:border-blue-500
-            [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none
-            [&::-webkit-inner-spin-button]:appearance-none"
-        />
+        <button
+          id="motor-toggle"
+          role="switch"
+          aria-checked={design.engineCount === 1}
+          onClick={() => handleMotorToggle({
+            target: { checked: design.engineCount === 0 },
+          } as React.ChangeEvent<HTMLInputElement>)}
+          className={[
+            'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full',
+            'border-2 border-transparent transition-colors duration-200',
+            'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-900',
+            design.engineCount === 1
+              ? 'bg-blue-600'
+              : 'bg-zinc-600',
+          ].join(' ')}
+        >
+          <span
+            aria-hidden="true"
+            className={[
+              'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow',
+              'transform transition duration-200',
+              design.engineCount === 1 ? 'translate-x-4' : 'translate-x-0',
+            ].join(' ')}
+          />
+        </button>
       </div>
 
       {/* P02 — Motor Config */}

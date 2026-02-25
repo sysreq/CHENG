@@ -97,7 +97,9 @@ export interface AircraftDesign {
   // ── Global / Fuselage ─────────────────────────────────────────────
   /** Fuselage body style. @see FuselagePreset */
   fuselagePreset: FuselagePreset;
-  /** Number of engines. @min 0 @max 4 @default 1 */
+  /** Motor present: 0 = no motor (glider/unpowered), 1 = single motor.
+   *  Values 2–4 are reserved for future multi-engine nacelle support (TODO v0.8).
+   *  @min 0 @max 1 @default 1 */
   engineCount: number;
   /** Motor position. "Tractor" = nose, "Pusher" = rear. @default "Tractor" */
   motorConfig: MotorConfig;
