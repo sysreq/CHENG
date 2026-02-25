@@ -119,7 +119,9 @@ export default function App() {
         <div className="sticky top-0 z-10 px-3 py-2 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider bg-zinc-900/90 backdrop-blur border-b border-zinc-700/50">
           Parameters
         </div>
-        <GlobalPanel />
+        <fieldset disabled={!isConnected} style={{ border: 'none', padding: 0, margin: 0 }}>
+          <GlobalPanel />
+        </fieldset>
       </aside>
 
       {/* Bottom-Left — Component Detail Panel */}
@@ -138,7 +140,9 @@ export default function App() {
         <div className="sticky top-0 z-10 px-3 py-2 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider bg-zinc-800/90 backdrop-blur border-b border-zinc-700/50">
           Component Details
         </div>
-        <ComponentPanel />
+        <fieldset disabled={!isConnected} style={{ border: 'none', padding: 0, margin: 0 }}>
+          <ComponentPanel />
+        </fieldset>
       </section>
 
       {/* Bottom Bar — status */}
