@@ -66,6 +66,10 @@ def _compute_tail_x(design: AircraftDesign) -> float:
         effective_arm = max(design.tail_arm, min_tail_pos - wing_x)
     so that tail_x >= min_tail_pos always holds.  When the user's tail_arm is
     already larger, their value is used unchanged.
+
+    #237: The effective tail arm is also capped so that tail_x never exceeds
+    fuselage_length.  This prevents tail surfaces from floating disconnected
+    beyond the fuselage end when tail_arm is set too large.
     """
     wing_x_frac = _WING_X_FRACTION.get(design.fuselage_preset, 0.30)
     wing_x = design.fuselage_length * wing_x_frac
@@ -73,7 +77,12 @@ def _compute_tail_x(design: AircraftDesign) -> float:
     min_tail_pos = design.fuselage_length * _MIN_TAIL_POS_FRAC
     # Convert to minimum arm (distance from wing mount to tail).
     min_tail_arm = max(0.0, min_tail_pos - wing_x)
-    effective_tail_arm = max(design.tail_arm, min_tail_arm)
+    # Maximum arm: tail must not extend beyond fuselage end (#237).
+    max_tail_arm = max(0.0, design.fuselage_length - wing_x)
+    effective_tail_arm = min(
+        max(design.tail_arm, min_tail_arm),
+        max_tail_arm,
+    )
     return wing_x + effective_tail_arm
 
 

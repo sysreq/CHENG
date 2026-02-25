@@ -8,6 +8,7 @@ Implements:
   - 3 control surface warnings          (V30)       [v0.7]
   - 1 multi-section wing analysis       (V29)      [v0.7]
   - 4 landing gear warnings             (V31)      [v0.7]
+  - 1 tail arm clamping warning         (V32)      [v0.7.x #237]
 
 All warnings are level="warn" and never block export.
 
@@ -111,6 +112,40 @@ def _check_v06(design: AircraftDesign, out: list[ValidationWarning]) -> None:
             ValidationWarning(
                 id="V06",
                 message="Tail arm exceeds fuselage — tail extends past the body",
+                fields=["tail_arm", "fuselage_length"],
+            )
+        )
+
+
+def _check_v32(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V32: wing_x + tail_arm > fuselage_length — tail floats beyond fuselage end.
+
+    The effective tail X position is wing_mount_x + tail_arm.  If this exceeds
+    fuselage_length, the tail surfaces would appear disconnected from the body.
+    The geometry engine clamps tail_x to fuselage_length automatically (#237),
+    but we warn the user so they can correct their inputs explicitly.
+
+    V06 already covers the case when tail_arm > fuselage_length entirely.
+    V32 only fires when tail_arm <= fuselage_length but wing_x + tail_arm still
+    exceeds fuselage_length (the more subtle, common case), so both warnings
+    remain mutually exclusive and non-redundant.
+    """
+    # Skip if V06 would already fire — avoid duplicate warning for the same root cause.
+    if design.tail_arm > design.fuselage_length:
+        return
+    from backend.geometry.engine import _WING_X_FRACTION
+    wing_x_frac = _WING_X_FRACTION.get(design.fuselage_preset, 0.30)
+    wing_x = design.fuselage_length * wing_x_frac
+    unclamped_tail_x = wing_x + design.tail_arm
+    if unclamped_tail_x > design.fuselage_length:
+        out.append(
+            ValidationWarning(
+                id="V32",
+                message=(
+                    f"Tail arm places tail surfaces beyond fuselage end "
+                    f"({unclamped_tail_x:.0f} mm vs fuselage {design.fuselage_length:.0f} mm) — "
+                    f"increase fuselageLength or reduce tailArm"
+                ),
                 fields=["tail_arm", "fuselage_length"],
             )
         )
@@ -978,7 +1013,7 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
     Returns a list of ValidationWarning objects.  Each warning has a unique
     ID (V01-V08 structural, V09-V13 aero/structural, V16-V23 print,
     V24-V28 printability, V30 control surfaces, V29 multi-section wing,
-    V31 landing gear), a human-readable message,
+    V31 landing gear, V32 tail arm clamping), a human-readable message,
     and the list of affected parameter field names.
     """
     warnings: list[ValidationWarning] = []
@@ -1024,5 +1059,8 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
 
     # Landing gear (V31)
     _check_v31(design, warnings)
+
+    # Tail arm clamping (V32) [v0.7.x #237]
+    _check_v32(design, warnings)
 
     return warnings

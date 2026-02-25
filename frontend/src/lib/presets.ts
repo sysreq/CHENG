@@ -367,14 +367,16 @@ function createFlyingWingPreset(): AircraftDesign {
     wingTwist: -3.0,
 
     // Tail — minimal vestigial (backend requires tail geometry; flying wing
-    // relies on sweep + washout for pitch stability). Vertical fin sized for
-    // basic yaw damping on a pusher configuration.
+    // relies on sweep + washout for pitch stability). Small dorsal fin sized
+    // for basic yaw damping on a pusher configuration, placed at the rear of
+    // the 200mm pod. wing_x = 35% * 200 = 70mm, so max arm = 130mm (#237).
+    // Values are at or near model minimums to keep surfaces small.
     hStabSpan: 100,
     hStabChord: 30,
     hStabIncidence: 0,
-    vStabHeight: 150,
-    vStabRootChord: 80,
-    tailArm: 80,
+    vStabHeight: 35,
+    vStabRootChord: 30,
+    tailArm: 130,
 
     // V-tail defaults
     ...VTAIL_DEFAULTS,
