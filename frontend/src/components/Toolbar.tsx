@@ -568,7 +568,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
             focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900
             disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Export STL
+          Export...
         </button>
       </div>
 
