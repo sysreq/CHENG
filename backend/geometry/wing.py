@@ -24,6 +24,34 @@ from backend.geometry.airfoil import load_airfoil
 # ---------------------------------------------------------------------------
 
 
+def build_wing_panels(
+    design: AircraftDesign,
+    side: Literal["left", "right"],
+) -> "list[cq.Workplane]":
+    """Build one wing half as a list of individual panel solids.
+
+    For single-section wings, returns a list with one element (the single panel).
+    For multi-section wings, returns N separate panel solids WITHOUT boolean union.
+
+    This is the preferred function for preview/tessellation since it avoids the
+    fragile boolean union and produces per-panel meshes with consistent normals.
+    Control surface cuts should be applied to the result of build_wing() (which
+    unions the panels), not to individual panels from this function.
+
+    Args:
+        design: Complete aircraft design parameters.
+        side:   Which wing half.  "left" extends in -Y, "right" in +Y.
+
+    Returns:
+        List of cq.Workplane objects, one per panel (length == wing_sections).
+    """
+    import cadquery as cq  # noqa: F811
+
+    if design.wing_sections > 1:
+        return _build_multi_section_panels(cq, design, side)
+    return [_build_single_panel(cq, design, side)]
+
+
 def build_wing(
     design: AircraftDesign,
     side: Literal["left", "right"],
@@ -317,6 +345,130 @@ def _build_multi_section_wing(
         result = _shell_wing(result, design.wing_skin_thickness, side)
 
     return result
+
+
+def _build_multi_section_panels(
+    cq: type,
+    design: AircraftDesign,
+    side: Literal["left", "right"],
+) -> "list[cq.Workplane]":
+    """Build a multi-panel wing half as a list of separate lofted solids.
+
+    Does NOT union the panels — each panel is returned as its own solid.
+    This is used for preview tessellation to ensure per-panel face normals
+    are consistent (no shading discontinuity at panel junctions from union
+    seam artefacts) and to support per-panel click selection (#241, #242).
+
+    Geometry construction is identical to ``_build_multi_section_wing``; the
+    only difference is the return type (list of panels vs. single unioned solid).
+    ``hollow_parts`` and TE enforcement are NOT applied — panels are solid for
+    preview.  For export, use ``build_wing()`` which applies those operations.
+
+    Returns:
+        List of cq.Workplane objects, length == design.wing_sections.
+        On loft failure for any panel the function falls back to returning
+        ``[_build_single_panel(...)]`` so the caller always gets at least one panel.
+    """
+    profile = load_airfoil(design.wing_airfoil)
+    n = design.wing_sections
+    root_chord = design.wing_chord
+    tip_chord = root_chord * design.wing_tip_root_ratio
+    half_span = design.wing_span / 2.0
+    y_sign = -1.0 if side == "left" else 1.0
+
+    wing_incidence_deg = design.wing_incidence
+    wing_twist_deg = design.wing_twist
+
+    n_breaks = n - 1
+    break_fracs = [
+        design.panel_break_positions[i] / 100.0
+        for i in range(n_breaks)
+    ]
+    station_fracs = [0.0] + break_fracs + [1.0]
+
+    station_chords = [
+        root_chord + (tip_chord - root_chord) * frac
+        for frac in station_fracs
+    ]
+
+    panel1_sweep = design.wing_sweep
+    panel_sweep_angles = [panel1_sweep] + [
+        design.panel_sweeps[i] for i in range(n_breaks)
+    ]
+
+    panel1_dihedral = design.wing_dihedral
+    panel_dihedral_angles = [panel1_dihedral] + [
+        design.panel_dihedrals[i] for i in range(n_breaks)
+    ]
+
+    station_abs_x: list[float] = [0.0]
+    station_abs_z: list[float] = [0.0]
+    station_abs_y: list[float] = [0.0]
+
+    for panel_idx in range(n):
+        frac_in = station_fracs[panel_idx]
+        frac_out = station_fracs[panel_idx + 1]
+        panel_span_mm = half_span * (frac_out - frac_in)
+
+        sweep_rad = math.radians(panel_sweep_angles[panel_idx])
+        dihedral_rad = math.radians(panel_dihedral_angles[panel_idx])
+
+        chord_in = station_chords[panel_idx]
+        chord_out = station_chords[panel_idx + 1]
+
+        qc_correction = 0.25 * (chord_in - chord_out)
+        delta_x = panel_span_mm * math.tan(sweep_rad) + qc_correction
+        delta_z = panel_span_mm * math.tan(dihedral_rad)
+        delta_y = panel_span_mm
+
+        station_abs_x.append(station_abs_x[-1] + delta_x)
+        station_abs_z.append(station_abs_z[-1] + delta_z)
+        station_abs_y.append(station_abs_y[-1] + delta_y)
+
+    panels: list["cq.Workplane"] = []
+    for panel_idx in range(n):
+        chord_in = station_chords[panel_idx]
+        chord_out = station_chords[panel_idx + 1]
+
+        frac_in = station_fracs[panel_idx]
+        frac_out = station_fracs[panel_idx + 1]
+
+        twist_in = wing_incidence_deg + wing_twist_deg * frac_in
+        twist_out = wing_incidence_deg + wing_twist_deg * frac_out
+
+        pts_in = _scale_airfoil_2d(profile, chord_in, twist_in)
+        pts_out = _scale_airfoil_2d(profile, chord_out, twist_out)
+
+        x_in = station_abs_x[panel_idx]
+        z_in = station_abs_z[panel_idx]
+        y_in = station_abs_y[panel_idx]
+
+        x_out = station_abs_x[panel_idx + 1]
+        z_out = station_abs_z[panel_idx + 1]
+        y_out = station_abs_y[panel_idx + 1]
+
+        panel_y_extent = y_out - y_in
+
+        try:
+            panel = (
+                cq.Workplane("XZ")
+                .transformed(offset=(x_in, z_in, 0))
+                .spline(pts_in, periodic=False).close()
+                .workplane(offset=y_sign * panel_y_extent)
+                .transformed(offset=((x_out - x_in), (z_out - z_in), 0))
+                .spline(pts_out, periodic=False).close()
+                .loft(ruled=False)
+            )
+            panel = panel.translate((0, y_sign * y_in, 0))
+            panels.append(panel)
+        except Exception:
+            # If a panel fails to loft, fall back to single-section wing
+            return [_build_single_panel(cq, design, side)]
+
+    if not panels:
+        return [_build_single_panel(cq, design, side)]
+
+    return panels
 
 
 # ---------------------------------------------------------------------------

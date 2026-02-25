@@ -181,7 +181,12 @@ export interface DesignStore {
   // ── Viewport Selection ──────────────────────────────────────────
   selectedComponent: ComponentSelection;
   selectedSubElement: SubElementSelection;
+  /** Index of the currently selected wing panel (0-based), or null if none.
+   *  Applies to both left and right halves when wing_sections > 1 (#242). */
+  selectedPanel: number | null;
   setSelectedComponent: (component: ComponentSelection) => void;
+  /** Set the selected wing panel index. Null deselects. */
+  setSelectedPanel: (panelIndex: number | null) => void;
   /** Cycle to next sub-element within the currently selected component. */
   cycleSubElement: () => void;
 
@@ -380,8 +385,11 @@ export const useDesignStore = create<DesignStore>()(
       // ── Viewport ──────────────────────────────────────────────────
       selectedComponent: null,
       selectedSubElement: null,
+      selectedPanel: null,
       setSelectedComponent: (component) =>
-        set({ selectedComponent: component, selectedSubElement: null }),
+        set({ selectedComponent: component, selectedSubElement: null, selectedPanel: null }),
+      setSelectedPanel: (panelIndex) =>
+        set({ selectedPanel: panelIndex, selectedComponent: 'wing', selectedSubElement: null }),
       cycleSubElement: () => {
         const { selectedComponent, selectedSubElement } = get();
         if (!selectedComponent) return;
@@ -440,6 +448,7 @@ export const useDesignStore = create<DesignStore>()(
           meshData: null,
           selectedComponent: null,
           selectedSubElement: null,
+          selectedPanel: null,
         });
       },
 

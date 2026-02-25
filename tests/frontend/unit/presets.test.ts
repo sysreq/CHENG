@@ -132,7 +132,7 @@ describe('presets', () => {
     expect(d.tailType).toBe('Conventional');
     expect(d.hStabSpan).toBeLessThanOrEqual(100);
     expect(d.hStabChord).toBeLessThanOrEqual(50);
-    expect(d.tailArm).toBeLessThanOrEqual(100);
+    expect(d.tailArm).toBeLessThanOrEqual(200); // FlyingWing tailArm=130 after cdbh668 tail-arm fix
   });
 
   it('Flying Wing fuselage section break points are in range', () => {

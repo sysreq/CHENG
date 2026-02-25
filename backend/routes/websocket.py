@@ -30,6 +30,7 @@ from pydantic import ValidationError
 
 from backend.geometry.engine import (
     _cadquery_limiter,
+    _compute_wing_mount,
     assemble_aircraft,
     compute_derived_values,
 )
@@ -287,11 +288,20 @@ def _generate_mesh(design: AircraftDesign):
     Assembles aircraft, tessellates each component separately (faster and
     more robust than boolean union), and merges the mesh data.
 
+    For multi-section wings (#241, #242), each panel is tessellated separately
+    so that:
+    - Per-panel face normals are consistent (no shading banding at junctions).
+    - Per-panel face ranges are exposed as ``wing_left_0``, ``wing_left_1``, etc.
+      so the frontend can highlight individual panels.
+
     Returns:
         Tuple of (MeshData, component_ranges) where component_ranges maps
-        component category ('fuselage', 'wing', 'tail') to [startFace, endFace].
+        component name to [startFace, endFace].  Wing halves appear as
+        ``wing_left`` / ``wing_right`` (combined range) plus per-panel sub-keys
+        ``wing_left_0``, ``wing_left_1``, etc. when wing_sections > 1.
     """
     from backend.geometry.tessellate import tessellate_for_preview, MeshData
+    from backend.geometry.wing import build_wing_panels
 
     import numpy as np
 
@@ -313,16 +323,70 @@ def _generate_mesh(design: AircraftDesign):
     face_offset = 0
 
     # Track per-component face ranges for frontend selection highlighting.
-    # Keys are component categories: 'fuselage', 'wing', 'tail'.
     component_ranges: dict[str, list[int]] = {}
 
-    for name, solid in components.items():
+    def _add_mesh(name: str, solid: "Any") -> bool:
+        """Tessellate one solid and append to accumulators, recording face range.
+
+        Returns True if any faces were added.
+        """
+        nonlocal offset, face_offset
         mesh = tessellate_for_preview(solid, tolerance=2.0)
         if mesh.vertex_count == 0:
-            continue
+            return False
         all_verts.append(mesh.vertices)
         all_normals.append(mesh.normals)
         all_faces.append(mesh.faces + offset)
+        component_ranges[name] = [face_offset, face_offset + mesh.face_count]
+        offset += mesh.vertex_count
+        face_offset += mesh.face_count
+        return True
+
+    # Wing mount position — shared helper ensures consistency with assemble_aircraft
+    wing_x, wing_z = _compute_wing_mount(preview_design)
+
+    # For multi-section wings, replace the unioned solid with individual panels
+    # so each panel gets its own face range and clean normals (#241, #242).
+    # build_wing_panels returns panels in LOCAL wing coordinates (no fuselage offset),
+    # so we apply the same (wing_x, 0, wing_z) translation that assemble_aircraft used.
+    multi_section_wing_keys: set[str] = set()
+    if preview_design.wing_sections > 1:
+        for side_key in ("wing_left", "wing_right"):
+            if side_key not in components:
+                continue
+            side = "left" if side_key == "wing_left" else "right"
+            try:
+                panels = build_wing_panels(preview_design, side=side)
+            except Exception:
+                # Fall back to the assembled (unioned) solid
+                panels = [components[side_key]]
+            multi_section_wing_keys.add(side_key)
+            half_start_face = face_offset
+            for panel_idx, panel_solid in enumerate(panels):
+                try:
+                    translated = panel_solid.translate((wing_x, 0, wing_z))
+                except Exception:
+                    translated = panel_solid
+                panel_key = f"{side_key}_{panel_idx}"
+                _add_mesh(panel_key, translated)
+            # Combined range for the half-wing spans all panels tessellated above
+            if face_offset > half_start_face:
+                component_ranges[side_key] = [half_start_face, face_offset]
+        # Combined 'wing' range for backward compatibility
+        wing_start: int | None = None
+        wing_end: int | None = None
+        for side_key in ("wing_left", "wing_right"):
+            if side_key in component_ranges:
+                r = component_ranges[side_key]
+                wing_start = r[0] if wing_start is None else min(wing_start, r[0])
+                wing_end = r[1] if wing_end is None else max(wing_end, r[1])
+        if wing_start is not None and wing_end is not None:
+            component_ranges["wing"] = [wing_start, wing_end]
+
+    for name, solid in components.items():
+        # Skip wing halves already handled as per-panel above
+        if name in multi_section_wing_keys:
+            continue
 
         # Map component name to category for the combined range
         if "fuselage" in name:
@@ -341,21 +405,14 @@ def _generate_mesh(design: AircraftDesign):
             category = "tail"
 
         start_face = face_offset
-        end_face = face_offset + mesh.face_count
-
-        # Store per-component range for detailed frontend queries
-        # (e.g. wing_left, wing_right for distinct shading)
-        component_ranges[name] = [start_face, end_face]
+        added = _add_mesh(name, solid)
 
         # Also maintain the combined category range for backward compatibility
-        if category != name:
+        if added and category != name:
             if category in component_ranges:
-                component_ranges[category][1] = end_face
+                component_ranges[category][1] = face_offset
             else:
-                component_ranges[category] = [start_face, end_face]
-
-        offset += mesh.vertex_count
-        face_offset += mesh.face_count
+                component_ranges[category] = [start_face, face_offset]
 
     if not all_verts:
         raise RuntimeError("Tessellation produced no geometry")
