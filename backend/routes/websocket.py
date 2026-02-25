@@ -121,6 +121,12 @@ async def preview_websocket(ws: WebSocket) -> None:
                 except WebSocketDisconnect:
                     return
 
+                # Low-level ws.receive() returns a disconnect dict instead of
+                # raising WebSocketDisconnect — calling receive() again after
+                # this would raise RuntimeError (#282).
+                if raw.get("type") == "websocket.disconnect":
+                    return
+
                 # Handle both text and binary frames
                 if "text" in raw:
                     text = raw["text"]
