@@ -2,6 +2,7 @@
 // CHENG — Aircraft Mesh Component
 // Renders per-component mesh groups with click-to-select highlighting.
 // Supports sub-element cycling within selected components (#138).
+// Supports per-panel selection for multi-section wings (#241, #242).
 // ============================================================================
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
@@ -11,13 +12,18 @@ import { Html } from '@react-three/drei';
 import { useDesignStore } from '@/store/designStore';
 import { createBufferGeometry } from '@/lib/meshParser';
 import type { MeshFrame } from '@/lib/meshParser';
-import type { ComponentSelection } from '@/types/design';
+import type { ComponentSelection, ComponentRanges } from '@/types/design';
 
 const SELECTED_COLOR = '#FFD60A';
 const SUB_SELECTED_COLOR = '#FF6B35';
 const UNSELECTED_COLOR = '#6B6B70';
+const PANEL_SELECTED_COLOR = '#FFD60A';
+const PANEL_MUTED_OPACITY = 0.4;
 const HOVER_EMISSIVE = '#222244';
 const HOVER_EMISSIVE_INTENSITY = 0.3;
+
+/** Max number of panels per wing half (matches backend wing_sections max=4). */
+const MAX_PANELS = 4;
 
 /** Default color per component when nothing is selected. */
 const COMPONENT_COLORS: Record<string, string> = {
@@ -114,7 +120,9 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
   const meshData = useDesignStore((state) => state.meshData);
   const selectedComponent = useDesignStore((state) => state.selectedComponent);
   const selectedSubElement = useDesignStore((state) => state.selectedSubElement);
+  const selectedPanel = useDesignStore((state) => state.selectedPanel);
   const setSelectedComponent = useDesignStore((state) => state.setSelectedComponent);
+  const setSelectedPanel = useDesignStore((state) => state.setSelectedPanel);
   const cycleSubElement = useDesignStore((state) => state.cycleSubElement);
   const setMeshOffset = useDesignStore((state) => state.setMeshOffset);
 
@@ -223,6 +231,43 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
     return result;
   }, [fullGeometry, meshData?.componentRanges]);
 
+  /**
+   * Per-panel geometries for multi-section wings (#241, #242).
+   * Shape: { wing_left: [geom0, geom1, …], wing_right: [geom0, geom1, …] }
+   * Only populated when wing_left_0 / wing_right_0 keys exist in componentRanges.
+   */
+  const panelGeometries = useMemo((): {
+    wing_left: THREE.BufferGeometry[];
+    wing_right: THREE.BufferGeometry[];
+  } | null => {
+    if (!fullGeometry || !meshData?.componentRanges) return null;
+    const ranges = meshData.componentRanges as ComponentRanges;
+
+    const extractPanels = (sideKey: 'wing_left' | 'wing_right'): THREE.BufferGeometry[] => {
+      const panels: THREE.BufferGeometry[] = [];
+      for (let i = 0; i < MAX_PANELS; i++) {
+        const key = `${sideKey}_${i}` as keyof ComponentRanges;
+        const range = ranges[key];
+        if (!range) break;
+        panels.push(createSubGeometry(fullGeometry, range[0], range[1]));
+      }
+      return panels;
+    };
+
+    const left = extractPanels('wing_left');
+    const right = extractPanels('wing_right');
+
+    // Only return panel data when at least one side has multiple panels
+    if (left.length <= 1 && right.length <= 1) {
+      // Dispose any geometries that won't be used
+      left.forEach((g) => g.dispose());
+      right.forEach((g) => g.dispose());
+      return null;
+    }
+
+    return { wing_left: left, wing_right: right };
+  }, [fullGeometry, meshData?.componentRanges]);
+
   // Dispose component geometries when they change or on unmount (#91)
   useEffect(() => {
     return () => {
@@ -233,6 +278,16 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
       }
     };
   }, [componentGeometries]);
+
+  // Dispose per-panel geometries when they change or on unmount (#241)
+  useEffect(() => {
+    return () => {
+      if (panelGeometries) {
+        panelGeometries.wing_left.forEach((g) => g.dispose());
+        panelGeometries.wing_right.forEach((g) => g.dispose());
+      }
+    };
+  }, [panelGeometries]);
 
   // Hover state for component highlighting (#168)
   const [hoveredComponent, setHoveredComponent] = useState<ComponentSelection>(null);
@@ -249,6 +304,21 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
       }
     },
     [selectedComponent, setSelectedComponent, cycleSubElement],
+  );
+
+  /** Click handler for a specific wing panel (#242). */
+  const handlePanelClick = useCallback(
+    (panelIndex: number) => (e: ThreeEvent<MouseEvent>) => {
+      e.stopPropagation();
+      if (selectedPanel === panelIndex) {
+        // Already selected — deselect panel but keep wing selected
+        setSelectedPanel(null);
+        setSelectedComponent('wing');
+      } else {
+        setSelectedPanel(panelIndex);
+      }
+    },
+    [selectedPanel, setSelectedPanel, setSelectedComponent],
   );
 
   const handlePointerEnter = useCallback(
@@ -271,7 +341,8 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
 
   const handleMissClick = useCallback(() => {
     setSelectedComponent(null);
-  }, [setSelectedComponent]);
+    setSelectedPanel(null);
+  }, [setSelectedComponent, setSelectedPanel]);
 
   if (!meshData) {
     return (
@@ -320,15 +391,22 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
       return key as ComponentSelection;
     };
 
+    // Use per-panel geometries for wing when available (#241, #242)
+    const hasWingPanels = panelGeometries !== null;
+
     // Prefer separate wing_left/wing_right if available; fall back to combined 'wing' (#228)
+    // If per-panel mode is active, skip wing_left/wing_right from allKeys (panels render them)
     const hasWingHalves = Boolean(componentGeometries['wing_left'] || componentGeometries['wing_right']);
 
-    const allKeys = [
-      'fuselage',
-      ...(hasWingHalves ? (['wing_left', 'wing_right'] as const) : (['wing'] as const)),
-      'tail',
-      'gear_main_left', 'gear_main_right', 'gear_nose', 'gear_tail',
+    // Keys for non-wing structural components always rendered the same way
+    const nonWingKeys = [
+      'fuselage', 'tail', 'gear_main_left', 'gear_main_right', 'gear_nose', 'gear_tail',
     ] as const;
+    // Wing keys: excluded when per-panel mode is active (panels render wing halves instead)
+    const wingHalfKeys: Array<'wing' | 'wing_left' | 'wing_right'> = hasWingPanels
+      ? []
+      : hasWingHalves ? ['wing_left', 'wing_right'] : ['wing'];
+    const allKeys: Array<string> = [...nonWingKeys, ...wingHalfKeys];
 
     return (
       <group ref={groupRef} rotation={[-Math.PI / 2, 0, Math.PI / 2]} onPointerMissed={handleMissClick}>
@@ -411,6 +489,105 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
               )}
             </group>
           );
+        })}
+
+        {/* Per-panel wing meshes for multi-section wings (#241, #242).
+            Each panel is a separate mesh with click-to-highlight.
+            Selected panel gets full accent color; others get muted opacity.
+            The side label (Left/Right) is provided via tooltip. */}
+        {hasWingPanels && panelGeometries && (['wing_left', 'wing_right'] as const).map((sideKey) => {
+          const panels = panelGeometries[sideKey];
+          if (!panels || panels.length === 0) return null;
+          const sideLabel = sideKey === 'wing_left' ? 'Left' : 'Right';
+          const basePanelColor = COMPONENT_COLORS[sideKey] ?? DEFAULT_COLOR;
+          const wingIsSelected = selectedComponent === 'wing';
+
+          return panels.map((panelGeom, panelIdx) => {
+            const panelKey = `${sideKey}_${panelIdx}`;
+            const isThisPanelSelected = wingIsSelected && selectedPanel === panelIdx;
+            const isHoveredPanel = (hoveredComponent as string) === panelKey;
+
+            let color: string;
+            let opacity = 1.0;
+            let transparent = false;
+
+            if (selectedPanel === null) {
+              // No panel selected: use normal component coloring
+              if (selectedComponent === null) {
+                color = basePanelColor;
+              } else if (wingIsSelected) {
+                color = SELECTED_COLOR;
+              } else {
+                color = UNSELECTED_COLOR;
+              }
+            } else {
+              // A panel is selected
+              if (isThisPanelSelected) {
+                color = PANEL_SELECTED_COLOR;
+              } else {
+                color = basePanelColor;
+                opacity = PANEL_MUTED_OPACITY;
+                transparent = true;
+              }
+            }
+
+            const tooltipText = `${sideLabel} Wing — Panel ${panelIdx + 1}`;
+
+            return (
+              <group key={panelKey}>
+                <mesh
+                  geometry={panelGeom}
+                  onClick={handlePanelClick(panelIdx)}
+                  onPointerEnter={(e: ThreeEvent<PointerEvent>) => {
+                    e.stopPropagation();
+                    setHoveredComponent(panelKey as ComponentSelection);
+                    gl.domElement.style.cursor = 'pointer';
+                  }}
+                  onPointerLeave={(e: ThreeEvent<PointerEvent>) => {
+                    e.stopPropagation();
+                    setHoveredComponent(null);
+                    gl.domElement.style.cursor = 'auto';
+                  }}
+                >
+                  <meshStandardMaterial
+                    color={color}
+                    emissive={isHoveredPanel ? HOVER_EMISSIVE : '#000000'}
+                    emissiveIntensity={isHoveredPanel ? HOVER_EMISSIVE_INTENSITY : 0}
+                    metalness={0.1}
+                    roughness={0.7}
+                    side={THREE.DoubleSide}
+                    transparent={transparent}
+                    opacity={opacity}
+                  />
+                </mesh>
+                {/* Tooltip on hover */}
+                {isHoveredPanel && panelGeom.boundingSphere && (
+                  <Html
+                    position={[
+                      panelGeom.boundingSphere.center.x,
+                      panelGeom.boundingSphere.center.y + panelGeom.boundingSphere.radius * 0.8,
+                      panelGeom.boundingSphere.center.z,
+                    ]}
+                    center
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    <div style={{
+                      fontSize: 10,
+                      fontFamily: 'monospace',
+                      color: '#fff',
+                      backgroundColor: 'rgba(30, 30, 34, 0.9)',
+                      padding: '2px 8px',
+                      borderRadius: 3,
+                      whiteSpace: 'nowrap',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                    }}>
+                      {tooltipText}
+                    </div>
+                  </Html>
+                )}
+              </group>
+            );
+          });
         })}
 
         {/* Control surfaces — amber, non-selectable (#144) */}

@@ -57,6 +57,34 @@ _MIN_TAIL_POS_FRAC: float = 0.75
 # ---------------------------------------------------------------------------
 
 
+def _compute_wing_mount(design: AircraftDesign) -> tuple[float, float]:
+    """Compute the (wing_x, wing_z) mount position for a given design.
+
+    Returns the chordwise (X) and vertical (Z) offsets applied to each wing half
+    relative to the fuselage origin.  The same values are used by both
+    ``assemble_aircraft()`` and the WebSocket preview generator to ensure the
+    per-panel tessellation in ``_generate_mesh()`` is correctly positioned.
+
+    Returns:
+        (wing_x, wing_z) — both in mm.
+    """
+    wing_x_frac = _WING_X_FRACTION.get(design.fuselage_preset, 0.30)
+    wing_x = design.fuselage_length * wing_x_frac
+
+    preset = design.fuselage_preset
+    if preset == "Pod":
+        fuselage_height = design.wing_chord * 0.45
+    elif preset == "Blended-Wing-Body":
+        fuselage_height = design.wing_chord * 0.15
+    else:
+        fuselage_height = design.wing_chord * 0.35 * 1.1
+
+    wing_z_frac = _WING_Z_FRACTION.get(design.wing_mount_type, 0.0)
+    wing_z = fuselage_height * wing_z_frac
+
+    return wing_x, wing_z
+
+
 def _compute_tail_x(design: AircraftDesign) -> float:
     """Compute the tail X position with a minimum fuselage-proportional floor.
 
@@ -132,21 +160,8 @@ def assemble_aircraft(design: AircraftDesign) -> dict[str, cq.Workplane]:
     # 1. Fuselage (already at origin, nose at X=0, tail at X=fuselage_length)
     fuselage = build_fuselage(design)
 
-    # 2. Wing mount position
-    wing_x_frac = _WING_X_FRACTION.get(design.fuselage_preset, 0.30)
-    wing_x = design.fuselage_length * wing_x_frac
-
-    # Estimate fuselage height for wing Z positioning.
-    # Must match the actual max_height used in each fuselage builder.
-    preset = design.fuselage_preset
-    if preset == "Pod":
-        fuselage_height = design.wing_chord * 0.45  # pod: max_width * 1.0
-    elif preset == "Blended-Wing-Body":
-        fuselage_height = design.wing_chord * 0.15  # BWB: flat airfoil-like
-    else:  # Conventional
-        fuselage_height = design.wing_chord * 0.35 * 1.1
-    wing_z_frac = _WING_Z_FRACTION.get(design.wing_mount_type, 0.0)
-    wing_z = fuselage_height * wing_z_frac
+    # 2. Wing mount position — shared helper ensures consistency with _generate_mesh
+    wing_x, wing_z = _compute_wing_mount(design)
 
     # Build wings and translate to mount position
     wing_left_raw = build_wing(design, side="left")
@@ -631,9 +646,8 @@ def _compute_cg(
 
     Falls back to 25% MAC (aerodynamic center) if total weight is zero.
     """
-    # Wing mount X position (same logic as assemble_aircraft)
-    wing_x_frac = _WING_X_FRACTION.get(design.fuselage_preset, 0.30)
-    wing_x = design.fuselage_length * wing_x_frac
+    # Wing mount X position — shared helper ensures consistency with assemble_aircraft
+    wing_x, _wing_z = _compute_wing_mount(design)
 
     # Wing CG: wing mount + sweep offset + 25% MAC
     wing_le_offset = y_mac * math.tan(sweep_rad)
