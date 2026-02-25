@@ -9,11 +9,10 @@ Connection lifecycle (spec §6.2):
 
 Concurrency model:
 - A task group runs two concurrent tasks: a reader and a generator.
-- The reader receives messages from the WebSocket and posts them to a
-  memory channel.  The generator picks up the latest design, cancels any
-  in-flight CadQuery work via cancel scope, and starts a new generation.
-- This avoids blocking the reader on `to_thread.run_sync`, so new messages
-  (including cancellations) are always handled promptly.
+- The reader receives messages from the WebSocket, validates them, cancels
+  any in-flight generation scope, and posts designs to a memory channel.
+- The generator picks up the latest design and runs CadQuery in a thread.
+- A lock protects ws.send_bytes to prevent interleaved frames.
 - `abandon_on_cancel` is NOT used — cancelled threads properly release
   the CapacityLimiter token when they finish.
 """
@@ -84,24 +83,36 @@ async def preview_websocket(ws: WebSocket) -> None:
     """Handle a single WebSocket connection for real-time preview.
 
     Uses a task group with two concurrent tasks:
-    - **reader**: receives WebSocket messages, validates them, and sends
-      parsed AircraftDesign objects into a memory channel.
-    - **generator**: consumes designs from the channel, cancels any
-      in-flight generation, and starts a new one.  Results (or errors)
-      are sent back via the WebSocket.
+    - **reader**: receives WebSocket messages, validates them, cancels any
+      in-flight generation scope, and sends parsed AircraftDesign objects
+      into a memory channel.
+    - **generator**: consumes designs from the channel and runs CadQuery
+      in a thread pool.  Results (or errors) are sent back via the WebSocket.
 
-    This design ensures the reader is never blocked waiting for CadQuery,
-    so cancellation of stale generations is immediate.
+    A shared lock protects all ws.send_bytes calls to prevent interleaved
+    frames from the two tasks.
     """
     await ws.accept()
     logger.info("WebSocket client connected")
 
-    # Memory channel with buffer size 0 — we only care about the latest
-    # design.  The reader drains to keep only the newest.
+    # Memory channel — reader posts validated designs, generator consumes.
     send_ch, recv_ch = anyio.create_memory_object_stream[AircraftDesign](max_buffer_size=16)
+
+    # Lock protecting ws.send_bytes — both tasks may send frames.
+    ws_lock = anyio.Lock()
+
+    # Shared cancel scope: reader cancels it when a new message arrives,
+    # generator creates it before starting work.
+    generation_scope: anyio.CancelScope | None = None
+
+    async def _send_frame(frame: bytes) -> None:
+        """Send a binary frame to the WebSocket, protected by lock."""
+        async with ws_lock:
+            await ws.send_bytes(frame)
 
     async def reader_task() -> None:
         """Read messages from the WebSocket and post validated designs."""
+        nonlocal generation_scope
         try:
             while True:
                 try:
@@ -122,7 +133,7 @@ async def preview_websocket(ws: WebSocket) -> None:
                             error="Message too large",
                             detail=f"Maximum message size is {MAX_MESSAGE_SIZE} bytes",
                         )
-                        await ws.send_bytes(frame)
+                        await _send_frame(frame)
                         continue
                     try:
                         text = raw_bytes.decode("utf-8")
@@ -132,7 +143,7 @@ async def preview_websocket(ws: WebSocket) -> None:
                             error="Invalid message format",
                             detail="Expected UTF-8 encoded JSON text",
                         )
-                        await ws.send_bytes(frame)
+                        await _send_frame(frame)
                         continue
                 else:
                     continue
@@ -143,7 +154,7 @@ async def preview_websocket(ws: WebSocket) -> None:
                         error="Message too large",
                         detail=f"Maximum message size is {MAX_MESSAGE_SIZE} bytes",
                     )
-                    await ws.send_bytes(frame)
+                    await _send_frame(frame)
                     continue
 
                 # Parse and validate
@@ -155,7 +166,7 @@ async def preview_websocket(ws: WebSocket) -> None:
                         error="Invalid JSON",
                         detail=str(exc),
                     )
-                    await ws.send_bytes(frame)
+                    await _send_frame(frame)
                     continue
 
                 try:
@@ -172,8 +183,14 @@ async def preview_websocket(ws: WebSocket) -> None:
                         error="Validation error",
                         detail="; ".join(detail_parts),
                     )
-                    await ws.send_bytes(frame)
+                    await _send_frame(frame)
                     continue
+
+                # Cancel any in-flight generation immediately — the reader
+                # is the only task that can do this promptly since the
+                # generator is blocked on run_sync (#188).
+                if generation_scope is not None:
+                    generation_scope.cancel()
 
                 # Post design to channel (non-blocking send)
                 try:
@@ -191,7 +208,7 @@ async def preview_websocket(ws: WebSocket) -> None:
 
     async def generator_task() -> None:
         """Consume designs from channel and generate meshes."""
-        generation_scope: anyio.CancelScope | None = None
+        nonlocal generation_scope
 
         async for design in recv_ch:
             # Drain channel to get the latest design (last-write-wins)
@@ -202,64 +219,57 @@ async def preview_websocket(ws: WebSocket) -> None:
                 except anyio.WouldBlock:
                     break
 
-            # Cancel any in-flight generation
-            if generation_scope is not None:
-                generation_scope.cancel()
-
             generation_scope = anyio.CancelScope()
-            try:
-                with generation_scope:
-                    # Compute derived values (pure math, fast)
-                    derived_dict = compute_derived_values(latest)
-                    derived = DerivedValues(**derived_dict)
+            with generation_scope:
+                # Compute derived values (pure math, fast)
+                derived_dict = compute_derived_values(latest)
+                derived = DerivedValues(**derived_dict)
 
-                    # Compute warnings (canonical module)
-                    warnings_list = compute_warnings(latest)
+                # Compute warnings (canonical module)
+                warnings_list = compute_warnings(latest)
 
-                    # Generate geometry in thread pool with limiter.
-                    # abandon_on_cancel=False ensures the thread releases
-                    # the CapacityLimiter token when it finishes (#189).
-                    try:
-                        mesh_data, comp_ranges = await anyio.to_thread.run_sync(
-                            lambda: _generate_mesh(latest),
-                            limiter=_cadquery_limiter,
-                            abandon_on_cancel=False,
-                        )
-                    except Exception as gen_err:
-                        if generation_scope.cancel_called:
-                            # Cancelled while waiting — don't send error
-                            continue
-                        logger.warning("Geometry generation failed: %s", gen_err)
-                        frame = _build_error_frame(
-                            error="Geometry generation failed",
-                            detail=str(gen_err),
-                        )
-                        try:
-                            await ws.send_bytes(frame)
-                        except Exception:
-                            return
-                        continue
-
-                    # If scope was cancelled while thread ran, discard result
+                # Generate geometry in thread pool with limiter.
+                # abandon_on_cancel=False ensures the thread releases
+                # the CapacityLimiter token when it finishes (#189).
+                try:
+                    mesh_data, comp_ranges = await anyio.to_thread.run_sync(
+                        lambda: _generate_mesh(latest),
+                        limiter=_cadquery_limiter,
+                        abandon_on_cancel=False,
+                    )
+                except Exception as gen_err:
                     if generation_scope.cancel_called:
+                        # Cancelled while generating — don't send error
                         continue
-
-                    # Build and send response
-                    response = _build_mesh_response(
-                        mesh_data.to_binary_frame(),
-                        derived,
-                        warnings_list,
-                        component_ranges=comp_ranges,
+                    logger.warning("Geometry generation failed: %s", gen_err)
+                    frame = _build_error_frame(
+                        error="Geometry generation failed",
+                        detail=str(gen_err),
                     )
                     try:
-                        await ws.send_bytes(response)
+                        await _send_frame(frame)
                     except Exception:
                         return
+                    continue
 
-            except anyio.get_cancelled_exc_class():
-                # Generation was superseded — that's fine
-                logger.debug("Generation cancelled (superseded)")
-                continue
+                # If scope was cancelled while thread ran, discard result
+                if generation_scope.cancel_called:
+                    continue
+
+                # Build and send response
+                response = _build_mesh_response(
+                    mesh_data.to_binary_frame(),
+                    derived,
+                    warnings_list,
+                    component_ranges=comp_ranges,
+                )
+                try:
+                    await _send_frame(response)
+                except Exception:
+                    return
+
+            # CancelScope context manager handles its own CancelledError —
+            # no need to catch it externally.
 
     try:
         async with anyio.create_task_group() as tg:
