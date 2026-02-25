@@ -124,10 +124,10 @@ class TestComputeDerivedValues:
         """Derived values should compute for default parameters."""
         result = compute_derived_values(default_design)
         assert isinstance(result, dict)
-        assert len(result) == 8
+        assert len(result) == 12
 
     def test_all_keys_present(self, default_design: AircraftDesign) -> None:
-        """All 8 derived value keys must be present."""
+        """All 12 derived value keys must be present."""
         result = compute_derived_values(default_design)
         expected_keys = {
             "tip_chord_mm",
@@ -138,6 +138,10 @@ class TestComputeDerivedValues:
             "estimated_cg_mm",
             "min_feature_thickness_mm",
             "wall_thickness_mm",
+            "weight_wing_g",
+            "weight_tail_g",
+            "weight_fuselage_g",
+            "weight_total_g",
         }
         assert set(result.keys()) == expected_keys
 

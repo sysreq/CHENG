@@ -250,7 +250,7 @@ class TestDerivedEdgeCases:
         assert d["wall_thickness_mm"] == pytest.approx(1.5)
 
     def test_all_derived_keys_present(self):
-        """All 8 derived keys should be in the result."""
+        """All 12 derived keys should be in the result."""
         d = compute_derived_values(_trainer())
         expected_keys = {
             "tip_chord_mm",
@@ -261,5 +261,9 @@ class TestDerivedEdgeCases:
             "estimated_cg_mm",
             "min_feature_thickness_mm",
             "wall_thickness_mm",
+            "weight_wing_g",
+            "weight_tail_g",
+            "weight_fuselage_g",
+            "weight_total_g",
         }
         assert set(d.keys()) == expected_keys
