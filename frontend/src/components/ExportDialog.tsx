@@ -3,7 +3,7 @@
 // Issues #28, #59, #119, #167, #170
 // ============================================================================
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useDesignStore } from '../store/designStore';
 import { fieldHasWarning, formatWarning, groupWarningsByCategory, WARNING_COLORS } from '../lib/validation';
@@ -607,7 +607,20 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
   const [testJointError, setTestJointError] = useState<string | null>(null);
   const [testJointSuccess, setTestJointSuccess] = useState(false);
 
-  const { structural, print } = groupWarningsByCategory(warnings);
+  // #270: AbortControllers for in-flight requests + mounted ref to guard post-await state updates
+  const mountedRef = useRef(true);
+  const previewAbortRef = useRef<AbortController | null>(null);
+  const exportAbortRef = useRef<AbortController | null>(null);
+  const testJointAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const { structural, aero, print } = groupWarningsByCategory(warnings);
 
   // Whether the selected format supports sectioning/preview
   const hasSectioning = formatSupportsSectioning(selectedFormat);
@@ -638,9 +651,15 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
     return `Export your design as ${selectedFormat.toUpperCase()} format.`;
   }, [step, hasSectioning, selectedFormat]);
 
-  // Reset state when dialog opens/closes
+  // Reset state when dialog opens/closes; abort any in-flight requests on close (#270)
   useEffect(() => {
     if (!open) {
+      previewAbortRef.current?.abort();
+      previewAbortRef.current = null;
+      exportAbortRef.current?.abort();
+      exportAbortRef.current = null;
+      testJointAbortRef.current?.abort();
+      testJointAbortRef.current = null;
       setStep('settings');
       setPreviewData(null);
       setExportError(null);
@@ -733,6 +752,11 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
   // ── Preview handler ─────────────────────────────────────────────────
 
   const handlePreview = useCallback(async () => {
+    // #270: abort any prior in-flight preview request
+    previewAbortRef.current?.abort();
+    const controller = new AbortController();
+    previewAbortRef.current = controller;
+
     setIsPreviewing(true);
     setExportError(null);
 
@@ -741,21 +765,28 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ design, format: selectedFormat }),
+        signal: controller.signal,
       });
+
+      if (!mountedRef.current) return;
 
       if (!res.ok) {
         const detail = await res.text().catch(() => '');
+        if (!mountedRef.current) return;
         throw new Error(detail || `Preview failed (${res.status})`);
       }
 
       const data = (await res.json()) as ExportPreviewResponse;
+      if (!mountedRef.current) return;
       setPreviewData(data);
       setStep('preview');
     } catch (err) {
+      if (!mountedRef.current) return;
+      if (err instanceof Error && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Preview failed';
       setExportError(msg);
     } finally {
-      setIsPreviewing(false);
+      if (mountedRef.current && !controller.signal.aborted) setIsPreviewing(false);
     }
   }, [design, selectedFormat]);
 
@@ -768,6 +799,11 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
   }, [onOpenChange]);
 
   const handleExport = useCallback(async () => {
+    // #270: abort any prior in-flight export request
+    exportAbortRef.current?.abort();
+    const controller = new AbortController();
+    exportAbortRef.current = controller;
+
     setIsExporting(true);
     setExportError(null);
 
@@ -776,15 +812,20 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ design, format: selectedFormat }),
+        signal: controller.signal,
       });
+
+      if (!mountedRef.current) return;
 
       if (!res.ok) {
         const detail = await res.text().catch(() => '');
+        if (!mountedRef.current) return;
         throw new Error(detail || `Export failed (${res.status})`);
       }
 
       // Stream the ZIP as a blob and trigger download
       const blob = await res.blob();
+      if (!mountedRef.current) return;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -793,20 +834,28 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // #271: delay revoke so browser has time to start the download (1s for Safari/iOS compat)
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
 
       setExportSuccess(true);
     } catch (err) {
+      if (!mountedRef.current) return;
+      if (err instanceof Error && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Export failed';
       setExportError(msg);
     } finally {
-      setIsExporting(false);
+      if (mountedRef.current && !controller.signal.aborted) setIsExporting(false);
     }
   }, [design, selectedFormat]);
 
   // ── Test Joint Export handler (#146) ─────────────────────────────────────
 
   const handleTestJointExport = useCallback(async () => {
+    // #270: abort any prior in-flight test-joint request
+    testJointAbortRef.current?.abort();
+    const controller = new AbortController();
+    testJointAbortRef.current = controller;
+
     setIsExportingTestJoint(true);
     setTestJointError(null);
     setTestJointSuccess(false);
@@ -821,15 +870,20 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
           sectionOverlap: design.sectionOverlap,
           nozzleDiameter: design.nozzleDiameter,
         }),
+        signal: controller.signal,
       });
+
+      if (!mountedRef.current) return;
 
       if (!res.ok) {
         const detail = await res.text().catch(() => '');
+        if (!mountedRef.current) return;
         throw new Error(detail || `Test joint export failed (${res.status})`);
       }
 
       // Trigger blob download
       const blob = await res.blob();
+      if (!mountedRef.current) return;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -837,14 +891,17 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // #271: delay revoke so browser has time to start the download (1s for Safari/iOS compat)
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
 
       setTestJointSuccess(true);
     } catch (err) {
+      if (!mountedRef.current) return;
+      if (err instanceof Error && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Test joint export failed';
       setTestJointError(msg);
     } finally {
-      setIsExportingTestJoint(false);
+      if (mountedRef.current && !controller.signal.aborted) setIsExportingTestJoint(false);
     }
   }, [design.jointType, design.jointTolerance, design.sectionOverlap, design.nozzleDiameter]);
 
@@ -1168,6 +1225,21 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
                     <div className="mb-2">
                       <p className="text-[10px] font-medium text-zinc-500 mb-1">Structural</p>
                       {structural.map((w) => (
+                        <div
+                          key={w.id}
+                          className={`px-2 py-1.5 mb-1 text-[10px] rounded border
+                            ${WARNING_COLORS.warn.bg} ${WARNING_COLORS.warn.border} ${WARNING_COLORS.warn.text}`}
+                        >
+                          {formatWarning(w)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {aero.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-[10px] font-medium text-zinc-500 mb-1">Aerodynamic</p>
+                      {aero.map((w) => (
                         <div
                           key={w.id}
                           className={`px-2 py-1.5 mb-1 text-[10px] rounded border

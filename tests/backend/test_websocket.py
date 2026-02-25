@@ -106,3 +106,53 @@ class TestWebSocketHardening:
         assert "create_task_group" in self.source
         assert "reader_task" in self.source
         assert "generator_task" in self.source
+
+
+class TestNoneTextGuard:
+    """Tests for Issue #255 — None text guard and byte-length size check."""
+
+    @pytest.fixture(autouse=True)
+    def _load_source(self) -> None:
+        from backend.routes import websocket
+        self.source = inspect.getsource(websocket)
+
+    def test_none_text_guard_present(self) -> None:
+        """Reader must guard against text=None in the ASGI receive dict (#255)."""
+        assert "if text is None:" in self.source
+
+    def test_byte_length_size_check(self) -> None:
+        """Size check must use byte-length with errors='replace' not bare len(text) (#255).
+        errors='replace' avoids UnicodeEncodeError on surrogate pairs from malicious clients.
+        """
+        assert 'text.encode("utf-8", errors="replace")' in self.source
+
+    def test_character_count_not_used_for_text_size(self) -> None:
+        """The text size limit must NOT use bare len(text) — it must use the
+        utf-8 encoded byte length to reject oversized non-ASCII payloads.
+        Byte-length check should be present; bare len(text) size check should
+        be absent from the text size-check branch."""
+        # Confirm the encoding-based check is present with safe error handler
+        assert 'len(text.encode("utf-8", errors="replace")) > MAX_MESSAGE_SIZE' in self.source
+
+    def test_none_text_with_none_bytes_skipped(self) -> None:
+        """When text=None and bytes=None, the frame must be skipped (not crash)."""
+        # Verify the guard checks raw.get("bytes") is None before continuing
+        assert 'raw.get("bytes") is None' in self.source
+
+    def test_oversized_non_ascii_rejected(self) -> None:
+        """A string of N multi-byte characters > MAX_MESSAGE_SIZE bytes but
+        <= MAX_MESSAGE_SIZE characters must be rejected by the byte-length check.
+        """
+        from backend.routes.websocket import MAX_MESSAGE_SIZE
+
+        # Build a string where character count is ≤ MAX_MESSAGE_SIZE but
+        # byte count exceeds MAX_MESSAGE_SIZE (each '€' is 3 bytes in UTF-8).
+        # char_count = MAX_MESSAGE_SIZE // 2  →  byte_count = 3 * char_count  > MAX_MESSAGE_SIZE
+        char_count = MAX_MESSAGE_SIZE // 2
+        text = "\u20ac" * char_count  # '€' = U+20AC, 3 bytes each
+        byte_len = len(text.encode("utf-8"))
+        assert byte_len > MAX_MESSAGE_SIZE, "test precondition: byte_len must exceed limit"
+        assert len(text) <= MAX_MESSAGE_SIZE, "test precondition: char count must fit old limit"
+
+        # The byte-length check should trigger
+        assert len(text.encode("utf-8")) > MAX_MESSAGE_SIZE

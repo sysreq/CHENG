@@ -44,3 +44,41 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# ── Stage 3: Dev Backend (skips frontend build) ───────────────────────
+# Use this target for local development when the Vite dev server runs separately.
+# Builds only the Python runtime layer — no Node.js or pnpm build required.
+FROM python:3.11-slim AS dev-backend
+
+LABEL org.opencontainers.image.title="CHENG (dev-backend)" \
+      org.opencontainers.image.description="Parametric RC Plane Generator — backend-only dev target"
+
+# System libs required by CadQuery/OpenCascade (OCP)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1-mesa-glx libglib2.0-0 libx11-6 libxext6 libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install uv and project dependencies (into .venv)
+COPY pyproject.toml uv.lock ./
+RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev
+
+# Copy application code (backend + airfoils only — no static frontend)
+COPY backend/ ./backend/
+COPY airfoils/ ./airfoils/
+
+# Create data directories
+RUN mkdir -p /data/designs /data/tmp
+
+ENV PORT=8000 \
+    CHENG_DATA_DIR=/data/designs \
+    CHENG_LOG_LEVEL=info \
+    PATH="/app/.venv/bin:$PATH"
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

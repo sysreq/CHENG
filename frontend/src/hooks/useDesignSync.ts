@@ -27,16 +27,22 @@ const TEXT_DEBOUNCE_MS = 300;
  *
  * Call exactly once at the App level.
  *
- * @param send - Function to send a design object via WebSocket
+ * @param send - Function to send a design object via WebSocket. Returns true if sent.
  */
-export function useDesignSync(send: (design: AircraftDesign) => void): void {
+export function useDesignSync(send: (design: AircraftDesign) => boolean): void {
   const sendRef = useRef(send);
   sendRef.current = send;
 
-  /** Send design and mark generating state. */
+  /**
+   * Send design and mark generating state ONLY if the send succeeded (#265).
+   * If the WebSocket is not OPEN, send() returns false and we do not set
+   * isGenerating=true, preventing a stuck spinner.
+   */
   const sendAndMark = (design: AircraftDesign) => {
-    useDesignStore.getState().setIsGenerating(true);
-    sendRef.current(design);
+    const sent = sendRef.current(design);
+    if (sent) {
+      useDesignStore.getState().setIsGenerating(true);
+    }
   };
 
   // Track throttle/debounce timers
@@ -47,13 +53,19 @@ export function useDesignSync(send: (design: AircraftDesign) => void): void {
   // Track previous design reference for change detection
   const prevDesignRef = useRef<AircraftDesign>(useDesignStore.getState().design);
 
-  // Subscribe to design store changes
+  // Subscribe to design store changes.
+  // Guard for Issue #267: track the previous design reference so the callback
+  // exits early when a non-design mutation fires (e.g. setMeshData, setDerived,
+  // setWarnings from WebSocket frames).  This avoids triggering timer logic on
+  // every incoming mesh frame even though the design params did not change.
   useEffect(() => {
     const unsubDesign = useDesignStore.subscribe((state) => {
       const design = state.design;
       const source: ChangeSource = state.lastChangeSource;
 
-      // Only send if the design object reference actually changed
+      // Only send if the design object reference actually changed (#267).
+      // setMeshData / setDerived / setWarnings do NOT change design, so they
+      // are skipped here without any timer side-effects.
       if (design === prevDesignRef.current) return;
       prevDesignRef.current = design;
 
@@ -107,16 +119,27 @@ export function useDesignSync(send: (design: AircraftDesign) => void): void {
     };
   }, []);
 
-  // On connection (initial or reconnection), send current design to sync backend
+  // On connection (initial or reconnection), send current design to sync backend.
+  // On disconnect/reconnecting, clear isGenerating to prevent a stuck spinner (#265).
   useEffect(() => {
     let prevConnState = useConnectionStore.getState().state;
 
     const unsubConnection = useConnectionStore.subscribe((state) => {
       const curr = state.state;
+
       if (curr === 'connected' && prevConnState !== 'connected') {
         // Sync the backend with current design state on any connection
         sendAndMark(useDesignStore.getState().design);
       }
+
+      // If the connection drops while generating, clear the spinner (#265)
+      if (
+        (curr === 'disconnected' || curr === 'reconnecting') &&
+        prevConnState === 'connected'
+      ) {
+        useDesignStore.getState().setIsGenerating(false);
+      }
+
       prevConnState = curr;
     });
 

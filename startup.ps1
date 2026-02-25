@@ -1,7 +1,9 @@
 # CHENG — Start dev servers (backend :8000, frontend :5173)
 param(
     [Alias('r')]
-    [switch]$Reload
+    [switch]$Reload,
+    [Alias('b')]
+    [switch]$Build
 )
 
 # Kill existing servers if running
@@ -12,18 +14,29 @@ if ($existing) {
     Start-Sleep -Seconds 1
 }
 
-# Build frontend
-Write-Host "Building frontend..."
+# Install frontend dependencies
+Write-Host "Installing frontend dependencies..."
 Push-Location frontend
 pnpm install --frozen-lockfile 2>$null
-$buildResult = pnpm build 2>&1
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Frontend build failed:" -ForegroundColor Red
-    Write-Host $buildResult
+    Write-Error "pnpm install failed. Aborting."
     Pop-Location
     exit 1
 }
-Write-Host "Frontend built." -ForegroundColor Green
+Write-Host "Frontend dependencies installed." -ForegroundColor Green
+
+# Build frontend (only when -Build flag is provided)
+if ($Build) {
+    Write-Host "Building frontend (production build)..."
+    $buildResult = pnpm build 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Frontend build failed:" -ForegroundColor Red
+        Write-Host $buildResult
+        Pop-Location
+        exit 1
+    }
+    Write-Host "Frontend built." -ForegroundColor Green
+}
 Pop-Location
 
 # Start backend
