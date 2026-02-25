@@ -58,8 +58,8 @@ class LocalStorage:
     def list_designs(self) -> list[dict]:
         """Return summaries of all saved designs, newest first.
 
-        Uses os.stat() for timestamps and a partial JSON read to extract
-        only 'id' and 'name' fields without parsing the entire file.
+        Reads each .cheng file fully and extracts 'id' and 'name' fields.
+        The files are local JSON on disk — full reads are fast and reliable.
         """
         designs: list[dict] = []
         for p in sorted(
@@ -68,18 +68,10 @@ class LocalStorage:
             reverse=True,
         ):
             try:
+                data = json.loads(p.read_text(encoding="utf-8"))
                 stat = os.stat(p)
-                # Read only the first 1 KB to extract id/name without full parse
-                with open(p, "r", encoding="utf-8") as f:
-                    head = f.read(1024)
-                data = json.loads(head if head.rstrip().endswith("}") else head + "}")
-            except (json.JSONDecodeError, OSError, ValueError):
-                # Fallback: full parse for files where partial read fails
-                try:
-                    data = json.loads(p.read_text(encoding="utf-8"))
-                    stat = os.stat(p)
-                except (json.JSONDecodeError, OSError):
-                    continue  # skip corrupt files
+            except (json.JSONDecodeError, OSError):
+                continue  # skip corrupt or unreadable files
             designs.append(
                 {
                     "id": data.get("id", p.stem),
