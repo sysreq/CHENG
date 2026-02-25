@@ -27,14 +27,12 @@ async function waitForAppReady(page: Page) {
 
   // Wait for app to finish initial load: either the connection status
   // shows "Connected" or a parameter input becomes available.
-  // This replaces the brittle fixed 2-second timeout.
-  await Promise.race([
-    page.getByText('Connected').waitFor({ timeout: 10_000 }).catch(() => {}),
-    page.locator('input[type="number"]').first().waitFor({ timeout: 10_000 }),
-  ]);
-
-  // Small buffer for WebSocket initial design sync
-  await page.waitForTimeout(500);
+  // Uses Playwright's .or() for proper multi-condition waiting.
+  const connectedIndicator = page.getByText('Connected');
+  const firstInput = page.locator('input[type="number"]').first();
+  await expect(connectedIndicator.or(firstInput)).toBeVisible({
+    timeout: 10_000,
+  });
 }
 
 /**
@@ -59,7 +57,9 @@ async function selectPreset(page: Page, presetName: string) {
   });
   await expect(confirmButton).toBeVisible({ timeout: 3_000 });
   await confirmButton.click();
-  await page.waitForTimeout(500);
+
+  // Wait for the alert dialog to close after confirming
+  await expect(confirmButton).not.toBeVisible({ timeout: 3_000 });
 }
 
 /** Get the numeric value from a ParamSlider's number input by its label. */
@@ -138,15 +138,16 @@ test.describe('Core Application Flows', () => {
 
     // Change wingspan from 1200 to 1500
     await setSliderInputValue(page, 'Wingspan', '1500');
-    await page.waitForTimeout(500);
 
-    // Verify the input now shows 1500
-    const value = await getSliderInputValue(page, 'Wingspan');
-    expect(value).toBe('1500');
+    // Use web-first assertions that auto-retry instead of fixed timeout
+    const wingspanInput = page
+      .locator('div.mb-3', { has: page.locator('text="Wingspan"') })
+      .locator('input[type="number"]');
+    await expect(wingspanInput).toHaveValue('1500');
 
     // Preset should switch to "Custom" since we changed a value
-    const preset = await getPresetValue(page);
-    expect(preset).toBe('Custom');
+    const presetSelect = page.locator('aside select').first();
+    await expect(presetSelect).toHaveValue('Custom');
   });
 
   // -------------------------------------------------------------------------
@@ -182,7 +183,6 @@ test.describe('Core Application Flows', () => {
 
     // Change a param to mark the design as dirty
     await setSliderInputValue(page, 'Wingspan', '1100');
-    await page.waitForTimeout(500);
 
     // The design name button should contain the dirty indicator "*"
     const nameDisplay = page.locator('button[title="Click to rename"]');
@@ -191,22 +191,11 @@ test.describe('Core Application Flows', () => {
     // Save via Ctrl+S
     await page.keyboard.press('Control+s');
 
-    // After save, either the dirty indicator clears (backend running) or
-    // a "Saved!" flash or "Save failed" message appears. Verify one of these.
+    // After save, either "Saved!" flash or "Save failed" should appear.
+    // Use .or() for proper multi-condition waiting (no swallowed errors).
     const savedFlash = page.getByText('Saved!');
     const saveFailed = page.getByText('Save failed');
-    const dirtyCleared = nameDisplay.filter({ hasNotText: '*' });
-
-    // Wait for any save feedback (up to 3 seconds)
-    await Promise.race([
-      savedFlash.waitFor({ timeout: 3_000 }).catch(() => {}),
-      saveFailed.waitFor({ timeout: 3_000 }).catch(() => {}),
-      dirtyCleared.waitFor({ timeout: 3_000 }).catch(() => {}),
-    ]);
-
-    // If we got here, the keyboard shortcut was handled (not swallowed by browser).
-    // The test passes as long as the shortcut triggered the save action.
-    expect(true).toBe(true);
+    await expect(savedFlash.or(saveFailed)).toBeVisible({ timeout: 5_000 });
   });
 
   // -------------------------------------------------------------------------
@@ -220,16 +209,12 @@ test.describe('Core Application Flows', () => {
     await setSliderInputValue(page, 'Wingspan', '3000');
     await setSliderInputValue(page, 'Fuselage Length', '150');
 
-    // Wait for backend to respond with warnings via WebSocket
-    await page.waitForTimeout(3_000);
-
-    // Warning badge should appear in the toolbar (amber rounded pill with count)
-    // OR a warning icon appears on parameter inputs.
-    const warningBadge = page.locator('.rounded-full').filter({ hasText: /\d+/ });
-    const warningCount = await warningBadge.count();
-
-    // At minimum, we expect some kind of warning indicator
-    expect(warningCount).toBeGreaterThan(0);
+    // Warning badge should appear in the toolbar (amber rounded pill with count).
+    // Use web-first assertion that auto-retries instead of fixed timeout + count().
+    const warningBadge = page
+      .locator('.rounded-full')
+      .filter({ hasText: /\d+/ });
+    await expect(warningBadge.first()).toBeVisible({ timeout: 5_000 });
   });
 
   // -------------------------------------------------------------------------
@@ -258,29 +243,27 @@ test.describe('Core Application Flows', () => {
     await page.goto('/');
     await waitForAppReady(page);
 
+    // Locate the wingspan input for web-first assertions
+    const wingspanInput = page
+      .locator('div.mb-3', { has: page.locator('text="Wingspan"') })
+      .locator('input[type="number"]');
+
     // Verify starting wingspan
-    const startValue = await getSliderInputValue(page, 'Wingspan');
-    expect(startValue).toBe('1200');
+    await expect(wingspanInput).toHaveValue('1200');
 
     // Change wingspan
     await setSliderInputValue(page, 'Wingspan', '1500');
-    await page.waitForTimeout(500);
-
-    const changedValue = await getSliderInputValue(page, 'Wingspan');
-    expect(changedValue).toBe('1500');
+    await expect(wingspanInput).toHaveValue('1500');
 
     // Click on the canvas to blur the input (prevents browser native undo
     // from interfering with the app's Zustand undo)
     const canvas = page.locator('canvas');
     await canvas.click({ position: { x: 100, y: 100 } });
-    await page.waitForTimeout(300);
 
     // Undo via Ctrl+Z (keyboard shortcut captured by Toolbar)
     await page.keyboard.press('Control+z');
-    await page.waitForTimeout(1_000);
 
-    // Should restore to 1200
-    const undoneValue = await getSliderInputValue(page, 'Wingspan');
-    expect(undoneValue).toBe('1200');
+    // Should restore to 1200 (auto-retrying assertion)
+    await expect(wingspanInput).toHaveValue('1200', { timeout: 3_000 });
   });
 });

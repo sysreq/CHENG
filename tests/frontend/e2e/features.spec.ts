@@ -22,12 +22,12 @@ async function waitForAppReady(page: Page) {
   await page.waitForSelector('main', { timeout: 15_000 });
   await page.waitForSelector('canvas', { timeout: 15_000 });
 
-  await Promise.race([
-    page.getByText('Connected').waitFor({ timeout: 10_000 }).catch(() => {}),
-    page.locator('input[type="number"]').first().waitFor({ timeout: 10_000 }),
-  ]);
-
-  await page.waitForTimeout(500);
+  // Uses Playwright's .or() for proper multi-condition waiting.
+  const connectedIndicator = page.getByText('Connected');
+  const firstInput = page.locator('input[type="number"]').first();
+  await expect(connectedIndicator.or(firstInput)).toBeVisible({
+    timeout: 10_000,
+  });
 }
 
 /** Get preset selector element. */
@@ -45,7 +45,9 @@ async function selectPreset(page: Page, presetName: string) {
   });
   await expect(confirmButton).toBeVisible({ timeout: 3_000 });
   await confirmButton.click();
-  await page.waitForTimeout(500);
+
+  // Wait for the alert dialog to close after confirming
+  await expect(confirmButton).not.toBeVisible({ timeout: 3_000 });
 }
 
 /** Get the numeric value from a ParamSlider's number input by its label. */
@@ -104,24 +106,24 @@ test.describe('Preset Cycling', () => {
     await page.goto('/');
     await waitForAppReady(page);
 
+    // Helper to get a slider input locator
+    const inputFor = (label: string) =>
+      page
+        .locator('div.mb-3', { has: page.locator(`text="${label}"`) })
+        .locator('input[type="number"]');
+
     // Verify default (Trainer)
     const presetSelect = getPresetSelect(page);
     await expect(presetSelect).toHaveValue('Trainer');
-
-    const trainerWingspan = await getSliderInputValue(page, 'Wingspan');
-    expect(trainerWingspan).toBe('1200');
+    await expect(inputFor('Wingspan')).toHaveValue('1200');
 
     // Cycle through remaining presets
     for (const preset of PRESETS.slice(1)) {
       await selectPreset(page, preset.name);
 
-      const wingspan = await getSliderInputValue(page, 'Wingspan');
-      expect(wingspan).toBe(preset.wingspan);
-
-      const chord = await getSliderInputValue(page, 'Wing Chord');
-      expect(chord).toBe(preset.wingChord);
-
-      // Preset selector should reflect the selected name
+      // Use web-first assertions that auto-retry
+      await expect(inputFor('Wingspan')).toHaveValue(preset.wingspan);
+      await expect(inputFor('Wing Chord')).toHaveValue(preset.wingChord);
       await expect(presetSelect).toHaveValue(preset.name);
     }
   });
@@ -140,7 +142,6 @@ test.describe('Custom Preset Save/Load', () => {
 
     // Change a parameter to create a unique configuration
     await setSliderInputValue(page, 'Wingspan', '1350');
-    await page.waitForTimeout(500);
 
     // Click "Save as Preset" button
     const saveButton = page.locator('button', { hasText: 'Save as Preset' });
@@ -171,10 +172,13 @@ test.describe('Custom Preset Save/Load', () => {
     const presetRow = page.locator('div', { hasText: presetName }).filter({
       has: page.locator('button', { hasText: 'Del' }),
     });
+    // Hover to reveal the opacity-0 delete button, then click
+    await presetRow.hover();
     const delButton = presetRow.locator('button', { hasText: 'Del' });
-    // Force-click since Del button is opacity-0 until hover
-    await delButton.click({ force: true });
-    await page.waitForTimeout(500);
+    await delButton.click();
+    await expect(page.getByText(presetName)).not.toBeVisible({
+      timeout: 3_000,
+    });
   });
 });
 
@@ -246,27 +250,15 @@ test.describe('Tail Configuration Switching', () => {
     const tailTypeSelect = tailTypeContainer.locator('select');
     await expect(tailTypeSelect).toHaveValue('Conventional');
 
-    // Switch to V-Tail
-    await tailTypeSelect.selectOption('V-Tail');
-    await page.waitForTimeout(1_000);
-
-    // The Glider preset uses V-Tail natively, but we can also just check
-    // by loading the Glider preset which switches tail type.
-    // Instead, let's verify by switching to Glider preset which has V-Tail.
+    // Load Glider preset which uses V-Tail natively
     await selectPreset(page, 'Glider');
 
-    // Verify tail type is now V-Tail
-    const tailTypeAfter = tailTypeContainer.locator('select');
-    await expect(tailTypeAfter).toHaveValue('V-Tail');
+    // Verify tail type changed to V-Tail
+    await expect(tailTypeSelect).toHaveValue('V-Tail');
 
-    // Verify the sidebar shows V-tail specific labels.
-    // Glider uses V-Tail so the GlobalPanel should show V-Tail in the dropdown.
-    const tailTypeValue = await tailTypeAfter.inputValue();
-    expect(tailTypeValue).toBe('V-Tail');
-
-    // Switch back to Trainer (Conventional)
+    // Switch back to Trainer (Conventional) and verify
     await selectPreset(page, 'Trainer');
-    await expect(tailTypeAfter).toHaveValue('Conventional');
+    await expect(tailTypeSelect).toHaveValue('Conventional');
   });
 });
 
@@ -330,28 +322,14 @@ test.describe('WebSocket Connection Status', () => {
     await page.goto('/');
     await waitForAppReady(page);
 
-    // The status bar (footer) should contain the connection status
+    // The status bar (footer) should contain the connection status.
+    // Use web-first assertion with regex to match any known connection state.
     const footer = page.locator('footer');
-
-    // Status label should show one of the known states.
-    // After app loads, it should show "Connected" (if backend is running)
-    // or "Connecting..." / "Disconnected" etc.
     const statusText = footer.locator('span').last();
-    await expect(statusText).toBeVisible();
-
-    // The text should be one of the known connection states
-    const text = await statusText.textContent();
-    const validStates = [
-      'Connected',
-      'Connecting...',
-      'Reconnecting...',
-      'Disconnected',
-      'Connection Error',
-    ];
-    const matchesKnownState = validStates.some(
-      (state) => text?.includes(state),
+    await expect(statusText).toHaveText(
+      /Connected|Connecting\.\.\.|Reconnecting\.\.\.|Disconnected|Connection Error/,
+      { timeout: 5_000 },
     );
-    expect(matchesKnownState).toBe(true);
   });
 });
 
@@ -366,27 +344,25 @@ test.describe('Multiple Parameter Changes', () => {
     await page.goto('/');
     await waitForAppReady(page);
 
+    // Helper to get a slider input locator by label
+    const inputFor = (label: string) =>
+      page
+        .locator('div.mb-3', { has: page.locator(`text="${label}"`) })
+        .locator('input[type="number"]');
+
     // Change wingspan
     await setSliderInputValue(page, 'Wingspan', '1500');
-    await page.waitForTimeout(300);
 
     // Change wing chord
     await setSliderInputValue(page, 'Wing Chord', '250');
-    await page.waitForTimeout(300);
 
     // Change fuselage length
     await setSliderInputValue(page, 'Fuselage Length', '500');
-    await page.waitForTimeout(300);
 
-    // Verify all values persisted
-    const wingspan = await getSliderInputValue(page, 'Wingspan');
-    expect(wingspan).toBe('1500');
-
-    const chord = await getSliderInputValue(page, 'Wing Chord');
-    expect(chord).toBe('250');
-
-    const fuselage = await getSliderInputValue(page, 'Fuselage Length');
-    expect(fuselage).toBe('500');
+    // Verify all values persisted using web-first assertions
+    await expect(inputFor('Wingspan')).toHaveValue('1500');
+    await expect(inputFor('Wing Chord')).toHaveValue('250');
+    await expect(inputFor('Fuselage Length')).toHaveValue('500');
 
     // The canvas should still be visible (3D view didn't crash)
     const canvas = page.locator('canvas');
@@ -428,13 +404,12 @@ test.describe('View Controls', () => {
     }
 
     // Click each view button in sequence -- they should not error
+    const canvas = page.locator('canvas');
     for (const btn of presetButtons) {
       const button = page.getByRole('button', { name: btn.label });
       await button.click();
-      await page.waitForTimeout(200);
 
-      // Canvas should remain visible (no crash)
-      const canvas = page.locator('canvas');
+      // Canvas should remain visible after each click (no crash)
       await expect(canvas).toBeVisible();
     }
   });
@@ -459,23 +434,18 @@ test.describe('Design Name Editing', () => {
     // Click to enter edit mode
     await nameButton.click();
 
-    // An inline text input should appear
+    // An inline text input should appear. Use .or() to handle multiple
+    // possible selectors without synchronous isVisible() checks.
     const nameInput = page.locator('input.bg-zinc-800[type="text"]').first();
-    // Fall back to looking for any text input in the toolbar area
     const toolbarInput = page.locator(
       'div.flex.items-center input[type="text"]',
     );
-
-    // One of these should be visible (the inline edit input)
-    const editInput = (await nameInput.isVisible())
-      ? nameInput
-      : toolbarInput;
+    const editInput = nameInput.or(toolbarInput);
+    await expect(editInput).toBeVisible({ timeout: 2_000 });
 
     // Type a new name
     await editInput.fill('My Test Plane');
     await editInput.press('Enter');
-
-    await page.waitForTimeout(300);
 
     // After pressing Enter, the button should reappear with the new name
     await expect(nameButton).toBeVisible({ timeout: 2_000 });
@@ -496,7 +466,6 @@ test.describe('History Panel', () => {
 
     // Make a change so there is history
     await setSliderInputValue(page, 'Wingspan', '1400');
-    await page.waitForTimeout(500);
 
     // Open Edit menu
     const editButton = page.locator('button', { hasText: 'Edit' });
@@ -555,7 +524,6 @@ test.describe('Bidirectional Parameter', () => {
 
     // Click swap to toggle to Aspect Ratio mode
     await swapButton.click();
-    await page.waitForTimeout(300);
 
     // After toggling, "Aspect Ratio" label should be visible
     const arLabel = sidebar.getByText('Aspect Ratio', { exact: true });
@@ -569,7 +537,6 @@ test.describe('Bidirectional Parameter', () => {
 
     // Toggle back to chord mode
     await swapBack.click();
-    await page.waitForTimeout(300);
     await expect(chordLabel).toBeVisible();
   });
 });
