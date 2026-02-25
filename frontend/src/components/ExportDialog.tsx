@@ -607,7 +607,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
   const [testJointError, setTestJointError] = useState<string | null>(null);
   const [testJointSuccess, setTestJointSuccess] = useState(false);
 
-  const { structural, print } = groupWarningsByCategory(warnings);
+  const { structural, aero, print } = groupWarningsByCategory(warnings);
 
   // Whether the selected format supports sectioning/preview
   const hasSectioning = formatSupportsSectioning(selectedFormat);
@@ -1168,6 +1168,21 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
                     <div className="mb-2">
                       <p className="text-[10px] font-medium text-zinc-500 mb-1">Structural</p>
                       {structural.map((w) => (
+                        <div
+                          key={w.id}
+                          className={`px-2 py-1.5 mb-1 text-[10px] rounded border
+                            ${WARNING_COLORS.warn.bg} ${WARNING_COLORS.warn.border} ${WARNING_COLORS.warn.text}`}
+                        >
+                          {formatWarning(w)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {aero.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-[10px] font-medium text-zinc-500 mb-1">Aerodynamic</p>
+                      {aero.map((w) => (
                         <div
                           key={w.id}
                           className={`px-2 py-1.5 mb-1 text-[10px] rounded border
