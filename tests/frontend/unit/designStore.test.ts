@@ -261,4 +261,153 @@ describe('designStore', () => {
     });
     expect(useDesignStore.getState().isGenerating).toBe(false);
   });
+
+  // ── newDesign transient state reset (#269) ───────────────────────────
+
+  it('newDesign resets isGenerating to false', () => {
+    useDesignStore.getState().setIsGenerating(true);
+    expect(useDesignStore.getState().isGenerating).toBe(true);
+
+    useDesignStore.getState().newDesign();
+    expect(useDesignStore.getState().isGenerating).toBe(false);
+  });
+
+  it('newDesign resets selectedComponent to null', () => {
+    useDesignStore.getState().setSelectedComponent('wing');
+    expect(useDesignStore.getState().selectedComponent).toBe('wing');
+
+    useDesignStore.getState().newDesign();
+    expect(useDesignStore.getState().selectedComponent).toBeNull();
+  });
+
+  it('newDesign resets selectedPanel to null', () => {
+    useDesignStore.getState().setSelectedPanel(2);
+    expect(useDesignStore.getState().selectedPanel).toBe(2);
+
+    useDesignStore.getState().newDesign();
+    expect(useDesignStore.getState().selectedPanel).toBeNull();
+  });
+
+  it('newDesign resets componentPrintSettings to empty object', () => {
+    useDesignStore.getState().setComponentPrintSetting('wing', { infillPercent: 30 });
+    expect(useDesignStore.getState().componentPrintSettings.wing).toBeDefined();
+
+    useDesignStore.getState().newDesign();
+    expect(useDesignStore.getState().componentPrintSettings).toEqual({});
+  });
+
+  it('newDesign resets meshOffset to [0, 0, 0]', () => {
+    useDesignStore.getState().setMeshOffset([100, 50, -20]);
+    expect(useDesignStore.getState().meshOffset).toEqual([100, 50, -20]);
+
+    useDesignStore.getState().newDesign();
+    expect(useDesignStore.getState().meshOffset).toEqual([0, 0, 0]);
+  });
+
+  it('newDesign resets selectedSubElement to null', () => {
+    // Set a component first so selectedSubElement can be set via cycleSubElement
+    useDesignStore.getState().setSelectedComponent('wing');
+    useDesignStore.getState().cycleSubElement();
+
+    useDesignStore.getState().newDesign();
+    expect(useDesignStore.getState().selectedSubElement).toBeNull();
+  });
+
+  it('newDesign resets fileError to null', () => {
+    // Simulate a lingering file error from a previous save failure
+    // The store has no direct setter for fileError, but loadDesign catches errors and sets it.
+    // We can test indirectly by verifying the initial/reset value.
+    useDesignStore.getState().newDesign();
+    expect(useDesignStore.getState().fileError).toBeNull();
+  });
+
+  it('newDesign resets isSaving and isLoading to false', () => {
+    useDesignStore.getState().newDesign();
+    expect(useDesignStore.getState().isSaving).toBe(false);
+    expect(useDesignStore.getState().isLoading).toBe(false);
+  });
+
+  // ── loadDesign transient state reset (#269) ──────────────────────────
+
+  it('loadDesign resets isGenerating to false', async () => {
+    // Simulate a stuck generating state before load
+    useDesignStore.getState().setIsGenerating(true);
+    expect(useDesignStore.getState().isGenerating).toBe(true);
+
+    // Mock fetch to return a minimal valid design
+    const fakeDesign = {
+      ...useDesignStore.getState().design,
+      id: 'loaded-id',
+      name: 'Loaded Aircraft',
+    };
+    globalThis.fetch = async () =>
+      ({ ok: true, json: async () => fakeDesign }) as Response;
+
+    await useDesignStore.getState().loadDesign('loaded-id');
+    expect(useDesignStore.getState().isGenerating).toBe(false);
+  });
+
+  it('loadDesign resets selectedComponent to null', async () => {
+    useDesignStore.getState().setSelectedComponent('fuselage');
+    expect(useDesignStore.getState().selectedComponent).toBe('fuselage');
+
+    const fakeDesign = {
+      ...useDesignStore.getState().design,
+      id: 'loaded-id',
+      name: 'Loaded Aircraft',
+    };
+    globalThis.fetch = async () =>
+      ({ ok: true, json: async () => fakeDesign }) as Response;
+
+    await useDesignStore.getState().loadDesign('loaded-id');
+    expect(useDesignStore.getState().selectedComponent).toBeNull();
+  });
+
+  it('loadDesign resets componentPrintSettings to empty object', async () => {
+    useDesignStore.getState().setComponentPrintSetting('tail', { infillPercent: 50 });
+    expect(useDesignStore.getState().componentPrintSettings.tail).toBeDefined();
+
+    const fakeDesign = {
+      ...useDesignStore.getState().design,
+      id: 'loaded-id',
+      name: 'Loaded Aircraft',
+    };
+    globalThis.fetch = async () =>
+      ({ ok: true, json: async () => fakeDesign }) as Response;
+
+    await useDesignStore.getState().loadDesign('loaded-id');
+    expect(useDesignStore.getState().componentPrintSettings).toEqual({});
+  });
+
+  it('loadDesign resets meshOffset to [0, 0, 0]', async () => {
+    useDesignStore.getState().setMeshOffset([200, -100, 30]);
+    expect(useDesignStore.getState().meshOffset).toEqual([200, -100, 30]);
+
+    const fakeDesign = {
+      ...useDesignStore.getState().design,
+      id: 'loaded-id',
+      name: 'Loaded Aircraft',
+    };
+    globalThis.fetch = async () =>
+      ({ ok: true, json: async () => fakeDesign }) as Response;
+
+    await useDesignStore.getState().loadDesign('loaded-id');
+    expect(useDesignStore.getState().meshOffset).toEqual([0, 0, 0]);
+  });
+
+  it('loadDesign resets selectedPanel to null', async () => {
+    useDesignStore.getState().setSelectedPanel(1);
+    expect(useDesignStore.getState().selectedPanel).toBe(1);
+
+    const fakeDesign = {
+      ...useDesignStore.getState().design,
+      id: 'loaded-id',
+      name: 'Loaded Aircraft',
+    };
+    globalThis.fetch = async () =>
+      ({ ok: true, json: async () => fakeDesign }) as Response;
+
+    await useDesignStore.getState().loadDesign('loaded-id');
+    expect(useDesignStore.getState().selectedPanel).toBeNull();
+  });
 });

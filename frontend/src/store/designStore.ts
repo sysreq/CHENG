@@ -443,12 +443,18 @@ export const useDesignStore = create<DesignStore>()(
           designId: null,
           designName: 'Untitled Aircraft',
           isDirty: false,
+          isSaving: false,
+          isLoading: false,
+          fileError: null,
           derived: null,
           warnings: [],
           meshData: null,
+          isGenerating: false,
           selectedComponent: null,
           selectedSubElement: null,
           selectedPanel: null,
+          componentPrintSettings: {},
+          meshOffset: [0, 0, 0],
         });
       },
 
@@ -464,11 +470,19 @@ export const useDesignStore = create<DesignStore>()(
             designName: data.name,
             activePreset: detectPreset(data),
             lastChangeSource: 'immediate' as ChangeSource,
+            lastAction: `Loaded design ${data.name}`,
             isDirty: false,
             isLoading: false,
+            fileError: null,
             derived: null,
             warnings: [],
             meshData: null,
+            isGenerating: false,
+            selectedComponent: null,
+            selectedSubElement: null,
+            selectedPanel: null,
+            componentPrintSettings: {},
+            meshOffset: [0, 0, 0],
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Failed to load design';
