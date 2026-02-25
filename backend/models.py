@@ -119,6 +119,11 @@ class AircraftDesign(CamelModel):
     print_infill: float = Field(default=15.0, ge=0, le=100)
     material_density: float = Field(default=1.24, ge=0.5, le=10.0)
 
+    # ── Propulsion / Electronics (for CG calculation) ────────────────
+    motor_weight_g: float = Field(default=60.0, ge=0, le=500)
+    battery_weight_g: float = Field(default=150.0, ge=0, le=2000)
+    battery_position_frac: float = Field(default=0.30, ge=0.0, le=1.0)
+
 
 # ---------------------------------------------------------------------------
 # Derived Values — computed by geometry engine, read-only

@@ -214,18 +214,6 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
 
     taper_ratio = tip_chord_mm / design.wing_chord if design.wing_chord > 0 else 0.0
 
-    # CG position aft of root LE at 25% MAC, accounting for sweep.
-    # For swept/tapered wings the MAC is located aft of the root LE by
-    # y_mac * tan(sweep), where y_mac is the spanwise position of the MAC.
-    # The aerodynamic center (25% MAC) is then:
-    #   CG = 0.25 * MAC + y_mac * tan(sweep_c/4)
-    half_span = design.wing_span / 2.0
-    sweep_rad = math.radians(design.wing_sweep)
-    y_mac = (
-        (half_span / 3.0) * (1.0 + 2.0 * lambda_) / (1.0 + lambda_)
-    ) if (1.0 + lambda_) > 0 else 0.0
-    estimated_cg_mm = 0.25 * mean_aero_chord_mm + y_mac * math.tan(sweep_rad)
-
     min_feature_thickness_mm = 2.0 * design.nozzle_diameter
 
     # Wall thickness reports the user-controllable fuselage wall_thickness (F14).
@@ -233,6 +221,18 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
 
     # Weight estimation (v0.6 #142)
     weights = _compute_weight_estimates(design)
+
+    # Full CG calculator (v0.6 #139) — weighted average of all mass positions.
+    # All X positions are measured from the aircraft nose (X=0).
+    half_span = design.wing_span / 2.0
+    sweep_rad = math.radians(design.wing_sweep)
+    y_mac = (
+        (half_span / 3.0) * (1.0 + 2.0 * lambda_) / (1.0 + lambda_)
+    ) if (1.0 + lambda_) > 0 else 0.0
+
+    estimated_cg_mm = _compute_cg(
+        design, weights, mean_aero_chord_mm, y_mac, sweep_rad,
+    )
 
     return {
         "tip_chord_mm": tip_chord_mm,
@@ -370,6 +370,88 @@ def _compute_weight_estimates(design: AircraftDesign) -> dict[str, float]:
         "weight_fuselage_g": w_fuse,
         "weight_total_g": round(w_wing + w_tail + w_fuse, 1),
     }
+
+
+def _compute_cg(
+    design: AircraftDesign,
+    weights: dict[str, float],
+    mac: float,
+    y_mac: float,
+    sweep_rad: float,
+) -> float:
+    """Compute CG as weighted average of all component X positions.
+
+    All X positions are measured from the aircraft nose (X=0, +X aft).
+
+    Component CG positions:
+    - **Wing**: at wing_mount_x + LE_offset + 25% MAC.
+      LE_offset = y_mac * tan(sweep) accounts for sweep.
+    - **Tail**: at wing_mount_x + tail_arm + 50% tail chord.
+    - **Fuselage**: at 50% fuselage_length (center of mass of tapered body).
+    - **Motor**: at X=0 for tractor, X=fuselage_length for pusher.
+    - **Battery**: at battery_position_frac * fuselage_length.
+
+    Falls back to 25% MAC (aerodynamic center) if total weight is zero.
+    """
+    # Wing mount X position (same logic as assemble_aircraft)
+    wing_x_frac = _WING_X_FRACTION.get(design.fuselage_preset, 0.30)
+    wing_x = design.fuselage_length * wing_x_frac
+
+    # Wing CG: wing mount + sweep offset + 25% MAC
+    wing_le_offset = y_mac * math.tan(sweep_rad)
+    wing_cg_x = wing_x + wing_le_offset + 0.25 * mac
+
+    # Tail CG: wing mount + tail_arm + 50% of tail chord
+    if design.tail_type == "V-Tail":
+        tail_chord = design.v_tail_chord
+    else:
+        # Weighted average of h_stab and v_stab chords
+        h_weight = design.h_stab_span
+        v_weight = design.v_stab_height
+        total = h_weight + v_weight
+        tail_chord = (
+            (design.h_stab_chord * h_weight + design.v_stab_root_chord * v_weight)
+            / max(total, 1.0)
+        )
+    tail_cg_x = wing_x + design.tail_arm + 0.5 * tail_chord
+
+    # Fuselage CG: center of mass (slightly forward of geometric center due
+    # to nose taper being more gradual than tail cone)
+    fuselage_cg_x = 0.45 * design.fuselage_length
+
+    # Motor CG
+    if design.motor_config == "Tractor":
+        motor_cg_x = 0.0  # At nose
+    else:  # Pusher
+        motor_cg_x = design.fuselage_length
+
+    # Battery CG: user-configurable position along fuselage
+    battery_cg_x = design.battery_position_frac * design.fuselage_length
+
+    # Weighted average
+    w_wing = weights["weight_wing_g"]
+    w_tail = weights["weight_tail_g"]
+    w_fuse = weights["weight_fuselage_g"]
+    w_motor = design.motor_weight_g
+    w_battery = design.battery_weight_g
+
+    total_weight = w_wing + w_tail + w_fuse + w_motor + w_battery
+
+    if total_weight <= 0:
+        # Fallback to aerodynamic center (25% MAC)
+        return 0.25 * mac + y_mac * math.tan(sweep_rad)
+
+    cg_x = (
+        wing_cg_x * w_wing
+        + tail_cg_x * w_tail
+        + fuselage_cg_x * w_fuse
+        + motor_cg_x * w_motor
+        + battery_cg_x * w_battery
+    ) / total_weight
+
+    # Return CG relative to wing leading edge (same convention as before:
+    # "distance aft of wing root LE").
+    return cg_x - wing_x
 
 
 # ---------------------------------------------------------------------------

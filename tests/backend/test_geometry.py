@@ -208,11 +208,11 @@ class TestComputeDerivedValues:
         assert result["taper_ratio"] == pytest.approx(0.67)
 
     def test_estimated_cg(self) -> None:
-        """CG estimate = 0.25 * MAC."""
+        """CG should be positive and within chord for a balanced design (v0.6)."""
         design = AircraftDesign(wing_chord=200, wing_tip_root_ratio=1.0)
         result = compute_derived_values(design)
-        expected_cg = 0.25 * 200.0  # MAC = 200 for rectangular
-        assert result["estimated_cg_mm"] == pytest.approx(expected_cg)
+        # v0.6: CG is weighted average of components, not just 25% MAC
+        assert 0 < result["estimated_cg_mm"] < 200.0
 
     def test_min_feature_thickness(self) -> None:
         """Min feature = 2 * nozzle_diameter."""
