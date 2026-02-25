@@ -22,9 +22,8 @@ const PARAM_RANGES: Partial<Record<NumericDesignKey, { min: number; max: number 
   vStabHeight: { min: 30, max: 400 },
   vTailSpan: { min: 80, max: 600 },
   vTailChord: { min: 30, max: 200 },
-  fuselageNoseLength: { min: 20, max: 1000 },
-  fuselageCabinLength: { min: 30, max: 1500 },
-  fuselageTailLength: { min: 20, max: 1000 },
+  noseCabinBreakPct: { min: 10, max: 85 },
+  cabinTailBreakPct: { min: 15, max: 90 },
   wingSweep: { min: -10, max: 45 },
 };
 
@@ -414,9 +413,13 @@ function ConventionalTailDimensions() {
 
 function FuselageDimensions() {
   const fuselageLength = useDesignStore((s) => s.design.fuselageLength);
-  const fuselageNoseLength = useDesignStore((s) => s.design.fuselageNoseLength);
-  const fuselageCabinLength = useDesignStore((s) => s.design.fuselageCabinLength);
-  const fuselageTailLength = useDesignStore((s) => s.design.fuselageTailLength);
+  const noseCabinBreakPct = useDesignStore((s) => s.design.noseCabinBreakPct);
+  const cabinTailBreakPct = useDesignStore((s) => s.design.cabinTailBreakPct);
+
+  // Derive absolute section lengths from percentage breakpoints
+  const noseLength = (noseCabinBreakPct / 100) * fuselageLength;
+  const cabinLength = ((cabinTailBreakPct - noseCabinBreakPct) / 100) * fuselageLength;
+  const tailLength = ((100 - cabinTailBreakPct) / 100) * fuselageLength;
 
   const offsetZ = 30;
 
@@ -435,66 +438,67 @@ function FuselageDimensions() {
         position={[fuselageLength / 2, 0, -offsetZ - 15]}
       />
 
-      {/* Nose section */}
-      <Line points={[[0, 0, offsetZ], [fuselageNoseLength, 0, offsetZ]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
+      {/* Nose section — shown as mm (read-only, derived from noseCabinBreakPct) */}
+      <Line points={[[0, 0, offsetZ], [noseLength, 0, offsetZ]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
       <Line points={[[0, 0, offsetZ - 6], [0, 0, offsetZ + 6]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
-      <Line points={[[fuselageNoseLength, 0, offsetZ - 6], [fuselageNoseLength, 0, offsetZ + 6]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
+      <Line points={[[noseLength, 0, offsetZ - 6], [noseLength, 0, offsetZ + 6]]} color={CONTEXT_LINE_COLOR} lineWidth={1} />
       <EditableLabel
         label="Nose:"
-        value={fuselageNoseLength}
-        unit="mm"
-        paramKey="fuselageNoseLength"
+        value={noseCabinBreakPct}
+        unit="%"
+        paramKey="noseCabinBreakPct"
         contextual
-        position={[fuselageNoseLength / 2, 0, offsetZ + 12]}
+        position={[noseLength / 2, 0, offsetZ + 12]}
       />
 
       {/* Cabin section */}
       <Line
-        points={[[fuselageNoseLength, 0, offsetZ], [fuselageNoseLength + fuselageCabinLength, 0, offsetZ]]}
+        points={[[noseLength, 0, offsetZ], [noseLength + cabinLength, 0, offsetZ]]}
         color={CONTEXT_LINE_COLOR}
         lineWidth={1}
       />
       <Line
         points={[
-          [fuselageNoseLength + fuselageCabinLength, 0, offsetZ - 6],
-          [fuselageNoseLength + fuselageCabinLength, 0, offsetZ + 6],
+          [noseLength + cabinLength, 0, offsetZ - 6],
+          [noseLength + cabinLength, 0, offsetZ + 6],
         ]}
         color={CONTEXT_LINE_COLOR}
         lineWidth={1}
       />
       <EditableLabel
         label="Cabin:"
-        value={fuselageCabinLength}
+        value={Math.round(cabinLength)}
         unit="mm"
-        paramKey="fuselageCabinLength"
+        paramKey="noseCabinBreakPct"
         contextual
-        position={[fuselageNoseLength + fuselageCabinLength / 2, 0, offsetZ + 12]}
+        readOnly
+        position={[noseLength + cabinLength / 2, 0, offsetZ + 12]}
       />
 
       {/* Tail section */}
       <Line
         points={[
-          [fuselageNoseLength + fuselageCabinLength, 0, offsetZ],
-          [fuselageNoseLength + fuselageCabinLength + fuselageTailLength, 0, offsetZ],
+          [noseLength + cabinLength, 0, offsetZ],
+          [noseLength + cabinLength + tailLength, 0, offsetZ],
         ]}
         color={CONTEXT_LINE_COLOR}
         lineWidth={1}
       />
       <Line
         points={[
-          [fuselageNoseLength + fuselageCabinLength + fuselageTailLength, 0, offsetZ - 6],
-          [fuselageNoseLength + fuselageCabinLength + fuselageTailLength, 0, offsetZ + 6],
+          [noseLength + cabinLength + tailLength, 0, offsetZ - 6],
+          [noseLength + cabinLength + tailLength, 0, offsetZ + 6],
         ]}
         color={CONTEXT_LINE_COLOR}
         lineWidth={1}
       />
       <EditableLabel
         label="Tail:"
-        value={fuselageTailLength}
-        unit="mm"
-        paramKey="fuselageTailLength"
+        value={cabinTailBreakPct}
+        unit="%"
+        paramKey="cabinTailBreakPct"
         contextual
-        position={[fuselageNoseLength + fuselageCabinLength + fuselageTailLength / 2, 0, offsetZ + 12]}
+        position={[noseLength + cabinLength + tailLength / 2, 0, offsetZ + 12]}
       />
     </>
   );

@@ -17,7 +17,7 @@ const ALL_PARAM_KEYS: (keyof AircraftDesign)[] = [
   'hStabSpan', 'hStabChord', 'hStabIncidence', 'vStabHeight', 'vStabRootChord',
   'vTailDihedral', 'vTailSpan', 'vTailChord', 'vTailIncidence', 'vTailSweep',
   'tailArm',
-  'fuselageNoseLength', 'fuselageCabinLength', 'fuselageTailLength',
+  'noseCabinBreakPct', 'cabinTailBreakPct',
   'wallThickness',
   'printBedX', 'printBedY', 'printBedZ', 'autoSection', 'sectionOverlap',
   'jointType', 'jointTolerance', 'nozzleDiameter', 'hollowParts', 'teMinThickness',
@@ -103,10 +103,14 @@ describe('presets', () => {
     expect(d.fuselageLength).toBe(1000);
   });
 
-  it('Glider fuselage sections sum to fuselage length', () => {
+  it('Glider fuselage section break points are in range', () => {
     const d = createDesignFromPreset('Glider');
-    expect(d.fuselageNoseLength + d.fuselageCabinLength + d.fuselageTailLength)
-      .toBe(d.fuselageLength);
+    expect(d.noseCabinBreakPct).toBeGreaterThanOrEqual(10);
+    expect(d.cabinTailBreakPct).toBeLessThanOrEqual(90);
+    expect(d.noseCabinBreakPct).toBeLessThan(d.cabinTailBreakPct);
+    // Derived: nose=20%, cabin=30%, tail=50% of 1000mm
+    expect(d.noseCabinBreakPct).toBe(20);
+    expect(d.cabinTailBreakPct).toBe(50);
   });
 
   // ── Flying Wing preset (#130) ────────────────────────────────────────
@@ -131,10 +135,14 @@ describe('presets', () => {
     expect(d.tailArm).toBeLessThanOrEqual(100);
   });
 
-  it('Flying Wing fuselage sections sum to fuselage length', () => {
+  it('Flying Wing fuselage section break points are in range', () => {
     const d = createDesignFromPreset('FlyingWing');
-    expect(d.fuselageNoseLength + d.fuselageCabinLength + d.fuselageTailLength)
-      .toBe(d.fuselageLength);
+    expect(d.noseCabinBreakPct).toBeGreaterThanOrEqual(10);
+    expect(d.cabinTailBreakPct).toBeLessThanOrEqual(90);
+    expect(d.noseCabinBreakPct).toBeLessThan(d.cabinTailBreakPct);
+    // Derived: nose=30%, cabin=50%, tail=20% of 200mm
+    expect(d.noseCabinBreakPct).toBe(30);
+    expect(d.cabinTailBreakPct).toBe(80);
   });
 
   // ── Scale preset (#131) ──────────────────────────────────────────────
@@ -161,10 +169,14 @@ describe('presets', () => {
     expect(ar).toBeLessThan(9);
   });
 
-  it('Scale fuselage sections sum to fuselage length', () => {
+  it('Scale fuselage section break points are in range', () => {
     const d = createDesignFromPreset('Scale');
-    expect(d.fuselageNoseLength + d.fuselageCabinLength + d.fuselageTailLength)
-      .toBe(d.fuselageLength);
+    expect(d.noseCabinBreakPct).toBeGreaterThanOrEqual(10);
+    expect(d.cabinTailBreakPct).toBeLessThanOrEqual(90);
+    expect(d.noseCabinBreakPct).toBeLessThan(d.cabinTailBreakPct);
+    // Derived: nose=25%, cabin=40%, tail=35% of 1100mm
+    expect(d.noseCabinBreakPct).toBe(25);
+    expect(d.cabinTailBreakPct).toBe(65);
   });
 
   // ── Multi-section wing presets (#143) ───────────────────────────────
@@ -223,13 +235,18 @@ describe('presets', () => {
     expect(a.id).not.toBe(b.id);
   });
 
-  it('fuselage sections sum to fuselage length for all presets', () => {
+  it('all presets have noseCabinBreakPct strictly less than cabinTailBreakPct', () => {
     for (const name of ALL_PRESET_NAMES) {
       const d = createDesignFromPreset(name);
       expect(
-        d.fuselageNoseLength + d.fuselageCabinLength + d.fuselageTailLength,
-        `${name} fuselage sections should sum to fuselageLength`,
-      ).toBe(d.fuselageLength);
+        d.noseCabinBreakPct,
+        `${name} noseCabinBreakPct should be < cabinTailBreakPct`,
+      ).toBeLessThan(d.cabinTailBreakPct);
+      // Ensure the gap is at least 5%
+      expect(
+        d.cabinTailBreakPct - d.noseCabinBreakPct,
+        `${name} section gap should be >= 5%`,
+      ).toBeGreaterThanOrEqual(5);
     }
   });
 });

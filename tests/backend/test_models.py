@@ -94,11 +94,31 @@ class TestAircraftDesign:
         assert d.wing_incidence == 2.0
         assert d.wing_twist == 0.0
         assert d.v_tail_sweep == 0.0
-        assert d.fuselage_nose_length == 75
-        assert d.fuselage_cabin_length == 150
-        assert d.fuselage_tail_length == 75
         assert d.wall_thickness == 1.5
         assert d.support_strategy == "minimal"
+
+    def test_fuselage_section_pct_defaults(self) -> None:
+        """Fuselage section transition-point defaults: 25% nose/cabin, 75% cabin/tail."""
+        d = AircraftDesign()
+        assert d.nose_cabin_break_pct == 25.0
+        assert d.cabin_tail_break_pct == 75.0
+
+    def test_fuselage_section_pct_range(self) -> None:
+        """nose_cabin_break_pct and cabin_tail_break_pct enforce Pydantic ge/le bounds."""
+        with pytest.raises(ValidationError):
+            AircraftDesign(nose_cabin_break_pct=5.0)   # below ge=10
+        with pytest.raises(ValidationError):
+            AircraftDesign(nose_cabin_break_pct=90.0)  # above le=85
+        with pytest.raises(ValidationError):
+            AircraftDesign(cabin_tail_break_pct=10.0)  # below ge=15
+        with pytest.raises(ValidationError):
+            AircraftDesign(cabin_tail_break_pct=95.0)  # above le=90
+
+    def test_fuselage_section_pct_custom(self) -> None:
+        """Custom percentage values should be stored correctly."""
+        d = AircraftDesign(nose_cabin_break_pct=20.0, cabin_tail_break_pct=60.0)
+        assert d.nose_cabin_break_pct == 20.0
+        assert d.cabin_tail_break_pct == 60.0
 
     def test_wing_incidence_range(self) -> None:
         """Wing incidence outside -5 to 15 should fail."""
@@ -128,16 +148,24 @@ class TestAircraftDesign:
         with pytest.raises(ValidationError):
             AircraftDesign(wall_thickness=5.0)
 
-    def test_fuselage_section_lengths_custom(self) -> None:
-        """Custom section lengths should be accepted."""
+    def test_fuselage_section_lengths_derived(self) -> None:
+        """Section lengths are derived from percentage breakpoints and fuselage_length."""
         d = AircraftDesign(
-            fuselage_nose_length=60,
-            fuselage_cabin_length=180,
-            fuselage_tail_length=60,
+            fuselage_length=400,
+            nose_cabin_break_pct=20.0,
+            cabin_tail_break_pct=60.0,
         )
-        assert d.fuselage_nose_length == 60
-        assert d.fuselage_cabin_length == 180
-        assert d.fuselage_tail_length == 60
+        # nose = 20% of 400 = 80mm
+        # cabin = (60-20)% of 400 = 160mm
+        # tail = (100-60)% of 400 = 160mm
+        nose_len = d.nose_cabin_break_pct / 100.0 * d.fuselage_length
+        cabin_len = (d.cabin_tail_break_pct - d.nose_cabin_break_pct) / 100.0 * d.fuselage_length
+        tail_len = (100.0 - d.cabin_tail_break_pct) / 100.0 * d.fuselage_length
+        assert abs(nose_len - 80.0) < 1e-9
+        assert abs(cabin_len - 160.0) < 1e-9
+        assert abs(tail_len - 160.0) < 1e-9
+        # Sections always sum to fuselage_length
+        assert abs(nose_len + cabin_len + tail_len - d.fuselage_length) < 1e-9
 
     def test_serialization_round_trip(self) -> None:
         """Serialize to dict and back should produce identical model."""

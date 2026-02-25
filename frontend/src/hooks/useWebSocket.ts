@@ -278,10 +278,9 @@ function serializeDesign(design: AircraftDesign): Record<string, unknown> {
     // Shared tail
     tail_arm: design.tailArm,
 
-    // Fuselage section lengths
-    fuselage_nose_length: design.fuselageNoseLength,
-    fuselage_cabin_length: design.fuselageCabinLength,
-    fuselage_tail_length: design.fuselageTailLength,
+    // Fuselage section transition points (F11/F12) — #244
+    nose_cabin_break_pct: design.noseCabinBreakPct,
+    cabin_tail_break_pct: design.cabinTailBreakPct,
 
     // Fuselage wall thickness
     wall_thickness: design.wallThickness,

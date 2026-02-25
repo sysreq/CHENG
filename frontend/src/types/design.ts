@@ -174,13 +174,11 @@ export interface AircraftDesign {
   /** Wing AC to tail AC distance. @unit mm @min 80 @max 1500 @default 180 */
   tailArm: number;
 
-  // ── Fuselage Section Lengths ──────────────────────────────────────
-  /** Fuselage nose section length. @unit mm @min 20 @max 1000 @default 75 */
-  fuselageNoseLength: number;
-  /** Fuselage cabin section length. @unit mm @min 30 @max 1500 @default 150 */
-  fuselageCabinLength: number;
-  /** Fuselage tail section length. @unit mm @min 20 @max 1000 @default 75 */
-  fuselageTailLength: number;
+  // ── Fuselage Section Transition Points (F11/F12) ──────────────────
+  /** Where nose ends / cabin begins, as % of fuselage length. @unit % @min 10 @max 85 @default 25 */
+  noseCabinBreakPct: number;
+  /** Where cabin ends / tail begins, as % of fuselage length. @unit % @min 15 @max 90 @default 75 */
+  cabinTailBreakPct: number;
 
   // ── Fuselage Wall Thickness ───────────────────────────────────────
   /** Fuselage wall thickness. @unit mm @min 0.8 @max 4.0 @default 1.5 */

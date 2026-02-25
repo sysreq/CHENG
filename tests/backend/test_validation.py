@@ -282,38 +282,40 @@ class TestV23:
 
 
 # ---------------------------------------------------------------------------
-# V07: fuselage section lengths sum deviates from fuselage_length
+# V07: nose_cabin_break_pct must be < cabin_tail_break_pct (gap >= 5%)
 # ---------------------------------------------------------------------------
 
 
 class TestV07:
-    def test_triggers_on_large_deviation(self) -> None:
-        """Section lengths summing to 200 vs fuselage_length=300 is >5% deviation."""
+    def test_triggers_when_gap_too_small(self) -> None:
+        """noseCabinBreakPct = 60, cabinTailBreakPct = 63 → gap = 3% → V07."""
         design = AircraftDesign(
-            fuselage_length=300,
-            fuselage_nose_length=50,
-            fuselage_cabin_length=100,
-            fuselage_tail_length=50,  # sum = 200, deviation = 33%
+            nose_cabin_break_pct=60.0,
+            cabin_tail_break_pct=63.0,  # gap = 3% < 5%
         )
         assert "V07" in _warning_ids(design)
 
-    def test_does_not_trigger_on_matching_sum(self) -> None:
-        """Section lengths summing exactly to fuselage_length should not trigger."""
+    def test_triggers_at_zero_gap(self) -> None:
+        """noseCabinBreakPct = cabin_tail_break_pct → gap = 0% → V07."""
         design = AircraftDesign(
-            fuselage_length=300,
-            fuselage_nose_length=75,
-            fuselage_cabin_length=150,
-            fuselage_tail_length=75,  # sum = 300
+            nose_cabin_break_pct=50.0,
+            cabin_tail_break_pct=50.0,  # gap = 0%
+        )
+        assert "V07" in _warning_ids(design)
+
+    def test_does_not_trigger_with_valid_gap(self) -> None:
+        """Default values (25%/75%) give gap=50% → no V07."""
+        design = AircraftDesign(
+            nose_cabin_break_pct=25.0,
+            cabin_tail_break_pct=75.0,
         )
         assert "V07" not in _warning_ids(design)
 
-    def test_does_not_trigger_on_small_deviation(self) -> None:
-        """5% or less deviation should not trigger."""
+    def test_does_not_trigger_at_minimum_gap(self) -> None:
+        """Gap exactly 5% should not trigger V07."""
         design = AircraftDesign(
-            fuselage_length=300,
-            fuselage_nose_length=75,
-            fuselage_cabin_length=150,
-            fuselage_tail_length=80,  # sum = 305, deviation = 1.67%
+            nose_cabin_break_pct=30.0,
+            cabin_tail_break_pct=35.0,  # gap = 5%
         )
         assert "V07" not in _warning_ids(design)
 
