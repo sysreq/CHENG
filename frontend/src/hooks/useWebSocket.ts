@@ -231,9 +231,12 @@ export function useWebSocket(): {
  */
 function serializeDesign(design: AircraftDesign): Record<string, unknown> {
   return {
+    // Meta
     version: design.version,
     id: design.id,
     name: design.name,
+
+    // Global / Fuselage
     fuselage_preset: design.fuselagePreset,
     engine_count: design.engineCount,
     motor_config: design.motorConfig,
@@ -242,21 +245,86 @@ function serializeDesign(design: AircraftDesign): Record<string, unknown> {
     wing_mount_type: design.wingMountType,
     fuselage_length: design.fuselageLength,
     tail_type: design.tailType,
+
+    // Wing
     wing_airfoil: design.wingAirfoil,
     wing_sweep: design.wingSweep,
     wing_tip_root_ratio: design.wingTipRootRatio,
     wing_dihedral: design.wingDihedral,
     wing_skin_thickness: design.wingSkinThickness,
+    wing_incidence: design.wingIncidence,
+    wing_twist: design.wingTwist,
+
+    // Multi-section wing (#143)
+    wing_sections: design.wingSections,
+    panel_break_positions: design.panelBreakPositions,
+    panel_dihedrals: design.panelDihedrals,
+    panel_sweeps: design.panelSweeps,
+
+    // Tail (Conventional / T-Tail / Cruciform)
     h_stab_span: design.hStabSpan,
     h_stab_chord: design.hStabChord,
     h_stab_incidence: design.hStabIncidence,
     v_stab_height: design.vStabHeight,
     v_stab_root_chord: design.vStabRootChord,
+
+    // Tail (V-Tail)
     v_tail_dihedral: design.vTailDihedral,
     v_tail_span: design.vTailSpan,
     v_tail_chord: design.vTailChord,
     v_tail_incidence: design.vTailIncidence,
+    v_tail_sweep: design.vTailSweep,
+
+    // Shared tail
     tail_arm: design.tailArm,
+
+    // Fuselage section lengths
+    fuselage_nose_length: design.fuselageNoseLength,
+    fuselage_cabin_length: design.fuselageCabinLength,
+    fuselage_tail_length: design.fuselageTailLength,
+
+    // Fuselage wall thickness
+    wall_thickness: design.wallThickness,
+
+    // Control surfaces — Ailerons (#144)
+    aileron_enable: design.aileronEnable,
+    aileron_span_start: design.aileronSpanStart,
+    aileron_span_end: design.aileronSpanEnd,
+    aileron_chord_percent: design.aileronChordPercent,
+
+    // Control surfaces — Elevator
+    elevator_enable: design.elevatorEnable,
+    elevator_span_percent: design.elevatorSpanPercent,
+    elevator_chord_percent: design.elevatorChordPercent,
+
+    // Control surfaces — Rudder
+    rudder_enable: design.rudderEnable,
+    rudder_height_percent: design.rudderHeightPercent,
+    rudder_chord_percent: design.rudderChordPercent,
+
+    // Control surfaces — Ruddervators
+    ruddervator_enable: design.ruddervatorEnable,
+    ruddervator_chord_percent: design.ruddervatorChordPercent,
+    ruddervator_span_percent: design.ruddervatorSpanPercent,
+
+    // Control surfaces — Elevons
+    elevon_enable: design.elevonEnable,
+    elevon_span_start: design.elevonSpanStart,
+    elevon_span_end: design.elevonSpanEnd,
+    elevon_chord_percent: design.elevonChordPercent,
+
+    // Landing gear (#145)
+    landing_gear_type: design.landingGearType,
+    main_gear_position: design.mainGearPosition,
+    main_gear_height: design.mainGearHeight,
+    main_gear_track: design.mainGearTrack,
+    main_wheel_diameter: design.mainWheelDiameter,
+    nose_gear_height: design.noseGearHeight,
+    nose_wheel_diameter: design.noseWheelDiameter,
+    tail_wheel_diameter: design.tailWheelDiameter,
+    tail_gear_position: design.tailGearPosition,
+
+    // Export / Print
     print_bed_x: design.printBedX,
     print_bed_y: design.printBedY,
     print_bed_z: design.printBedZ,
@@ -267,5 +335,6 @@ function serializeDesign(design: AircraftDesign): Record<string, unknown> {
     nozzle_diameter: design.nozzleDiameter,
     hollow_parts: design.hollowParts,
     te_min_thickness: design.teMinThickness,
+    support_strategy: design.supportStrategy,
   };
 }
