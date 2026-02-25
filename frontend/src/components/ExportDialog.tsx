@@ -786,7 +786,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
       const msg = err instanceof Error ? err.message : 'Preview failed';
       setExportError(msg);
     } finally {
-      if (mountedRef.current) setIsPreviewing(false);
+      if (mountedRef.current && !controller.signal.aborted) setIsPreviewing(false);
     }
   }, [design, selectedFormat]);
 
@@ -844,7 +844,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
       const msg = err instanceof Error ? err.message : 'Export failed';
       setExportError(msg);
     } finally {
-      if (mountedRef.current) setIsExporting(false);
+      if (mountedRef.current && !controller.signal.aborted) setIsExporting(false);
     }
   }, [design, selectedFormat]);
 
@@ -901,7 +901,7 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
       const msg = err instanceof Error ? err.message : 'Test joint export failed';
       setTestJointError(msg);
     } finally {
-      if (mountedRef.current) setIsExportingTestJoint(false);
+      if (mountedRef.current && !controller.signal.aborted) setIsExportingTestJoint(false);
     }
   }, [design.jointType, design.jointTolerance, design.sectionOverlap, design.nozzleDiameter]);
 
