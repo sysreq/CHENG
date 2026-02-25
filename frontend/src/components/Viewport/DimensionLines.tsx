@@ -223,32 +223,49 @@ export default function DimensionLines() {
 }
 
 // ---------------------------------------------------------------------------
+// Wing X fraction by fuselage preset — mirrors backend _WING_X_FRACTION
+// ---------------------------------------------------------------------------
+
+const WING_X_FRACTION: Record<string, number> = {
+  Conventional: 0.30,
+  Pod: 0.25,
+  'Blended-Wing-Body': 0.35,
+};
+
+// ---------------------------------------------------------------------------
 // Global Dimensions (no selection)
 // ---------------------------------------------------------------------------
 
 function GlobalDimensions() {
   const wingSpan = useDesignStore((s) => s.design.wingSpan);
   const fuselageLength = useDesignStore((s) => s.design.fuselageLength);
+  const fuselagePreset = useDesignStore((s) => s.design.fuselagePreset);
   const wingSweep = useDesignStore((s) => s.design.wingSweep);
 
   const halfSpan = wingSpan / 2;
-  const spanY = halfSpan + 40;
+  // Wingspan line is drawn at the wing mount X position, not the nose.
+  // Mirrors backend _WING_X_FRACTION used in engine.py / validation.py.
+  const wingXFrac = WING_X_FRACTION[fuselagePreset] ?? 0.30;
+  const wingX = fuselageLength * wingXFrac;
+  // Fuselage length annotation runs close to the centreline with a small
+  // fixed offset, regardless of wingspan.
+  const spanY = 40;
 
   return (
     <>
-      {/* Wingspan line */}
-      <Line points={[[0, -halfSpan, 0], [0, halfSpan, 0]]} color={LINE_COLOR} lineWidth={1} />
-      <Line points={[[0, -halfSpan, -10], [0, -halfSpan, 10]]} color={LINE_COLOR} lineWidth={1} />
-      <Line points={[[0, halfSpan, -10], [0, halfSpan, 10]]} color={LINE_COLOR} lineWidth={1} />
+      {/* Wingspan line — drawn at wing mount X position */}
+      <Line points={[[wingX, -halfSpan, 0], [wingX, halfSpan, 0]]} color={LINE_COLOR} lineWidth={1} />
+      <Line points={[[wingX, -halfSpan, -10], [wingX, -halfSpan, 10]]} color={LINE_COLOR} lineWidth={1} />
+      <Line points={[[wingX, halfSpan, -10], [wingX, halfSpan, 10]]} color={LINE_COLOR} lineWidth={1} />
       <EditableLabel
         label=""
         value={wingSpan}
         unit="mm"
         paramKey="wingSpan"
-        position={[0, 0, 15]}
+        position={[wingX, 0, 15]}
       />
 
-      {/* Fuselage length line */}
+      {/* Fuselage length line — 40mm off centreline, parallel to fuselage axis */}
       <Line points={[[0, spanY, 0], [fuselageLength, spanY, 0]]} color={LINE_COLOR} lineWidth={1} />
       <Line points={[[0, spanY - 10, 0], [0, spanY + 10, 0]]} color={LINE_COLOR} lineWidth={1} />
       <Line points={[[fuselageLength, spanY - 10, 0], [fuselageLength, spanY + 10, 0]]} color={LINE_COLOR} lineWidth={1} />
