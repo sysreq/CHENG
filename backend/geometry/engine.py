@@ -78,6 +78,7 @@ def assemble_aircraft(design: AircraftDesign) -> dict[str, cq.Workplane]:
     from backend.geometry.fuselage import build_fuselage
     from backend.geometry.wing import build_wing
     from backend.geometry.tail import build_tail
+    from backend.geometry.landing_gear import build_landing_gear
 
     components: dict[str, cq.Workplane] = {}
 
@@ -125,6 +126,11 @@ def assemble_aircraft(design: AircraftDesign) -> dict[str, cq.Workplane]:
             components[name] = solid.translate((tail_x, 0, 0))
         except Exception:
             components[name] = solid
+
+    # 4. Landing gear
+    gear_components = build_landing_gear(design)
+    for name, solid in gear_components.items():
+        components[name] = solid
 
     return components
 

@@ -160,6 +160,7 @@ async def export_design(request: ExportRequest) -> FileResponse:
     """
     design = request.design
     export_format = request.format
+    export_test_joint = getattr(request, "export_test_joint", False)
 
     # Ensure tmp dir exists (may not exist outside Docker)
     EXPORT_TMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -167,7 +168,7 @@ async def export_design(request: ExportRequest) -> FileResponse:
     try:
         # Run the blocking export pipeline in a thread with the CadQuery limiter
         zip_path = await anyio.to_thread.run_sync(
-            lambda: _export_blocking(design, export_format),
+            lambda: _export_blocking(design, export_format, export_test_joint),
             limiter=_cadquery_limiter,
             abandon_on_cancel=True,
         )
@@ -253,11 +254,14 @@ def _preview_blocking(design: AircraftDesign) -> list[ExportPreviewPart]:
     return all_parts
 
 
-def _export_blocking(design: AircraftDesign, export_format: str = "stl") -> Path:
+def _export_blocking(design: AircraftDesign, export_format: str = "stl", export_test_joint: bool = False) -> Path:
     """Synchronous export pipeline -- runs in thread pool.
 
     Routes to the appropriate export handler based on format.
     """
+    if export_test_joint:
+        return _export_test_joint_blocking(design)
+
     components = _get_or_assemble(design)
 
     if export_format == "step":
@@ -268,6 +272,67 @@ def _export_blocking(design: AircraftDesign, export_format: str = "stl") -> Path
         return build_svg_zip(components, design)
     else:
         return _export_stl_blocking(design)
+
+
+def _export_test_joint_blocking(design: AircraftDesign) -> Path:
+    """Export a simple 20x20x10 block split in half with a tongue-and-groove joint."""
+    import cadquery as cq
+
+    # 1. Create a 20x20x10 block and split it along Y axis (lengthwise)
+    # The left block will be Y < 0, right block will be Y > 0
+    # Left block (Y from -10 to 0)
+    left_solid = (
+        cq.Workplane("XY")
+        .transformed(offset=(0, -5, 5))
+        .box(20, 10, 10)
+    )
+    # Right block (Y from 0 to 10)
+    right_solid = (
+        cq.Workplane("XY")
+        .transformed(offset=(0, 5, 5))
+        .box(20, 10, 10)
+    )
+
+    # 2. Add tongue and groove joint
+    left_solid, right_solid = add_tongue_and_groove(
+        left_solid,
+        right_solid,
+        overlap=design.section_overlap,
+        tolerance=design.joint_tolerance,
+        nozzle_diameter=design.nozzle_diameter,
+        split_axis="Y",
+    )
+
+    # 3. Create SectionParts
+    sp1 = SectionPart(
+        solid=left_solid,
+        filename="test_joint_left.stl",
+        component="test_joint",
+        side="left",
+        section_num=1,
+        total_sections=2,
+        dimensions_mm=(20, 10, 10),
+        print_orientation="flat",
+        assembly_order=1,
+        split_axis="Y",
+    )
+    sp2 = SectionPart(
+        solid=right_solid,
+        filename="test_joint_right.stl",
+        component="test_joint",
+        side="right",
+        section_num=2,
+        total_sections=2,
+        dimensions_mm=(20, 10, 10),
+        print_orientation="flat",
+        assembly_order=2,
+        split_axis="Y",
+    )
+    sp1.recompute_dimensions()
+    sp2.recompute_dimensions()
+
+    # 4. ZIP and return
+    return build_zip([sp1, sp2], design)
 
 
 def _export_stl_blocking(design: AircraftDesign) -> Path:

@@ -32,6 +32,7 @@ WingAirfoil = Literal[
 ]
 JointType = Literal["Tongue-and-Groove", "Dowel-Pin", "Flat-with-Alignment-Pins"]
 SupportStrategy = Literal["none", "minimal", "full"]
+LandingGearType = Literal["None", "Tricycle", "Taildragger", "Skid"]
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +76,10 @@ class AircraftDesign(CamelModel):
     wing_sweep: float = Field(default=0, ge=-10, le=45)
     wing_tip_root_ratio: float = Field(default=1.0, ge=0.3, le=1.0)
     wing_dihedral: float = Field(default=3, ge=-10, le=15)
+    wing_sections: int = Field(default=1, ge=1, le=4)
+    panel_break_positions: list[float] = Field(default_factory=list)
+    panel_dihedrals: list[float] = Field(default_factory=list)
+    panel_sweeps: list[float] = Field(default_factory=list)
     wing_skin_thickness: float = Field(default=1.2, ge=0.8, le=3.0)
     wing_incidence: float = Field(default=2.0, ge=-5, le=15)
     wing_twist: float = Field(default=0.0, ge=-5, le=5)
@@ -95,6 +100,29 @@ class AircraftDesign(CamelModel):
 
     # ── Shared Tail ───────────────────────────────────────────────────
     tail_arm: float = Field(default=180, ge=80, le=1500)
+
+    # ── Landing Gear ──────────────────────────────────────────────────
+    landing_gear_type: LandingGearType = "None"
+    main_gear_position: float = Field(default=35, ge=25, le=55)
+    main_gear_height: float = Field(default=40, ge=15, le=150)
+    main_gear_track: float = Field(default=120, ge=30, le=400)
+    main_wheel_diameter: float = Field(default=30, ge=10, le=80)
+    nose_gear_height: float = Field(default=45, ge=15, le=150)
+    nose_wheel_diameter: float = Field(default=20, ge=8, le=60)
+    tail_wheel_diameter: float = Field(default=12, ge=5, le=40)
+    tail_gear_position: float = Field(default=92, ge=85, le=98)
+
+    # ── Control Surfaces ──────────────────────────────────────────────
+    aileron_enable: bool = True
+    aileron_span_start: float = Field(default=55, ge=30, le=70)
+    aileron_span_end: float = Field(default=95, ge=70, le=98)
+    aileron_chord_percent: float = Field(default=25, ge=15, le=40)
+    elevator_enable: bool = True
+    elevator_span_percent: float = Field(default=100, ge=50, le=100)
+    elevator_chord_percent: float = Field(default=35, ge=20, le=50)
+    rudder_enable: bool = True
+    rudder_height_percent: float = Field(default=90, ge=50, le=100)
+    rudder_chord_percent: float = Field(default=35, ge=20, le=50)
 
     # ── Fuselage Section Lengths ──────────────────────────────────────
     fuselage_nose_length: float = Field(default=75, ge=20, le=1000)
@@ -157,6 +185,7 @@ class ExportRequest(CamelModel):
 
     design: AircraftDesign
     format: Literal["stl", "step", "dxf", "svg"] = "stl"
+    export_test_joint: bool = False
 
 
 class GenerationResult(CamelModel):

@@ -23,12 +23,14 @@ Containerized web app for designing 3D-printable RC aircraft. Users adjust param
 - Export writes temp ZIP to `/data/tmp/`, streams to client, then deletes
 - Frontend state in Zustand store with Zundo undo/redo
 
-## MVP Scope
-- 33 user-configurable params + 8 derived/read-only values
+## Current Scope
+- 39 user-configurable params + 8 derived/read-only values
 - 3 presets: Trainer (1200mm), Sport (1000mm), Aerobatic (900mm)
-- STL export only (STEP/DXF deferred to 1.0)
+- Export: STL (sectioned), STEP, DXF, SVG
 - Auto-sectioning with tongue-and-groove joints
-- 6 structural warnings (V01-V06) + 7 print warnings (V16-V23), all non-blocking
+- 8 structural warnings (V01-V08) + 7 print warnings (V16-V23), all non-blocking
+- Bidirectional parameter editing (chord/aspect ratio)
+- Per-component print settings (wing, tail, fuselage)
 
 ## Implementation Status
 - **Phase 0 (Scaffold):** Complete — project structure, models, types, stores, presets
@@ -36,6 +38,8 @@ Containerized web app for designing 3D-printable RC aircraft. Users adjust param
 - **Phase 2 (Integration):** Complete — WebSocket, generate, export routes wired. 166 tests passing.
 - **Phase 3 (Polish):** Complete — issues #39-#82 fixed. 228 backend + 42 frontend + 7 E2E tests.
 - **Phase 4 (Bugfix):** Complete — issues #83-#115 fixed. Backend/geometry fixes, frontend UX polish, responsive layout.
+- **v0.2 (Export Formats):** Complete — STEP/DXF/SVG export, export preview, aero-audit fixes. 271 tests.
+- **v0.3 (Advanced Params):** Complete — 6 params promoted, fuselage panel, bidirectional editing, per-component print settings, 8 UX fixes. 283+53+7 tests.
 - **App is fully functional:** Geometry, preview, export, validation, Docker all working
 
 ## Dev Scripts
@@ -58,7 +62,7 @@ Containerized web app for designing 3D-printable RC aircraft. Users adjust param
 - Python: snake_case, Pydantic models, type hints
 - TypeScript: strict mode, camelCase
 - **API naming:** `CamelModel` base class (Pydantic `alias_generator=to_camel`). Use `model_dump(by_alias=True)` for frontend. Backend storage stays snake_case.
-- **Validation:** Canonical module is `backend/validation.py` (V01-V06 structural, V16-V23 print). Never duplicate in engine.py.
+- **Validation:** Canonical module is `backend/validation.py` (V01-V08 structural, V16-V23 print). Never duplicate in engine.py.
 - Parameter IDs use subsystem prefixes: G (Global), W (Wing), T (Tail), F (Fuselage), P (Propulsion), PR (Print/Export), D (Derived)
 - Pydantic model uses flat structure with snake_case field names matching parameter names
 

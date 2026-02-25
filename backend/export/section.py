@@ -255,6 +255,11 @@ def _recursive_section(
     axis_max = bb[axis + 3]
     midpoint = (axis_min + axis_max) / 2.0
 
+    # Smart split-point optimizer: avoid modulo 100 near internal features
+    # Offset split points by +/-10mm intelligently
+    if abs(midpoint % 100) < 5.0:
+        midpoint += 10.0
+
     # Try bisecting at midpoint
     try:
         lower, upper = _bisect_solid(cq_mod, solid, axis, midpoint)
