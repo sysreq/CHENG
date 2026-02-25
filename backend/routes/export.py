@@ -99,11 +99,14 @@ def _generate_sections(design: AircraftDesign) -> list[SectionPart]:
             comp_category = comp_name.replace("_left", "").replace("_right", "")
 
         # Use auto_section_with_axis to get split axis info (#163)
+        # Pass design + component for smart split-point optimization (#147)
         pieces_with_axis = auto_section_with_axis(
             solid,
             bed_x=design.print_bed_x,
             bed_y=design.print_bed_y,
             bed_z=design.print_bed_z,
+            design=design,
+            component=comp_category,
         )
         pieces = [p[0] for p in pieces_with_axis]
         split_axes = [p[1] for p in pieces_with_axis]
@@ -220,6 +223,21 @@ async def export_preview(request: ExportRequest) -> ExportPreviewResponse:
 
 
 # ---------------------------------------------------------------------------
+# Issue #147: Smart split reason helper
+# ---------------------------------------------------------------------------
+
+
+def _smart_split_reason(component: str) -> str:
+    """Return a human-readable reason string for an adjusted cut position."""
+    comp = component.lower()
+    if "wing" in comp and "stab" not in comp:
+        return "Avoided wing root / tip zone"
+    if comp == "fuselage":
+        return "Avoided wing-mount saddle"
+    return "Avoided internal feature"
+
+
+# ---------------------------------------------------------------------------
 # Blocking pipelines (run in thread pool)
 # ---------------------------------------------------------------------------
 
@@ -236,6 +254,11 @@ def _preview_blocking(design: AircraftDesign) -> list[ExportPreviewPart]:
             design.print_bed_y,
             design.print_bed_z,
         )
+        # Build human-readable adjust reason for Issue #147
+        adjust_reason = ""
+        if sp.avoidance_zone_hit:
+            adjust_reason = _smart_split_reason(sp.component)
+
         all_parts.append(
             ExportPreviewPart(
                 filename=sp.filename,
@@ -247,6 +270,10 @@ def _preview_blocking(design: AircraftDesign) -> list[ExportPreviewPart]:
                 print_orientation=sp.print_orientation,
                 assembly_order=sp.assembly_order,
                 fits_bed=fits,
+                # Issue #147: smart split metadata
+                cut_position_mm=sp.split_position_mm if sp.total_sections > 1 else None,
+                cut_adjusted=sp.avoidance_zone_hit,
+                cut_adjust_reason=adjust_reason,
             )
         )
 

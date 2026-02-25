@@ -189,6 +189,10 @@ class ExportPreviewPart(CamelModel):
     print_orientation: str
     assembly_order: int
     fits_bed: bool
+    # ── Issue #147: Smart split metadata (optional — only present for multi-section parts) ──
+    cut_position_mm: float | None = None    # actual cut coordinate along split axis
+    cut_adjusted: bool = False              # True if optimizer moved from midpoint
+    cut_adjust_reason: str = ""             # e.g. "Avoided wing root zone"
 
 
 class ExportPreviewResponse(CamelModel):

@@ -300,6 +300,14 @@ export interface ExportPreviewPart {
   printOrientation: string;
   assemblyOrder: number;
   fitsBed: boolean;
+  /** Actual cut position in mm from the component bounding-box origin.
+   *  Only present for components with multiple sections. (Issue #147) */
+  cutPositionMm?: number | null;
+  /** Whether this cut was adjusted away from the midpoint to avoid an
+   *  internal feature (spar channel, wing root, fuselage saddle). (Issue #147) */
+  cutAdjusted?: boolean;
+  /** Human-readable reason for the cut adjustment. (Issue #147) */
+  cutAdjustReason?: string;
 }
 
 /** Response from POST /api/export/preview. */
