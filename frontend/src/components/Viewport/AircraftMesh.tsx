@@ -22,6 +22,9 @@ const HOVER_EMISSIVE_INTENSITY = 0.3;
 /** Default color per component when nothing is selected. */
 const COMPONENT_COLORS: Record<string, string> = {
   wing: '#5c9ce6',
+  // Wing halves — left slightly lighter, right slightly darker for distinction (#228)
+  wing_left: '#6db0f0',
+  wing_right: '#4a88d4',
   fuselage: '#8b8b8b',
   tail: '#e6a65c',
   // Control surfaces — amber (#144)
@@ -41,8 +44,9 @@ const COMPONENT_COLORS: Record<string, string> = {
 };
 const DEFAULT_COLOR = '#a0a0a8';
 
-/** All primary structural components (selectable). */
-const PRIMARY_COMPONENTS = ['fuselage', 'wing', 'tail'] as const;
+/** All primary structural components (selectable).
+ *  Includes separate left/right wing halves for distinct shading (#228). */
+const PRIMARY_COMPONENTS = ['fuselage', 'wing_left', 'wing_right', 'wing', 'tail'] as const;
 
 /** Control surface component keys (rendered but not top-level selectable). */
 const CONTROL_SURFACE_KEYS = [
@@ -185,12 +189,12 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
 
     const ranges = meshData.componentRanges;
     const result: Partial<Record<
-      'fuselage' | 'wing' | 'tail' | ControlSurfaceKey
+      'fuselage' | 'wing' | 'wing_left' | 'wing_right' | 'tail' | ControlSurfaceKey
       | 'gear_main_left' | 'gear_main_right' | 'gear_nose' | 'gear_tail',
       THREE.BufferGeometry
     >> = {};
 
-    // Primary structural components
+    // Primary structural components — prefer separate wing_left/wing_right (#228)
     for (const key of PRIMARY_COMPONENTS) {
       const range = ranges[key];
       if (range) {
@@ -284,6 +288,8 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
     const componentLabels: Record<string, string> = {
       fuselage: 'Fuselage',
       wing: 'Wing',
+      wing_left: 'Left Wing',
+      wing_right: 'Right Wing',
       tail: 'Tail',
       aileron_left: 'Left Aileron',
       aileron_right: 'Right Aileron',
@@ -305,24 +311,33 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
       'gear_main_left', 'gear_main_right', 'gear_nose', 'gear_tail',
     ] as const);
 
+    // Map wing half keys to the 'wing' ComponentSelection so clicking either half selects the wing
+    const WING_HALF_KEYS = new Set(['wing_left', 'wing_right'] as const);
+
     const getComponentSelection = (key: string): ComponentSelection => {
       if (GEAR_MESH_KEYS.has(key as 'gear_main_left')) return 'landing_gear';
+      if (WING_HALF_KEYS.has(key as 'wing_left')) return 'wing';
       return key as ComponentSelection;
     };
 
+    // Prefer separate wing_left/wing_right if available; fall back to combined 'wing' (#228)
+    const hasWingHalves = Boolean(componentGeometries['wing_left'] || componentGeometries['wing_right']);
+
     const allKeys = [
-      'fuselage', 'wing', 'tail',
+      'fuselage',
+      ...(hasWingHalves ? (['wing_left', 'wing_right'] as const) : (['wing'] as const)),
+      'tail',
       'gear_main_left', 'gear_main_right', 'gear_nose', 'gear_tail',
     ] as const;
 
     return (
       <group ref={groupRef} rotation={[-Math.PI / 2, 0, Math.PI / 2]} onPointerMissed={handleMissClick}>
         {allKeys.map((key) => {
-          const geom = componentGeometries[key];
+          const geom = componentGeometries[key as keyof typeof componentGeometries];
           if (!geom) return null;
 
           const componentSel = getComponentSelection(key);
-          const isHovered = hoveredComponent === key;
+          const isHovered = hoveredComponent === (key as ComponentSelection);
           const isSelected = selectedComponent === componentSel;
           const hasSubSelection = isSelected && selectedSubElement !== null;
 
@@ -346,8 +361,8 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
               <mesh
                 geometry={geom}
                 onClick={handleComponentClick(componentSel)}
-                onPointerEnter={handlePointerEnter(componentSel)}
-                onPointerLeave={handlePointerLeave(componentSel)}
+                onPointerEnter={handlePointerEnter(key as ComponentSelection)}
+                onPointerLeave={handlePointerLeave(key as ComponentSelection)}
               >
                 <meshStandardMaterial
                   color={color}

@@ -2,8 +2,9 @@
 // CHENG — Reusable Slider + Number Input for Design Parameters
 // ============================================================================
 
-import React, { useState, useCallback, useEffect, useId } from 'react';
+import React, { useState, useCallback, useEffect, useId, useRef } from 'react';
 import * as Tooltip from '@radix-ui/react-tooltip';
+import { useDesignStore } from '../../store/designStore';
 
 export interface ParamSliderProps {
   /** Display label */
@@ -55,6 +56,11 @@ export function ParamSlider({
   disabled = false,
 }: ParamSliderProps): React.JSX.Element {
   const id = useId();
+  const temporalStore = useDesignStore.temporal;
+  const commitSliderChange = useDesignStore((s) => s.commitSliderChange);
+
+  // Track whether the slider is currently being dragged (for Zundo pause/resume)
+  const isDragging = useRef(false);
 
   // Local string state for the number input — allows free typing
   const [localValue, setLocalValue] = useState<string>(String(value));
@@ -70,6 +76,42 @@ export function ParamSlider({
   const parsed = parseFloat(localValue);
   const isOutOfRange =
     isFocused && !Number.isNaN(parsed) && (parsed < min || parsed > max);
+
+  // Commit helper: resume Zundo and force a history snapshot of the current state.
+  // Called when slider drag ends (either via slider element or global safety net).
+  const commitDrag = useCallback(() => {
+    if (isDragging.current) {
+      isDragging.current = false;
+      // Resume Zundo tracking first, then commit the current state as a history entry.
+      // commitSliderChange() triggers a no-op setState that Zundo intercepts to
+      // record the current (post-drag) state as a history snapshot.
+      temporalStore.getState().resume();
+      commitSliderChange();
+    }
+  }, [temporalStore, commitSliderChange]);
+
+  // Pause Zundo history recording at the start of a slider drag.
+  // This prevents intermediate drag values from flooding the history stack.
+  const handleSliderPointerDown = useCallback(() => {
+    if (!isDragging.current) {
+      isDragging.current = true;
+      temporalStore.getState().pause();
+      // Global safety net: if the pointer is released outside the slider element
+      // (e.g. mouse moves off slider), still resume Zundo and commit history.
+      const cleanup = () => {
+        commitDrag();
+        document.removeEventListener('pointerup', cleanup);
+        document.removeEventListener('pointercancel', cleanup);
+      };
+      document.addEventListener('pointerup', cleanup, { once: true });
+      document.addEventListener('pointercancel', cleanup, { once: true });
+    }
+  }, [temporalStore, commitDrag]);
+
+  // Resume Zundo on pointer up and commit one history entry.
+  const handleSliderPointerUp = useCallback(() => {
+    commitDrag();
+  }, [commitDrag]);
 
   const handleSliderChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -166,6 +208,8 @@ export function ParamSlider({
         step={step}
         value={value}
         onChange={handleSliderChange}
+        onPointerDown={handleSliderPointerDown}
+        onPointerUp={handleSliderPointerUp}
         disabled={disabled}
         className={`w-full h-1.5 rounded-full appearance-none cursor-pointer
           bg-zinc-700 accent-blue-500 ${warningRing}

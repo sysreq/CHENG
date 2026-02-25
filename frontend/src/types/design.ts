@@ -338,9 +338,10 @@ export interface ValidationWarning {
 // ---------------------------------------------------------------------------
 
 /** Per-component face index ranges for selection highlighting.
- *  Includes control surfaces, multi-section wing panel sub-keys, and landing gear. */
+ *  Includes control surfaces, multi-section wing panel sub-keys, and landing gear.
+ *  wing_left/wing_right are separate halves for distinct shading (#228). */
 export type ComponentRanges = Partial<Record<
-  | 'fuselage' | 'wing' | 'tail'
+  | 'fuselage' | 'wing' | 'wing_left' | 'wing_right' | 'tail'
   | 'aileron_left' | 'aileron_right'
   | 'elevator_left' | 'elevator_right'
   | 'rudder'

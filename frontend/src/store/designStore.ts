@@ -138,6 +138,12 @@ export interface DesignStore {
     value: AircraftDesign[K],
     source?: ChangeSource,
   ) => void;
+  /**
+   * Force a Zundo history snapshot of the current design state.
+   * Called after slider drag completes (onPointerUp) to commit one history
+   * entry for the entire drag gesture (#222).
+   */
+  commitSliderChange: () => void;
   loadPreset: (name: Exclude<PresetName, 'Custom'>) => void;
 
   // ── Multi-Section Wing Panel Array Actions (#143) ────────────────
@@ -253,6 +259,23 @@ export const useDesignStore = create<DesignStore>()(
               state.design.panelDihedrals = oldDihedrals.slice(0, targetLen);
               state.design.panelSweeps = oldSweeps.slice(0, targetLen);
             }
+          }),
+        );
+      },
+
+      commitSliderChange: () => {
+        // Force a Zundo history snapshot of the current design state.
+        // We do this by re-setting the lastAction field with the current value,
+        // which triggers Zustand setState → Zundo records the current state.
+        // This is called after resume() so Zundo IS tracking again.
+        const current = get();
+        set(
+          produce((state: DesignStore) => {
+            // Re-apply current state values — this is a no-op for the design
+            // but it DOES trigger Zustand setState, which Zundo intercepts to
+            // record a snapshot (since isTracking is now true after resume()).
+            state.lastAction = current.lastAction;
+            state.lastChangeSource = 'immediate';
           }),
         );
       },
