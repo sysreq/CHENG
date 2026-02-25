@@ -10,10 +10,12 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import anyio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from backend.cleanup import cleanup_tmp_files, periodic_cleanup
 from backend.routes.designs import router as designs_router
 from backend.routes.generate import router as generate_router
 from backend.routes.export import router as export_router
@@ -68,7 +70,19 @@ async def lifespan(app: FastAPI):
     except OSError:
         logger.info("Cannot create /data/presets — presets will use module default")
 
-    yield
+    # 5. Clean up orphaned temp files from previous runs (#181)
+    try:
+        deleted = cleanup_tmp_files(tmp_dir)
+        if deleted:
+            logger.info("Startup cleanup: removed %d orphaned temp file(s)", deleted)
+    except Exception:
+        logger.warning("Startup temp cleanup failed", exc_info=True)
+
+    # 6. Start periodic cleanup task (runs every 30 min)
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(periodic_cleanup, tmp_dir)
+        yield
+        tg.cancel_scope.cancel()
 
 
 app = FastAPI(title="CHENG", version="0.1.0", lifespan=lifespan)

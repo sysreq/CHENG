@@ -201,13 +201,10 @@ def _build_h_stab_half(
     thickness_ratio = 0.12  # 12% thickness (NACA 0012 equivalent)
     half_thickness = chord * thickness_ratio / 2.0
 
-    # Incidence rotation
-    inc_rad = math.radians(incidence)
-
     # Loft from root to tip using chained workplane offsets
     result = (
         cq.Workplane("XZ")
-        .transformed(offset=(0, z_offset, 0), rotate=(0, -incidence, 0))
+        .transformed(offset=(0, z_offset, 0), rotate=(0, 0, -incidence))
         .ellipse(chord / 2, half_thickness)
         .workplane(offset=y_sign * half_span)
         .ellipse(chord / 2, half_thickness)
@@ -304,7 +301,7 @@ def _build_v_tail_half(
     # transformed adds the Z offset from dihedral and X offset from sweep
     result = (
         cq.Workplane("XZ")
-        .transformed(rotate=(0, -incidence, 0))
+        .transformed(rotate=(0, 0, -incidence))
         .ellipse(chord / 2, half_thickness)
         .workplane(offset=tip_y)
         .transformed(offset=(sweep_offset_x, tip_z, 0))
