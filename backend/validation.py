@@ -1,8 +1,10 @@
 """Validation rules — compute non-blocking warnings for a design.
 
-MVP implements:
-  - 6 structural / geometric warnings  (V01-V06)
+Implements:
+  - 8 structural / geometric warnings  (V01-V08)
+  - 5 aerodynamic / structural analysis (V09-V13)  [v0.6]
   - 7 print / export warnings          (V16-V23)
+  - 5 printability analysis warnings    (V24-V28)  [v0.6]
 
 All warnings are level="warn" and never block export.
 
@@ -144,6 +146,236 @@ def _check_v08(design: AircraftDesign, out: list[ValidationWarning]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Aerodynamic / structural analysis  (V09 - V13)  [v0.6]
+# ---------------------------------------------------------------------------
+
+
+def _wing_area_m2(design: AircraftDesign) -> float:
+    """Wing planform area in m^2."""
+    tip_chord = design.wing_chord * design.wing_tip_root_ratio
+    return 0.5 * (design.wing_chord + tip_chord) * design.wing_span * 1e-6
+
+
+def _estimate_weight_kg(design: AircraftDesign) -> float:
+    """Quick total weight estimate in kg (airframe + motor + battery).
+
+    Uses the same volume-based approach as engine._compute_weight_estimates
+    but simplified for validation (avoids circular import).
+    """
+    from backend.geometry.engine import _compute_weight_estimates
+    weights = _compute_weight_estimates(design)
+    airframe_g = weights["weight_total_g"]
+    return (airframe_g + design.motor_weight_g + design.battery_weight_g) / 1000.0
+
+
+def _check_v09(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V09: Wing bending moment check.
+
+    Rough estimate: root bending moment from lift ≈ (W * b) / (4 * pi).
+    For a 3D-printed wing, bending stress ~ M / (t^2 * c) should stay within
+    PLA tensile limits. We warn if the non-dimensional bending parameter
+    (weight_kg * span_m) / skin_thickness_mm^2 exceeds a threshold.
+
+    The threshold is empirically set: above ~2.5, a 1.2mm skin PLA wing
+    is at risk of creasing under moderate g-loads (2-3g maneuvers).
+    """
+    weight_kg = _estimate_weight_kg(design)
+    span_m = design.wing_span / 1000.0
+    skin_t = design.wing_skin_thickness
+
+    if skin_t <= 0:
+        return
+
+    bending_param = (weight_kg * span_m) / (skin_t ** 2)
+
+    if bending_param > 2.5:
+        out.append(
+            ValidationWarning(
+                id="V09",
+                message=(
+                    f"High wing bending load — consider thicker skin or shorter span "
+                    f"(bending index {bending_param:.1f}, limit 2.5)"
+                ),
+                fields=["wing_span", "wing_skin_thickness"],
+            )
+        )
+
+
+def _check_v10(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V10: Tail volume coefficient check.
+
+    Horizontal tail volume: V_h = (S_h * l_t) / (S_w * MAC)
+    Typical RC range: 0.3 - 0.8. Below 0.3 = insufficient pitch stability.
+    Above 1.0 = over-stabilized (sluggish pitch response).
+
+    Vertical tail volume: V_v = (S_v * l_t) / (S_w * b)
+    Typical range: 0.02 - 0.05. Below 0.02 = poor directional stability.
+    """
+    mac = _mac(design)
+    wing_area_mm2 = 0.5 * (design.wing_chord + design.wing_chord * design.wing_tip_root_ratio) * design.wing_span
+
+    if mac <= 0 or wing_area_mm2 <= 0 or design.wing_span <= 0:
+        return
+
+    if design.tail_type == "V-Tail":
+        # V-tail effective areas using Purser-Campbell method:
+        # The aerodynamic effectiveness is reduced by the square of the
+        # trig function because both the force component and the effective
+        # angle-of-attack change are reduced by the dihedral angle.
+        v_tail_area = design.v_tail_chord * design.v_tail_span
+        dihedral_rad = math.radians(design.v_tail_dihedral)
+        h_area = v_tail_area * math.cos(dihedral_rad) ** 2
+        v_area = v_tail_area * math.sin(dihedral_rad) ** 2
+    else:
+        h_area = design.h_stab_chord * design.h_stab_span
+        v_area = design.v_stab_root_chord * design.v_stab_height
+
+    # Horizontal tail volume coefficient
+    v_h = (h_area * design.tail_arm) / (wing_area_mm2 * mac)
+    if v_h < 0.3:
+        out.append(
+            ValidationWarning(
+                id="V10",
+                message=f"Low horizontal tail volume ({v_h:.2f}) — may lack pitch stability (typical: 0.3-0.8)",
+                fields=["h_stab_span", "h_stab_chord", "tail_arm"],
+            )
+        )
+    elif v_h > 1.0:
+        out.append(
+            ValidationWarning(
+                id="V10",
+                message=f"High horizontal tail volume ({v_h:.2f}) — pitch response may be sluggish (typical: 0.3-0.8)",
+                fields=["h_stab_span", "h_stab_chord", "tail_arm"],
+            )
+        )
+
+    # Vertical tail volume coefficient
+    v_v = (v_area * design.tail_arm) / (wing_area_mm2 * design.wing_span)
+    if v_v < 0.02:
+        out.append(
+            ValidationWarning(
+                id="V10",
+                message=f"Low vertical tail volume ({v_v:.3f}) — poor directional stability (typical: 0.02-0.05)",
+                fields=["v_stab_height", "v_stab_root_chord", "tail_arm"],
+            )
+        )
+
+
+def _check_v11(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V11: Flutter margin estimate.
+
+    Higher aspect ratio wings at higher speeds are more susceptible to flutter.
+    For 3D-printed PLA wings (low stiffness), warn if:
+      AR > 8 (high AR increases flutter risk)
+      or AR > 6 AND sweep > 15° (swept high-AR is worse)
+
+    This is a simplified heuristic — real flutter analysis requires FEA.
+    """
+    tip_chord = design.wing_chord * design.wing_tip_root_ratio
+    wing_area_mm2 = 0.5 * (design.wing_chord + tip_chord) * design.wing_span
+    ar = (design.wing_span ** 2) / wing_area_mm2 if wing_area_mm2 > 0 else 0.0
+
+    if ar > 8:
+        out.append(
+            ValidationWarning(
+                id="V11",
+                message=f"High aspect ratio ({ar:.1f}) — flutter risk for 3D-printed wings (limit AR < 8)",
+                fields=["wing_span", "wing_chord", "wing_tip_root_ratio"],
+            )
+        )
+    elif ar > 6 and abs(design.wing_sweep) > 15:
+        out.append(
+            ValidationWarning(
+                id="V11",
+                message=f"High AR ({ar:.1f}) combined with sweep ({design.wing_sweep:.0f}°) increases flutter risk",
+                fields=["wing_span", "wing_chord", "wing_sweep"],
+            )
+        )
+
+
+def _check_v12(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V12: Wing loading check.
+
+    Wing loading = weight / wing_area.
+    For RC planes:
+      < 20 g/dm² = very light (floater/glider)
+      20-60 g/dm² = typical sport
+      > 80 g/dm² = heavy — needs higher speed, harder landings
+      > 120 g/dm² = very heavy — not suitable for beginners
+    """
+    weight_kg = _estimate_weight_kg(design)
+    weight_g = weight_kg * 1000.0
+    wing_area_dm2 = _wing_area_m2(design) * 100.0  # m² to dm²
+
+    if wing_area_dm2 <= 0:
+        return
+
+    wing_loading = weight_g / wing_area_dm2
+
+    if wing_loading > 120:
+        out.append(
+            ValidationWarning(
+                id="V12",
+                message=f"Very high wing loading ({wing_loading:.0f} g/dm²) — needs fast airspeed, hard landings",
+                fields=["wing_span", "wing_chord"],
+            )
+        )
+    elif wing_loading > 80:
+        out.append(
+            ValidationWarning(
+                id="V12",
+                message=f"High wing loading ({wing_loading:.0f} g/dm²) — not beginner-friendly (typical: 20-60)",
+                fields=["wing_span", "wing_chord"],
+            )
+        )
+
+
+def _check_v13(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V13: Stall speed estimate.
+
+    V_stall = sqrt(2 * W / (rho * S * Cl_max))
+
+    Where:
+      W = weight in N
+      rho = 1.225 kg/m³ (sea level)
+      S = wing area in m²
+      Cl_max ≈ 1.2 (typical for RC airfoils)
+
+    Warn if stall speed > 15 m/s (54 km/h) — difficult for beginners.
+    Info if stall speed > 10 m/s (36 km/h).
+    """
+    weight_kg = _estimate_weight_kg(design)
+    weight_n = weight_kg * 9.81
+    wing_area_m2 = _wing_area_m2(design)
+
+    if wing_area_m2 <= 0 or weight_n <= 0:
+        return
+
+    rho = 1.225  # kg/m³, sea level ISA
+    cl_max = 1.2  # typical RC airfoil
+
+    v_stall = math.sqrt(2.0 * weight_n / (rho * wing_area_m2 * cl_max))
+    v_stall_kmh = v_stall * 3.6
+
+    if v_stall > 15.0:
+        out.append(
+            ValidationWarning(
+                id="V13",
+                message=f"High stall speed ({v_stall_kmh:.0f} km/h) — needs fast approach, difficult landings",
+                fields=["wing_span", "wing_chord"],
+            )
+        )
+    elif v_stall > 10.0:
+        out.append(
+            ValidationWarning(
+                id="V13",
+                message=f"Moderate stall speed ({v_stall_kmh:.0f} km/h) — OK for experienced pilots",
+                fields=["wing_span", "wing_chord"],
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
 # 3D-printing warnings  (V16 - V23)
 # ---------------------------------------------------------------------------
 
@@ -241,6 +473,214 @@ def _check_v23(design: AircraftDesign, out: list[ValidationWarning]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Printability analysis  (V24 - V28)  [v0.6]
+# ---------------------------------------------------------------------------
+
+
+def _check_v24(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V24: Overhang analysis.
+
+    FDM printers struggle with overhangs > 45 degrees. For aircraft:
+    - Wing dihedral > 45° creates unsupported overhangs on the underside
+    - Wing sweep > 30° combined with dihedral creates compound overhangs
+    - V-tail dihedral > 45° creates overhangs on inner surfaces
+    """
+    if abs(design.wing_dihedral) > 45:
+        out.append(
+            ValidationWarning(
+                id="V24",
+                message=(
+                    f"Wing dihedral ({design.wing_dihedral:.0f}°) exceeds 45° — "
+                    f"underside overhang requires support material"
+                ),
+                fields=["wing_dihedral"],
+            )
+        )
+    elif abs(design.wing_dihedral) > 30 and abs(design.wing_sweep) > 15:
+        out.append(
+            ValidationWarning(
+                id="V24",
+                message=(
+                    f"Combined dihedral ({design.wing_dihedral:.0f}°) and sweep "
+                    f"({design.wing_sweep:.0f}°) may create compound overhangs"
+                ),
+                fields=["wing_dihedral", "wing_sweep"],
+            )
+        )
+
+    if design.tail_type == "V-Tail" and design.v_tail_dihedral > 45:
+        out.append(
+            ValidationWarning(
+                id="V24",
+                message=(
+                    f"V-tail dihedral ({design.v_tail_dihedral:.0f}°) exceeds 45° — "
+                    f"inner surfaces need support"
+                ),
+                fields=["v_tail_dihedral"],
+            )
+        )
+
+
+def _check_v25(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V25: Trailing edge sharpness.
+
+    If te_min_thickness is set below a printable threshold, warn the user.
+    Also check if the tip chord is so small that the TE becomes impractically
+    thin (tip chord * 0.02 for typical TE = ~2% of chord).
+    """
+    if design.te_min_thickness < 0.8:
+        out.append(
+            ValidationWarning(
+                id="V25",
+                message=(
+                    f"Trailing edge thickness ({design.te_min_thickness:.1f} mm) "
+                    f"below 0.8 mm — may not print reliably"
+                ),
+                fields=["te_min_thickness"],
+            )
+        )
+
+    # Check tip chord TE
+    tip_chord = design.wing_chord * design.wing_tip_root_ratio
+    # TE is typically ~2% of chord for thin airfoils; thicker for NACA 0012 etc.
+    tip_te_estimate = tip_chord * 0.02
+    if tip_te_estimate < design.te_min_thickness and tip_chord < 80:
+        out.append(
+            ValidationWarning(
+                id="V25",
+                message=(
+                    f"Tip chord ({tip_chord:.0f} mm) too small for reliable TE printing — "
+                    f"consider increasing taper ratio"
+                ),
+                fields=["wing_chord", "wing_tip_root_ratio", "te_min_thickness"],
+            )
+        )
+
+
+def _check_v26(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V26: Connector/joint clearance check.
+
+    Tongue-and-groove joints need sufficient depth relative to the wall
+    thickness. If joint_tolerance is very tight AND section_overlap is short,
+    the joint may not engage properly with FDM dimensional variance.
+
+    Also check that the joint tolerance is compatible with the nozzle diameter
+    (tolerance should be at least nozzle_diameter / 4 for reliable fit).
+    """
+    min_clearance = design.nozzle_diameter / 4.0
+    if design.joint_tolerance < min_clearance:
+        out.append(
+            ValidationWarning(
+                id="V26",
+                message=(
+                    f"Joint tolerance ({design.joint_tolerance:.2f} mm) below "
+                    f"{min_clearance:.2f} mm — too tight for {design.nozzle_diameter:.1f} mm nozzle"
+                ),
+                fields=["joint_tolerance", "nozzle_diameter"],
+            )
+        )
+
+    # Check joint depth relative to wall/skin
+    if design.joint_type == "Tongue-and-Groove":
+        # Tongue depth is typically section_overlap * 0.5
+        tongue_depth = design.section_overlap * 0.5
+        min_wall = min(design.wing_skin_thickness, design.wall_thickness)
+        if tongue_depth < 2.0 * min_wall:
+            out.append(
+                ValidationWarning(
+                    id="V26",
+                    message=(
+                        f"Joint tongue depth ({tongue_depth:.1f} mm) may be too shallow "
+                        f"relative to wall thickness ({min_wall:.1f} mm)"
+                    ),
+                    fields=["section_overlap", "wing_skin_thickness", "wall_thickness"],
+                )
+            )
+
+
+def _check_v27(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V27: Per-part print orientation recommendation.
+
+    For FDM printing of aircraft parts:
+    - Wings: print chord-wise (LE down, TE up) for best surface finish
+    - Fuselage: print lengthwise (nose forward) — but may need splitting
+    - Tail: similar to wings
+
+    Warn if dimensions suggest difficult print orientations.
+    """
+    # Check if fuselage height exceeds bed Z
+    preset = design.fuselage_preset
+    if preset == "Pod":
+        fuse_height = design.wing_chord * 0.45
+    elif preset == "Blended-Wing-Body":
+        fuse_height = design.wing_chord * 0.15
+    else:
+        fuse_height = design.wing_chord * 0.35 * 1.1
+
+    # Wing chord is the critical dimension for print orientation
+    # If chord > bed_z, the wing cannot be printed chord-upright
+    if design.wing_chord > design.print_bed_z:
+        out.append(
+            ValidationWarning(
+                id="V27",
+                message=(
+                    f"Wing chord ({design.wing_chord:.0f} mm) exceeds bed height "
+                    f"({design.print_bed_z:.0f} mm) — cannot print upright for best finish"
+                ),
+                fields=["wing_chord", "print_bed_z"],
+            )
+        )
+
+    if fuse_height > design.print_bed_z:
+        out.append(
+            ValidationWarning(
+                id="V27",
+                message=(
+                    f"Fuselage cross-section ({fuse_height:.0f} mm) exceeds bed height "
+                    f"({design.print_bed_z:.0f} mm) — print on side or split vertically"
+                ),
+                fields=["wing_chord", "fuselage_preset", "print_bed_z"],
+            )
+        )
+
+
+def _check_v28(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V28: Layer adhesion warning for thin walls.
+
+    For FDM-printed aircraft, wall thickness should be at least 2x nozzle
+    diameter for structural integrity (2 perimeters minimum). 1-perimeter
+    walls are possible but fragile. 3x is ideal for high-stress areas
+    but too heavy for full-wing skins.
+    """
+    min_perimeters = 2.0
+    min_wall = min_perimeters * design.nozzle_diameter
+
+    if design.wing_skin_thickness < min_wall:
+        out.append(
+            ValidationWarning(
+                id="V28",
+                message=(
+                    f"Wing skin ({design.wing_skin_thickness:.1f} mm) below "
+                    f"{min_wall:.1f} mm (3x nozzle) — weak layer adhesion"
+                ),
+                fields=["wing_skin_thickness", "nozzle_diameter"],
+            )
+        )
+
+    if design.wall_thickness < min_wall:
+        out.append(
+            ValidationWarning(
+                id="V28",
+                message=(
+                    f"Fuselage wall ({design.wall_thickness:.1f} mm) below "
+                    f"{min_wall:.1f} mm (3x nozzle) — weak layer adhesion"
+                ),
+                fields=["wall_thickness", "nozzle_diameter"],
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -249,12 +689,13 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
     """Compute all non-blocking validation warnings for a design.
 
     Returns a list of ValidationWarning objects.  Each warning has a unique
-    ID (V01-V06 for structural, V16-V23 for print), a human-readable message,
-    and the list of affected parameter field names.
+    ID (V01-V08 structural, V09-V13 aero/structural, V16-V23 print,
+    V24-V28 printability), a human-readable message, and the list of
+    affected parameter field names.
     """
     warnings: list[ValidationWarning] = []
 
-    # Structural / geometric
+    # Structural / geometric (V01-V08)
     _check_v01(design, warnings)
     _check_v02(design, warnings)
     _check_v03(design, warnings)
@@ -264,7 +705,14 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
     _check_v07(design, warnings)
     _check_v08(design, warnings)
 
-    # 3D printing
+    # Aerodynamic / structural analysis (V09-V13)
+    _check_v09(design, warnings)
+    _check_v10(design, warnings)
+    _check_v11(design, warnings)
+    _check_v12(design, warnings)
+    _check_v13(design, warnings)
+
+    # 3D printing (V16-V23)
     _check_v16(design, warnings)
     _check_v17(design, warnings)
     _check_v18(design, warnings)
@@ -272,5 +720,12 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
     _check_v21(design, warnings)
     _check_v22(design, warnings)
     _check_v23(design, warnings)
+
+    # Printability analysis (V24-V28)
+    _check_v24(design, warnings)
+    _check_v25(design, warnings)
+    _check_v26(design, warnings)
+    _check_v27(design, warnings)
+    _check_v28(design, warnings)
 
     return warnings

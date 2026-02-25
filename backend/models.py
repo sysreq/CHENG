@@ -116,6 +116,13 @@ class AircraftDesign(CamelModel):
     hollow_parts: bool = True
     te_min_thickness: float = Field(default=0.8, ge=0.4, le=2.0)
     support_strategy: SupportStrategy = "minimal"
+    print_infill: float = Field(default=15.0, ge=0, le=100)
+    material_density: float = Field(default=1.24, ge=0.5, le=10.0)
+
+    # ── Propulsion / Electronics (for CG calculation) ────────────────
+    motor_weight_g: float = Field(default=60.0, ge=0, le=500)
+    battery_weight_g: float = Field(default=150.0, ge=0, le=2000)
+    battery_position_frac: float = Field(default=0.30, ge=0.0, le=1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +140,10 @@ class DerivedValues(CamelModel):
     estimated_cg_mm: float
     min_feature_thickness_mm: float
     wall_thickness_mm: float
+    weight_wing_g: float = 0.0
+    weight_tail_g: float = 0.0
+    weight_fuselage_g: float = 0.0
+    weight_total_g: float = 0.0
 
 
 # ---------------------------------------------------------------------------
