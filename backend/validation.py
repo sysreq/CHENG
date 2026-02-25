@@ -654,8 +654,8 @@ def _check_v30(design: AircraftDesign, out: list[ValidationWarning]) -> None:
     """V30: Control surface sizing and geometry checks.
 
     V30a: Aileron span order — aileron_span_start < aileron_span_end.
-    V30b: Elevator chord must be < 50% (Pydantic also constrains, belt-and-suspenders).
-    V30c: Rudder chord must be < 50%.
+    V30b: Elevator chord >= 45% risks leaving insufficient fixed stabilizer area.
+    V30c: Rudder chord >= 45% risks leaving insufficient fixed fin area.
     V30d: Elevon chord area / wing area must be >= 8% for flying-wing pitch authority.
     V30e: Control surface minimum printable span (> 3 * nozzle_diameter).
     """
@@ -691,27 +691,27 @@ def _check_v30(design: AircraftDesign, out: list[ValidationWarning]) -> None:
                 )
             )
 
-    # V30b: Elevator chord
-    if design.elevator_enable and design.elevator_chord_percent >= 50.0:
+    # V30b: Elevator chord >= 45% leaves very little fixed stabilizer area
+    if design.elevator_enable and design.elevator_chord_percent >= 45.0:
         out.append(
             ValidationWarning(
                 id="V30",
                 message=(
-                    f"Elevator chord ({design.elevator_chord_percent:.0f}%) is >= 50% — "
-                    f"would leave no fixed stabilizer area"
+                    f"Elevator chord ({design.elevator_chord_percent:.0f}%) is >= 45% — "
+                    f"consider reducing to leave adequate fixed stabilizer area"
                 ),
                 fields=["elevator_chord_percent"],
             )
         )
 
-    # V30c: Rudder chord
-    if design.rudder_enable and design.rudder_chord_percent >= 50.0:
+    # V30c: Rudder chord >= 45% leaves very little fixed fin area
+    if design.rudder_enable and design.rudder_chord_percent >= 45.0:
         out.append(
             ValidationWarning(
                 id="V30",
                 message=(
-                    f"Rudder chord ({design.rudder_chord_percent:.0f}%) is >= 50% — "
-                    f"would leave no fixed fin area"
+                    f"Rudder chord ({design.rudder_chord_percent:.0f}%) is >= 45% — "
+                    f"consider reducing to leave adequate fixed fin area"
                 ),
                 fields=["rudder_chord_percent"],
             )

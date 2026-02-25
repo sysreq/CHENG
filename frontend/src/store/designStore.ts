@@ -97,9 +97,18 @@ const PARAM_LABELS: Partial<Record<keyof AircraftDesign, string>> = {
   rudderEnable: 'Rudder',
   ruddervatorEnable: 'Ruddervators',
   elevonEnable: 'Elevons',
+  aileronSpanStart: 'Aileron Inboard',
+  aileronSpanEnd: 'Aileron Outboard',
   aileronChordPercent: 'Aileron Chord %',
+  elevatorSpanPercent: 'Elevator Span %',
   elevatorChordPercent: 'Elevator Chord %',
+  rudderHeightPercent: 'Rudder Height %',
   rudderChordPercent: 'Rudder Chord %',
+  ruddervatorSpanPercent: 'Ruddervator Span %',
+  ruddervatorChordPercent: 'Ruddervator Chord %',
+  elevonSpanStart: 'Elevon Inboard',
+  elevonSpanEnd: 'Elevon Outboard',
+  elevonChordPercent: 'Elevon Chord %',
 };
 
 export interface DesignStore {

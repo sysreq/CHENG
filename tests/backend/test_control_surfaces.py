@@ -206,34 +206,36 @@ class TestValidationV30:
         assert not any("span start" in m.lower() for m in v30_msgs)
 
     def test_v30b_elevator_chord_at_boundary(self):
-        # elevator_chord_percent = 50.0 should trigger V30b
+        # elevator_chord_percent >= 45.0 should trigger V30b
         d = AircraftDesign(
             elevator_enable=True,
-            elevator_chord_percent=50.0,
+            elevator_chord_percent=45.0,
         )
         warnings = compute_warnings(d)
         v30_msgs = [w.message for w in warnings if w.id == "V30"]
         assert any("elevator" in m.lower() for m in v30_msgs), (
-            f"V30b elevator not raised. Messages: {v30_msgs}"
+            f"V30b elevator not raised at 45%. Messages: {v30_msgs}"
         )
 
     def test_v30c_rudder_chord_at_boundary(self):
         d = AircraftDesign(
             rudder_enable=True,
-            rudder_chord_percent=50.0,
+            rudder_chord_percent=45.0,
         )
         warnings = compute_warnings(d)
         v30_msgs = [w.message for w in warnings if w.id == "V30"]
         assert any("rudder" in m.lower() for m in v30_msgs), (
-            f"V30c rudder not raised. Messages: {v30_msgs}"
+            f"V30c rudder not raised at 45%. Messages: {v30_msgs}"
         )
 
-    def test_no_v30_elevator_below_50(self):
+    def test_no_v30_elevator_below_45(self):
         d = AircraftDesign(elevator_enable=True, elevator_chord_percent=35.0)
         warnings = compute_warnings(d)
         v30_msgs = [w.message for w in warnings if w.id == "V30"]
-        # Should not fire V30b for normal elevator chord
-        assert not any("elevator" in m.lower() and ">= 50" in m for m in v30_msgs)
+        # Should not fire V30b for normal elevator chord below 45%
+        assert not any("elevator" in m.lower() for m in v30_msgs), (
+            f"V30b unexpectedly raised at 35%. Messages: {v30_msgs}"
+        )
 
     def test_v30d_elevon_insufficient_area_for_flying_wing(self):
         # Flying wing with minimal elevon span — should trigger V30d

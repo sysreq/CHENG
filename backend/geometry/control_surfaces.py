@@ -3,12 +3,29 @@ rudder, ruddervators, and elevons.
 
 Architecture (from v0.7_aero_guidance.md §2.1):
   1. Build the parent solid (wing or tail) as normal.
-  2. Compute the hinge line in 3D space.
+  2. Compute the hinge line in 3D space, accounting for sweep and taper.
   3. Build a "cutter" solid — a box along the hinge line that captures the
      control surface volume plus the 0.5 mm per-side hinge gap.
   4. parent.cut(cutter) → fixed surface (stays attached to aircraft).
   5. Build the control surface solid directly from a separate geometry.
   6. Return both as separate cq.Workplane objects.
+
+Sweep correction:
+  In the CHENG coordinate system the wing root LE is at X=0 and the LE sweeps
+  back (positive X) as Y increases.  At spanwise station Y the LE X offset is:
+      x_le(y) = abs(y) * tan(sweep_rad)
+  The hinge line X at that station is therefore:
+      x_hinge(y) = x_le(y) + chord(y) * (1 - chord_frac)
+
+Taper:
+  The local chord at any spanwise station is linearly interpolated between root
+  and tip chords.  The cutter is sized using the LARGER chord (inboard) to
+  ensure the full trailing-edge pocket is covered.
+
+V-tail ruddervator dihedral:
+  The cutter box is rotated about the X-axis by the V-tail dihedral angle so
+  that it lies in the tilted plane of the V-tail surface rather than the XY
+  plane.
 
 Never boolean-union control surfaces with the parent — they are separate STL
 parts assembled onto the aircraft via piano-wire hinge pins.
@@ -73,6 +90,7 @@ def cut_aileron(
         tip_chord = root_chord * design.wing_tip_root_ratio
         half_span = design.wing_span / 2.0
         y_sign = -1.0 if side == "left" else 1.0
+        sweep_rad = math.radians(design.wing_sweep)
 
         aileron_chord_frac = design.aileron_chord_percent / 100.0
         y_inboard = (design.aileron_span_start / 100.0) * half_span
@@ -83,35 +101,38 @@ def cut_aileron(
             logger.warning("Aileron span is zero or negative — skipping cut.")
             return wing_solid, None
 
-        # Chord at midspan (for cutter sizing)
-        y_mid_frac = ((y_inboard + y_outboard) / 2.0) / half_span
-        chord_at_mid = root_chord + (tip_chord - root_chord) * y_mid_frac
+        # Sweep-corrected LE offset at each spanwise station
+        x_le_inboard = y_inboard * math.tan(sweep_rad)
+        x_le_outboard = y_outboard * math.tan(sweep_rad)
+        x_le_mid = (x_le_inboard + x_le_outboard) / 2.0
 
-        # Hinge line X position: from LE, distance = chord*(1-aileron_frac)
-        # The cutter includes the gap, so it starts at x_hinge - HINGE_GAP
-        x_hinge_mid = chord_at_mid * (1.0 - aileron_chord_frac)
-        cutter_chord = chord_at_mid * aileron_chord_frac + HINGE_GAP
+        # Local chord at inboard (larger) and outboard stations
+        chord_at_inboard = root_chord + (tip_chord - root_chord) * (y_inboard / half_span)
+        chord_at_mid = root_chord + (tip_chord - root_chord) * ((y_inboard + y_outboard) / 2.0 / half_span)
 
-        # Wing max thickness ≈ 12% of mean chord for Z sizing
+        # Use inboard (larger) chord to size cutter — ensures full TE coverage
+        cutter_chord = chord_at_inboard * aileron_chord_frac + HINGE_GAP
+
+        # Hinge X at midspan, sweep-corrected: x_le + chord*(1 - frac)
+        x_hinge_mid = x_le_mid + chord_at_mid * (1.0 - aileron_chord_frac)
+
+        # Wing max thickness ≈ 12% of mean chord for Z sizing, 3x over-size
         mean_chord = (root_chord + tip_chord) / 2.0
-        wing_max_thickness = mean_chord * 0.12 * 3.0  # 3x over-size for clean cut
+        wing_max_thickness = mean_chord * 0.12 * 3.0
 
-        # Cutter center in aircraft coordinates.
-        # Y center is at (y_inboard + y_outboard)/2 * y_sign (spanwise).
         cutter_x_center = x_hinge_mid + (cutter_chord / 2.0) - HINGE_GAP
         cutter_y_center = y_sign * (y_inboard + y_outboard) / 2.0
 
         cutter = (
             cq.Workplane("XY")
             .transformed(offset=(cutter_x_center, cutter_y_center, 0.0))
-            .box(cutter_chord, aileron_span, wing_max_thickness)
+            .box(cutter_chord, aileron_span + HINGE_GAP, wing_max_thickness)
         )
 
         # Cut aileron from wing body
         wing_body = wing_solid.cut(cutter)
 
-        # Build aileron solid: same cutter volume minus the gap
-        # Aileron starts at x_hinge + HINGE_GAP (forward of hinge gap)
+        # Build aileron solid: hinge gap inset from cutter
         ail_chord = chord_at_mid * aileron_chord_frac - HINGE_GAP
         if ail_chord <= 0:
             ail_chord = chord_at_mid * aileron_chord_frac
@@ -347,6 +368,7 @@ def cut_elevons(
         half_span = design.wing_span / 2.0
         y_sign = -1.0 if side == "left" else 1.0
 
+        sweep_rad = math.radians(design.wing_sweep)
         elevon_chord_frac = design.elevon_chord_percent / 100.0
         y_inboard = (design.elevon_span_start / 100.0) * half_span
         y_outboard = (design.elevon_span_end / 100.0) * half_span
@@ -356,10 +378,17 @@ def cut_elevons(
             logger.warning("Elevon span is zero or negative — skipping cut.")
             return wing_solid, None
 
-        y_mid_frac = ((y_inboard + y_outboard) / 2.0) / half_span
-        chord_at_mid = root_chord + (tip_chord - root_chord) * y_mid_frac
-        x_hinge_mid = chord_at_mid * (1.0 - elevon_chord_frac)
-        cutter_chord = chord_at_mid * elevon_chord_frac + HINGE_GAP
+        # Sweep-corrected LE offset at each station
+        x_le_inboard = y_inboard * math.tan(sweep_rad)
+        x_le_mid = ((y_inboard + y_outboard) / 2.0) * math.tan(sweep_rad)
+
+        chord_at_inboard = root_chord + (tip_chord - root_chord) * (y_inboard / half_span)
+        chord_at_mid = root_chord + (tip_chord - root_chord) * ((y_inboard + y_outboard) / 2.0 / half_span)
+
+        # Use inboard (larger) chord for cutter width
+        cutter_chord = chord_at_inboard * elevon_chord_frac + HINGE_GAP
+        x_hinge_mid = x_le_mid + chord_at_mid * (1.0 - elevon_chord_frac)
+
         mean_chord = (root_chord + tip_chord) / 2.0
         wing_max_thickness = mean_chord * 0.12 * 3.0
 
@@ -369,7 +398,7 @@ def cut_elevons(
         cutter = (
             cq.Workplane("XY")
             .transformed(offset=(cutter_x_center, cutter_y_center, 0.0))
-            .box(cutter_chord, elevon_span, wing_max_thickness)
+            .box(cutter_chord, elevon_span + HINGE_GAP, wing_max_thickness)
         )
 
         wing_body = wing_solid.cut(cutter)
@@ -414,37 +443,46 @@ def _cut_single_ruddervator(
         rudv_chord_frac = design.ruddervator_chord_percent / 100.0
         y_sign = -1.0 if side == "left" else 1.0
         dihedral_rad = math.radians(design.v_tail_dihedral)
+        sweep_rad = math.radians(design.v_tail_sweep)
 
         # Ruddervator spans from inboard to tip of V-tail surface
-        y_inboard = half_span * (1.0 - design.ruddervator_span_percent / 100.0)
-        y_outboard = half_span
-        rudv_span = y_outboard - y_inboard
+        y_inboard_local = half_span * (1.0 - design.ruddervator_span_percent / 100.0)
+        y_outboard_local = half_span
+        rudv_span_local = y_outboard_local - y_inboard_local
 
-        if rudv_span <= 0:
+        if rudv_span_local <= 0:
             return v_tail_solid, None
 
-        x_hinge = v_tail_chord * (1.0 - rudv_chord_frac)
+        # Sweep-corrected hinge X at midspan (in V-tail surface local frame)
+        y_mid_local = (y_inboard_local + y_outboard_local) / 2.0
+        x_le_mid = y_mid_local * math.tan(sweep_rad)
+        x_hinge = x_le_mid + v_tail_chord * (1.0 - rudv_chord_frac)
+
+        # V-tail surface thickness ≈ 9% of chord (thinner than wing)
         v_tail_thickness = v_tail_chord * 0.09 * 3.0
 
         cutter_chord = v_tail_chord * rudv_chord_frac + HINGE_GAP
         cutter_x_center = x_hinge + (cutter_chord / 2.0) - HINGE_GAP
 
-        # For V-tail: spanwise axis is tilted. Use cutter in local XY frame
-        # (before dihedral).  Project midpoint to 3D Y/Z position.
-        y_mid_local = (y_inboard + y_outboard) / 2.0
+        # The V-tail spanwise axis is tilted by dihedral_rad from horizontal.
+        # Map midpoint local-Y → world (Y, Z) using dihedral rotation.
         y_3d = y_sign * y_mid_local * math.cos(dihedral_rad)
         z_3d = y_mid_local * math.sin(dihedral_rad)
 
-        # Spanwise extent in 3D
-        rudv_span_y = rudv_span * math.cos(dihedral_rad)
-        rudv_span_z = rudv_span * math.sin(dihedral_rad)
-        # Use a box along the spanwise projection
-        rudv_span_3d = math.sqrt(rudv_span_y**2 + rudv_span_z**2)
+        # Ruddervator span projected to world Y/Z components
+        rudv_span_y_world = rudv_span_local * math.cos(dihedral_rad)
+        rudv_span_z_world = rudv_span_local * math.sin(dihedral_rad)
 
+        # Build cutter rotated in the V-tail surface plane.
+        # Place it at the 3D midpoint, rotated about X-axis by dihedral_rad.
+        dihedral_deg = design.v_tail_dihedral
         cutter = (
             cq.Workplane("XY")
-            .transformed(offset=(cutter_x_center, y_3d, z_3d))
-            .box(cutter_chord, rudv_span_y + HINGE_GAP, v_tail_thickness)
+            .transformed(
+                offset=(cutter_x_center, y_3d, z_3d),
+                rotate=(dihedral_deg, 0.0, 0.0),
+            )
+            .box(cutter_chord, rudv_span_local + HINGE_GAP, v_tail_thickness)
         )
 
         v_tail_body = v_tail_solid.cut(cutter)
@@ -457,8 +495,11 @@ def _cut_single_ruddervator(
 
         rudv_solid = (
             cq.Workplane("XY")
-            .transformed(offset=(rud_x_center, y_3d, z_3d))
-            .box(rud_chord, rudv_span_y - HINGE_GAP * 2, v_tail_thickness)
+            .transformed(
+                offset=(rud_x_center, y_3d, z_3d),
+                rotate=(dihedral_deg, 0.0, 0.0),
+            )
+            .box(rud_chord, rudv_span_local - HINGE_GAP * 2, v_tail_thickness)
         )
         rudv_solid = rudv_solid.intersect(v_tail_solid)
 
