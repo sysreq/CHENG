@@ -278,8 +278,8 @@ export function GlobalPanel(): React.JSX.Element {
 
   return (
     <div className="p-3">
-      {/* ── Preset Selector ─────────────────────────────────────────── */}
-      <div className="mb-4">
+      {/* ── Preset Section Card (#205) ────────────────────────────────── */}
+      <div className="mb-4 p-2.5 bg-zinc-800/40 border border-zinc-700/50 rounded-lg">
         <label className="block text-xs font-medium text-zinc-300 mb-1">Preset</label>
         <select
           value={activePreset}
@@ -338,7 +338,6 @@ export function GlobalPanel(): React.JSX.Element {
             </AlertDialog.Content>
           </AlertDialog.Portal>
         </AlertDialog.Root>
-      </div>
 
       {/* ── Save as Preset Button ────────────────────────────────────── */}
       <button
@@ -476,6 +475,7 @@ export function GlobalPanel(): React.JSX.Element {
           </AlertDialog.Content>
         </AlertDialog.Portal>
       </AlertDialog.Root>
+      </div>
 
       {/* ── Separator ───────────────────────────────────────────────── */}
       <div className="border-t border-zinc-700/50 mb-3 mt-3" />
