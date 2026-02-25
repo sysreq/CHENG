@@ -12,6 +12,9 @@ import logging
 from collections import defaultdict
 from pathlib import Path
 
+import asyncio
+import threading
+
 import anyio
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -39,6 +42,19 @@ router = APIRouter(prefix="/api", tags=["export"])
 
 _assembly_cache: dict[str, dict] = {}
 _MAX_CACHE = 4
+# #256: threading.Lock protects the cache for calls from the thread pool.
+# The asyncio.Lock below protects the async (event-loop) path.
+_assembly_cache_thread_lock = threading.Lock()
+# Lazily initialized asyncio.Lock — cannot be created at module level (no event loop yet).
+_assembly_cache_lock: asyncio.Lock | None = None
+
+
+def _get_cache_lock() -> asyncio.Lock:
+    """Return (creating on first call) the module-level cache lock."""
+    global _assembly_cache_lock
+    if _assembly_cache_lock is None:
+        _assembly_cache_lock = asyncio.Lock()
+    return _assembly_cache_lock
 
 
 def _design_cache_key(design: AircraftDesign) -> str:
@@ -46,21 +62,73 @@ def _design_cache_key(design: AircraftDesign) -> str:
     return hashlib.md5(design.model_dump_json().encode()).hexdigest()
 
 
-def _get_or_assemble(design: AircraftDesign) -> dict:
-    """Return cached assembled components or run assemble_aircraft."""
-    key = _design_cache_key(design)
-    if key in _assembly_cache:
-        logger.debug("Assembly cache hit for key %s", key[:8])
-        return _assembly_cache[key]
+def _get_or_assemble_sync(design: AircraftDesign) -> dict:
+    """Return cached assembled components or run assemble_aircraft (thread-safe).
 
+    Uses a threading.Lock so concurrent thread-pool callers (up to 4 via
+    CapacityLimiter) do not race on _assembly_cache.  Assembly itself is
+    performed outside the lock to avoid blocking other threads while CadQuery
+    runs (double-checked locking pattern).
+    """
+    key = _design_cache_key(design)
+
+    with _assembly_cache_thread_lock:
+        if key in _assembly_cache:
+            logger.debug("Assembly cache hit for key %s", key[:8])
+            return _assembly_cache[key]
+
+    # Assemble without holding the lock — CadQuery is the expensive part
     components = assemble_aircraft(design)
 
-    # Evict oldest entry if cache is full
-    if len(_assembly_cache) >= _MAX_CACHE:
-        _assembly_cache.pop(next(iter(_assembly_cache)))
+    with _assembly_cache_thread_lock:
+        # Re-check in case another thread assembled the same design concurrently
+        if key not in _assembly_cache:
+            if len(_assembly_cache) >= _MAX_CACHE:
+                _assembly_cache.pop(next(iter(_assembly_cache)))
+            _assembly_cache[key] = components
+        return _assembly_cache[key]
 
-    _assembly_cache[key] = components
-    return components
+
+def _get_or_assemble(design: AircraftDesign) -> dict:
+    """Return cached assembled components or run assemble_aircraft.
+
+    This synchronous form is used from blocking thread-pool tasks.  The
+    asyncio lock cannot be acquired from a thread, but CadQuery's own
+    CapacityLimiter(4) already ensures at most 4 threads run concurrently.
+    For the async (event-loop) path use ``_get_or_assemble_async``.
+    """
+    return _get_or_assemble_sync(design)
+
+
+async def _get_or_assemble_async(design: AircraftDesign) -> dict:
+    """Async wrapper that protects _assembly_cache with an asyncio.Lock.
+
+    Use this from async endpoint code (preview, export) so that concurrent
+    HTTP requests do not race on the shared cache dict.
+    """
+    async with _get_cache_lock():
+        key = _design_cache_key(design)
+        if key in _assembly_cache:
+            logger.debug("Assembly cache hit (async) for key %s", key[:8])
+            return _assembly_cache[key]
+
+    # Assemble outside the lock — this is the expensive blocking call.
+    # We accept the rare case of two concurrent misses racing to assemble;
+    # the second write is a no-op overwrite of an identical result.
+    components = await anyio.to_thread.run_sync(
+        lambda: assemble_aircraft(design),
+        limiter=_cadquery_limiter,
+        abandon_on_cancel=True,
+    )
+
+    async with _get_cache_lock():
+        # Double-check: another coroutine may have populated the cache while
+        # we were assembling.
+        if key not in _assembly_cache:
+            if len(_assembly_cache) >= _MAX_CACHE:
+                _assembly_cache.pop(next(iter(_assembly_cache)))
+            _assembly_cache[key] = components
+        return _assembly_cache[key]
 
 
 def clear_assembly_cache() -> None:
@@ -334,17 +402,23 @@ def _export_blocking(design: AircraftDesign, export_format: str = "stl") -> Path
     """Synchronous export pipeline -- runs in thread pool.
 
     Routes to the appropriate export handler based on format.
+
+    #257: STL export re-assembles via _generate_sections() -> _get_or_assemble()
+    internally, so we skip the top-level _get_or_assemble() call for "stl" to
+    avoid redundant assembly work.  STEP/DXF/SVG all need the assembled
+    components dict directly, so they keep the cache lookup.
     """
+    if export_format == "stl":
+        return _export_stl_blocking(design)
+
     components = _get_or_assemble(design)
 
     if export_format == "step":
         return build_step_zip(components, design)
     elif export_format == "dxf":
         return build_dxf_zip(components, design)
-    elif export_format == "svg":
+    else:  # svg
         return build_svg_zip(components, design)
-    else:
-        return _export_stl_blocking(design)
 
 
 def _export_stl_blocking(design: AircraftDesign) -> Path:

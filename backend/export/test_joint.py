@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import tempfile
+import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -282,7 +283,9 @@ def build_test_joint_zip(
         zf.writestr("test_joint_socket.stl", socket_stl)
         zf.writestr("manifest.json", json.dumps(manifest, indent=2))
 
-    final_path = tmp_dir / "cheng_test_joint.zip"
+    # #260: use a per-request unique filename to prevent concurrent-export collisions
+    unique_suffix = uuid.uuid4().hex[:8]
+    final_path = tmp_dir / f"cheng_test_joint_{unique_suffix}.zip"
     try:
         tmp_path.rename(final_path)
     except OSError:
