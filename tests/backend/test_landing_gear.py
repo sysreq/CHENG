@@ -132,6 +132,82 @@ def test_taildragger_gear_components_not_none():
         assert result.get(key) is not None, f"{key} was None — CadQuery operation failed"
 
 
+def test_taildragger_tail_gear_has_strut():
+    """Taildragger gear_tail component must have a strut connecting it to the fuselage.
+
+    The assembly Z extent calculation:
+    - Strut occupies Z=0 (top) to Z=-strut_height (bottom).
+    - Wheel (rolling axis = Y, major_r = wheel_dia/2) placed at axle Z=-strut_height.
+      Wheel torus Z range = -(strut_height + major_r) to -(strut_height - major_r).
+    - Union bounding box: Z from -(strut_height + major_r) to 0.
+    - Z extent = strut_height + major_r = strut_height + wheel_dia/2.
+
+    With formula strut_height = max(12, wheel_dia*0.75):
+    - For wheel_dia=20mm: strut_height = max(12, 15) = 15mm.
+      Z extent = 15 + 10 = 25mm > wheel_dia=20mm.
+
+    A bare wheel alone has Z extent = wheel_dia (= 2 * major_r).
+    With strut_height > wheel_dia/2, Z extent = strut_height + wheel_dia/2 > wheel_dia.
+    We verify: Z extent > wheel_dia confirms the strut visibly extends above the wheel.
+    """
+    pytest.importorskip("cadquery", reason="CadQuery not installed")
+    from backend.geometry.landing_gear import generate_landing_gear
+
+    tail_wheel_dia = 20.0  # strut_height = max(12, 15) = 15mm → z_extent = 25mm
+    design = make_taildragger_design(tail_wheel_diameter=tail_wheel_dia)
+    result = generate_landing_gear(design)
+
+    gear_tail = result.get("gear_tail")
+    if gear_tail is None:
+        pytest.skip("gear_tail is None — CadQuery geometry failed")
+
+    bb = gear_tail.val().BoundingBox()
+    z_extent = bb.zmax - bb.zmin
+
+    # A bare wheel alone would have Z extent == wheel_dia (= 20mm).
+    # With a strut (height > wheel_radius), Z extent = strut_height + wheel_dia/2 > wheel_dia.
+    assert z_extent > tail_wheel_dia, (
+        f"gear_tail Z extent {z_extent:.1f}mm is not greater than wheel_dia "
+        f"{tail_wheel_dia:.1f}mm — strut may be missing"
+    )
+
+
+def test_taildragger_tail_gear_strut_proportional_to_wheel():
+    """Tail strut height scales with wheel diameter (strut_height = max(12, wheel_dia*0.75)).
+
+    The expected Z extent formula: strut_height + wheel_dia/2.
+    - For wheel_dia=40mm: strut_height = max(12, 30) = 30mm, Z extent = 30 + 20 = 50mm.
+    - For wheel_dia=8mm:  strut_height = max(12, 6) = 12mm,  Z extent = 12 + 4 = 16mm.
+    Both exceed their respective wheel_dia, confirming the strut is larger than the wheel radius.
+    """
+    pytest.importorskip("cadquery", reason="CadQuery not installed")
+    from backend.geometry.landing_gear import generate_landing_gear
+
+    # Large wheel case
+    large_dia = 40.0
+    design_large = make_taildragger_design(tail_wheel_diameter=large_dia)
+    result_large = generate_landing_gear(design_large)
+    gear_tail_large = result_large.get("gear_tail")
+    if gear_tail_large is not None:
+        bb_large = gear_tail_large.val().BoundingBox()
+        z_large = bb_large.zmax - bb_large.zmin
+        assert z_large > large_dia, (
+            f"Large-wheel gear_tail Z extent {z_large:.1f}mm <= wheel_dia {large_dia:.1f}mm"
+        )
+
+    # Small wheel case
+    small_dia = 8.0
+    design_small = make_taildragger_design(tail_wheel_diameter=small_dia)
+    result_small = generate_landing_gear(design_small)
+    gear_tail_small = result_small.get("gear_tail")
+    if gear_tail_small is not None:
+        bb_small = gear_tail_small.val().BoundingBox()
+        z_small = bb_small.zmax - bb_small.zmin
+        assert z_small > small_dia, (
+            f"Small-wheel gear_tail Z extent {z_small:.1f}mm <= wheel_dia {small_dia:.1f}mm"
+        )
+
+
 # ---------------------------------------------------------------------------
 # 4. Bounding box height check
 # ---------------------------------------------------------------------------

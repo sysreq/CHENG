@@ -153,6 +153,39 @@ def _build_nose_strut(
         return None
 
 
+def _build_tail_strut(
+    cq_mod: type,
+    height: float,
+    wheel_dia: float,
+) -> "cq.Workplane | None":
+    """Build a short vertical strut for the tail wheel.
+
+    The tail strut is a simple vertical rectangular extrusion downward,
+    similar to the nose strut but with a narrower cross-section (the aft
+    fuselage is narrower than the forward fuselage).
+
+    Cross-section: strut_w × strut_d where strut_w is 15% of wheel diameter
+    (minimum 4mm) and strut_d is 60% of strut_w.
+
+    The strut occupies Z=0 (fuselage bottom mount) down to Z=-height.
+
+    Returns None if CadQuery operation fails.
+    """
+    cq = cq_mod
+    try:
+        strut_w = max(4.0, wheel_dia * 0.15)  # 15% of wheel dia, min 4mm
+        strut_d = strut_w * 0.6              # slightly thinner fore-aft
+
+        strut = (
+            cq.Workplane("XY")
+            .rect(strut_d, strut_w)
+            .extrude(-height)  # negative = downward (-Z)
+        )
+        return strut
+    except Exception:
+        return None
+
+
 def _assemble_main_gear_unit(
     cq_mod: type,
     strut: "cq.Workplane",
@@ -331,19 +364,42 @@ def generate_landing_gear(
         tail_wheel_dia = design.tail_wheel_diameter
         tail_gear_x = fuse_len * (design.tail_gear_position / 100.0)
 
-        # Tail wheel rests on the ground; no separate height param.
-        # The wheel center is at Z = -tail_wheel_dia/2 (sitting on ground plane Z=0).
+        # Strut height: distance from fuselage bottom mount to wheel axle center.
+        # Must exceed the wheel radius (wheel_dia/2) so the strut visibly extends
+        # above the wheel in the viewport.  Use 75% of wheel diameter, min 12mm.
+        tail_strut_height = max(12.0, tail_wheel_dia * 0.75)
+
+        tail_strut = _build_tail_strut(cq, tail_strut_height, tail_wheel_dia)
         tail_wheel = _build_wheel(cq, tail_wheel_dia)
 
-        if tail_wheel is not None:
+        # Assemble strut + wheel:
+        #   - Strut occupies Z=0 (fuselage mount) down to Z=-tail_strut_height.
+        #   - Wheel center at Z=-tail_strut_height (axle at strut bottom).
+        #   - No Z shift applied — strut mounts directly at fuselage bottom (Z=0),
+        #     matching the nose gear and main gear assembly pattern.
+        if tail_strut is not None and tail_wheel is not None:
             try:
-                # Position: at tail gear X, centered on Y=0, wheel bottom touches ground
-                tail_wheel_positioned = tail_wheel.translate(
-                    (tail_gear_x, 0.0, -(tail_wheel_dia / 2.0))
-                )
-                components["gear_tail"] = tail_wheel_positioned
+                wheel_at_axle = tail_wheel.translate((0.0, 0.0, -tail_strut_height))
+                tail_assembly = tail_strut.union(wheel_at_axle)
             except Exception:
-                components["gear_tail"] = tail_wheel
+                # Union failed — fall back to strut alone or bare wheel
+                tail_assembly = tail_strut if tail_strut is not None else tail_wheel
+        elif tail_strut is not None:
+            tail_assembly = tail_strut
+        elif tail_wheel is not None:
+            tail_assembly = tail_wheel
+        else:
+            tail_assembly = None
+
+        if tail_assembly is not None:
+            try:
+                # Position at tail gear X, no Z shift — strut mount is at Z=0
+                # (fuselage bottom), matching the nose gear pattern.
+                components["gear_tail"] = tail_assembly.translate(
+                    (tail_gear_x, 0.0, 0.0)
+                )
+            except Exception:
+                components["gear_tail"] = tail_assembly
         else:
             components["gear_tail"] = None
 
