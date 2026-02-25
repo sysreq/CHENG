@@ -49,8 +49,8 @@ Containerized web app for designing 3D-printable RC aircraft. Users adjust param
 - **v0.5 (UX Polish):** Complete — 15 UX issues fixed (error boundary, disabled inputs, view shortcuts, preset UX). 70 Vitest tests.
 - **v0.6 (Validation):** Complete — Weight estimation, full CG calculator, V09-V13 structural, V24-V28 printability, WebSocket refactor, temp cleanup. 393 backend + 19 E2E tests.
 - **v0.7 (Advanced Geometry):** Complete — Multi-section wings W08-W11 (#143), control surfaces C01-C24 (#144), landing gear L01-L11 (#145), test joint export (#146), smart split optimizer (#147). 592 backend + 70 Vitest + 19 E2E tests. PRs #223-227.
+- **v0.7.x (Geometry & UI Bugfixes):** Complete — 12 issues (#212-#231) fixed. Flat-plate airfoil (#213), WebSocket serialization gap (root cause of #214-#216, #219, #229, #231), fuselage section sliders (#219), tail arm positioning (#212), pusher circle (#218), history debounce (#222), wing panel shading/selection (#228), landing gear panel tab (#230). ~600 backend + 80 Vitest + 19 E2E tests. PRs #232-#235.
 - **App is fully functional:** Geometry, preview, export, validation, Docker all working
-- **Active bugfixes (v0.7.x):** 12 issues (#212-#222, #228-#231) — geometry params not updating preview, flat-plate airfoil, pusher circle, panel selection, control surface preview, landing gear UI access
 
 ## Dev Scripts
 - `startup.ps1` — Builds frontend + starts both servers. Use `-r` for backend `--reload`.
