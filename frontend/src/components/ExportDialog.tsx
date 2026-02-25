@@ -469,6 +469,95 @@ function ExportPreviewPanel({
 }
 
 // ---------------------------------------------------------------------------
+// TestJointDiagram — schematic SVG of plug + socket
+// ---------------------------------------------------------------------------
+
+function TestJointDiagram({
+  jointType,
+  tolerance,
+  overlap,
+}: {
+  jointType: JointType;
+  tolerance: number;
+  overlap: number;
+}): React.JSX.Element {
+  // Simple SVG: two rectangles representing the plug and socket with joint interface
+  const svgW = 240;
+  const svgH = 80;
+  const blockW = 90;
+  const blockH = 50;
+  const ox = (svgW - blockW * 2 - 20) / 2;
+  const oy = (svgH - blockH) / 2;
+
+  return (
+    <svg
+      width={svgW}
+      height={svgH}
+      className="w-full bg-zinc-800/50 border border-zinc-700/50 rounded"
+    >
+      {/* Part A (plug) */}
+      <rect x={ox} y={oy} width={blockW} height={blockH}
+        fill="#4a9eff22" stroke="#4a9eff" strokeWidth={1} rx={2} />
+      <text x={ox + blockW / 2} y={oy + blockH / 2 + 4}
+        textAnchor="middle" fontSize={9} fill="#4a9eff">Plug</text>
+
+      {/* Part B (socket) */}
+      <rect x={ox + blockW + 20} y={oy} width={blockW} height={blockH}
+        fill="#22c55e22" stroke="#22c55e" strokeWidth={1} rx={2} />
+      <text x={ox + blockW + 20 + blockW / 2} y={oy + blockH / 2 + 4}
+        textAnchor="middle" fontSize={9} fill="#22c55e">Socket</text>
+
+      {/* Joint interface visualization */}
+      {jointType === 'Tongue-and-Groove' && (
+        <>
+          {/* Tongue protruding from plug into the gap */}
+          <rect
+            x={ox + blockW - 1}
+            y={oy + blockH * 0.3}
+            width={22}
+            height={blockH * 0.4}
+            fill="#f59e0b44"
+            stroke="#f59e0b"
+            strokeWidth={1}
+          />
+        </>
+      )}
+      {jointType === 'Dowel-Pin' && (
+        <>
+          <circle cx={ox + blockW + 10} cy={oy + blockH * 0.35} r={3} fill="#f59e0b" />
+          <circle cx={ox + blockW + 10} cy={oy + blockH * 0.65} r={3} fill="#f59e0b" />
+        </>
+      )}
+      {jointType === 'Flat-with-Alignment-Pins' && (
+        <>
+          <line
+            x1={ox + blockW} y1={oy} x2={ox + blockW + 20} y2={oy + blockH}
+            stroke="#555" strokeWidth={1} strokeDasharray="3 2" />
+          <circle cx={ox + blockW + 10} cy={oy + blockH * 0.5} r={3} fill="#f59e0b" />
+        </>
+      )}
+
+      {/* Dimension annotation: overlap */}
+      <line
+        x1={ox + blockW - Math.min(overlap * 0.3, 15)}
+        y1={oy + blockH + 8}
+        x2={ox + blockW + 20 + Math.min(overlap * 0.3, 15)}
+        y2={oy + blockH + 8}
+        stroke="#888" strokeWidth={0.5} />
+      <text
+        x={ox + blockW + 10}
+        y={oy + blockH + 17}
+        textAnchor="middle"
+        fontSize={8}
+        fill="#888">
+        {overlap}mm overlap ±{tolerance.toFixed(2)}mm
+      </text>
+    </svg>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -484,6 +573,11 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [previewData, setPreviewData] = useState<ExportPreviewResponse | null>(null);
+
+  // Test Joint (#146) state
+  const [isExportingTestJoint, setIsExportingTestJoint] = useState(false);
+  const [testJointError, setTestJointError] = useState<string | null>(null);
+  const [testJointSuccess, setTestJointSuccess] = useState(false);
 
   const { structural, print } = groupWarningsByCategory(warnings);
 
@@ -523,6 +617,8 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
       setPreviewData(null);
       setExportError(null);
       setExportSuccess(false);
+      setTestJointError(null);
+      setTestJointSuccess(false);
     }
   }, [open]);
 
@@ -679,6 +775,50 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
       setIsExporting(false);
     }
   }, [design, selectedFormat]);
+
+  // ── Test Joint Export handler (#146) ─────────────────────────────────────
+
+  const handleTestJointExport = useCallback(async () => {
+    setIsExportingTestJoint(true);
+    setTestJointError(null);
+    setTestJointSuccess(false);
+
+    try {
+      const res = await fetch('/api/export/test-joint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jointType: design.jointType,
+          jointTolerance: design.jointTolerance,
+          sectionOverlap: design.sectionOverlap,
+          nozzleDiameter: design.nozzleDiameter,
+        }),
+      });
+
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        throw new Error(detail || `Test joint export failed (${res.status})`);
+      }
+
+      // Trigger blob download
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'test_joint.zip';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setTestJointSuccess(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Test joint export failed';
+      setTestJointError(msg);
+    } finally {
+      setIsExportingTestJoint(false);
+    }
+  }, [design.jointType, design.jointTolerance, design.sectionOverlap, design.nozzleDiameter]);
 
   const handleBack = useCallback(() => {
     setStep('settings');
@@ -851,6 +991,74 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
                     onInputChange={setToleranceInput}
                     hasWarning={fieldHasWarning(warnings, 'jointTolerance')}
                   />
+
+                  {/* ── Test Joint (#146) ─────────────────────────────────── */}
+                  <div className="mt-3 mb-3 p-3 bg-zinc-800/40 border border-zinc-700/50 rounded-lg">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex-1">
+                        <p className="text-xs font-semibold text-zinc-200 mb-0.5">
+                          Print Test Joint
+                        </p>
+                        <p className="text-[10px] text-zinc-400 leading-relaxed">
+                          Print this small test piece to verify your joint tolerance fits before
+                          printing the full plane. Takes ~15–30 min on a typical FDM printer.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Current joint settings summary */}
+                    <div className="grid grid-cols-3 gap-1.5 mb-3">
+                      <div className="px-2 py-1 text-[10px] text-zinc-300 bg-zinc-800 border border-zinc-700/50 rounded text-center">
+                        <div className="text-zinc-500 mb-0.5">Type</div>
+                        {design.jointType.split('-')[0]}
+                      </div>
+                      <div className="px-2 py-1 text-[10px] text-zinc-300 bg-zinc-800 border border-zinc-700/50 rounded text-center">
+                        <div className="text-zinc-500 mb-0.5">Tolerance</div>
+                        ±{design.jointTolerance.toFixed(2)} mm
+                      </div>
+                      <div className="px-2 py-1 text-[10px] text-zinc-300 bg-zinc-800 border border-zinc-700/50 rounded text-center">
+                        <div className="text-zinc-500 mb-0.5">Overlap</div>
+                        {design.sectionOverlap} mm
+                      </div>
+                    </div>
+
+                    {/* Schematic diagram */}
+                    <TestJointDiagram
+                      jointType={design.jointType}
+                      tolerance={design.jointTolerance}
+                      overlap={design.sectionOverlap}
+                    />
+
+                    {/* Download button */}
+                    <button
+                      onClick={handleTestJointExport}
+                      disabled={isExportingTestJoint}
+                      className="w-full mt-3 px-4 py-2 text-xs font-medium text-zinc-100
+                        bg-emerald-700 hover:bg-emerald-600 rounded
+                        focus:outline-none focus:ring-2 focus:ring-emerald-400
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                        inline-flex items-center justify-center gap-1.5
+                        transition-colors"
+                    >
+                      {isExportingTestJoint ? (
+                        <>
+                          <span className="generating-spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                          Generating Test Joint...
+                        </>
+                      ) : (
+                        'Download Test Joint (ZIP)'
+                      )}
+                    </button>
+
+                    {testJointSuccess && (
+                      <p className="mt-2 text-[10px] text-emerald-300 text-center">
+                        Downloaded. Print and check the fit before exporting the full plane.
+                      </p>
+                    )}
+                    {testJointError && (
+                      <p className="mt-2 text-[10px] text-red-400">{testJointError}</p>
+                    )}
+                  </div>
 
                   {/* ── Print Settings ───────────────────────────────────── */}
                   <div className="border-t border-zinc-700/50 my-3" />

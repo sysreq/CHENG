@@ -26,6 +26,7 @@ from backend.models import (
     ExportRequest,
     ExportPreviewPart,
     ExportPreviewResponse,
+    TestJointExportRequest,
 )
 
 logger = logging.getLogger("cheng.export")
@@ -146,6 +147,52 @@ def _fits_on_bed(
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+
+@router.post("/export/test-joint")
+async def export_test_joint(request: TestJointExportRequest) -> FileResponse:
+    """Generate a test joint print piece and return as ZIP.
+
+    Produces two small STL files (plug + socket) that replicate the production
+    tongue-and-groove joint profile.  Useful for printer fit calibration before
+    committing to a full aircraft print.
+
+    ZIP contents:
+      test_joint_plug.stl    — tongue side (40 x overlap x 40 mm)
+      test_joint_socket.stl  — groove side (40 x overlap x 40 mm)
+      manifest.json          — joint settings + instructions
+
+    Pipeline:
+      1. generate_test_joint_pieces() in thread pool (CadQuery limiter)
+      2. tessellate + ZIP in same thread
+      3. stream FileResponse with background cleanup
+    """
+    from backend.export.test_joint import build_test_joint_zip
+
+    EXPORT_TMP_DIR.mkdir(parents=True, exist_ok=True)
+
+    try:
+        zip_path = await anyio.to_thread.run_sync(
+            lambda: build_test_joint_zip(
+                section_overlap=request.section_overlap,
+                joint_tolerance=request.joint_tolerance,
+                nozzle_diameter=request.nozzle_diameter,
+                tmp_dir=EXPORT_TMP_DIR,
+                joint_type=request.joint_type,
+            ),
+            limiter=_cadquery_limiter,
+            abandon_on_cancel=True,
+        )
+    except Exception as exc:
+        logger.exception("Test joint export failed")
+        raise HTTPException(status_code=500, detail=f"Test joint export failed: {exc}") from exc
+
+    return FileResponse(
+        path=str(zip_path),
+        media_type="application/zip",
+        filename="test_joint.zip",
+        background=BackgroundTask(lambda: zip_path.unlink(missing_ok=True)),
+    )
 
 
 @router.post("/export")
