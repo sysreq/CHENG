@@ -428,7 +428,7 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
               >
                 <meshBasicMaterial transparent opacity={0} depthWrite={false} />
               </mesh>
-              {hoveredComponent === key && geom.boundingSphere && (
+              {(hoveredComponent as string) === key && geom.boundingSphere && (
                 <Html
                   position={[
                     geom.boundingSphere.center.x,
