@@ -186,20 +186,25 @@ class TestFindSmartSplitPosition:
         assert abs(z_max - z_min - 2 * _FUSE_WING_ZONE_MM) < 1e-6
 
     def test_wing_zones_structure(self) -> None:
-        """Wing avoidance zones include root zone and tip zone."""
-        from backend.export.section import _compute_avoidance_zones, _ROOT_ZONE_MM, _TIP_ZONE_MM
+        """Wing avoidance zones include root zone at both ends of the component span.
+
+        After the Gemini-review fix (Issue #147): both ends of the wing span are
+        protected with ROOT_ZONE_MM to handle left-wing (root at axis_max) and
+        right-wing (root at axis_min) correctly without needing to know 'side'.
+        """
+        from backend.export.section import _compute_avoidance_zones, _ROOT_ZONE_MM
         from backend.models import AircraftDesign
 
         design = AircraftDesign(wing_span=1000)
         zones = _compute_avoidance_zones(design, "wing", 1, 0.0, 500.0)
         assert len(zones) >= 2, f"Expected at least 2 wing zones, got {len(zones)}"
-        # Root zone: (0, 15)
-        root_zone = zones[0]
-        assert root_zone == (0.0, _ROOT_ZONE_MM), f"Root zone mismatch: {root_zone}"
-        # Tip zone: (500 - 30, 500)
-        tip_zone = zones[-1]
-        assert abs(tip_zone[0] - (500.0 - _TIP_ZONE_MM)) < 1e-6
-        assert abs(tip_zone[1] - 500.0) < 1e-6
+        # Zone at min end: (0, ROOT_ZONE_MM)
+        root_min_zone = zones[0]
+        assert root_min_zone == (0.0, _ROOT_ZONE_MM), f"Root-min zone mismatch: {root_min_zone}"
+        # Zone at max end: (500 - ROOT_ZONE_MM, 500)
+        root_max_zone = zones[1]
+        assert abs(root_max_zone[0] - (500.0 - _ROOT_ZONE_MM)) < 1e-6
+        assert abs(root_max_zone[1] - 500.0) < 1e-6
 
     def test_fuselage_wing_zone_not_split_in_zone(self) -> None:
         """_find_smart_split_position avoids the fuselage saddle zone when possible."""
@@ -587,4 +592,43 @@ class TestEdgeCases:
 
         assert _SEARCH_OFFSETS == [0.0, 10.0, -10.0, 20.0, -20.0], (
             f"Search offsets do not match spec: {_SEARCH_OFFSETS}"
+        )
+
+    def test_auto_section_with_meta_returns_four_tuple(self) -> None:
+        """auto_section_with_meta returns (solid, axis, split_pos, zone_hit) tuples."""
+        from backend.export.section import auto_section_with_meta
+        from backend.models import AircraftDesign
+
+        design = AircraftDesign(wing_span=1200)
+        solid = _make_box(200, 600, 30, center=(0, 300, 0))
+        results = auto_section_with_meta(
+            solid, bed_x=220, bed_y=220, bed_z=250,
+            design=design, component="wing",
+        )
+
+        assert len(results) >= 2
+        for item in results:
+            assert len(item) == 4, f"Expected 4-tuple, got {len(item)}-tuple"
+            _solid, split_axis, split_pos, zone_hit = item
+            assert split_axis in ("X", "Y", "Z"), f"Invalid axis: {split_axis}"
+            assert isinstance(split_pos, float), f"split_pos is not float: {type(split_pos)}"
+            assert isinstance(zone_hit, bool), f"zone_hit is not bool: {type(zone_hit)}"
+
+    def test_split_position_mm_nonzero_for_split_sections(self) -> None:
+        """split_position_mm should be non-zero for sections that resulted from a split."""
+        from backend.export.section import auto_section_with_meta
+        from backend.models import AircraftDesign
+
+        design = AircraftDesign(wing_span=1200)
+        solid = _make_box(200, 600, 30, center=(0, 300, 0))
+        results = auto_section_with_meta(
+            solid, bed_x=220, bed_y=220, bed_z=250,
+            design=design, component="wing",
+        )
+
+        # At least one section should have a non-zero split_position_mm
+        # (the split did happen at some coordinate)
+        split_positions = [item[2] for item in results]
+        assert any(abs(p) > 0.1 for p in split_positions), (
+            f"All split positions are zero: {split_positions}"
         )

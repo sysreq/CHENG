@@ -117,7 +117,7 @@ def auto_section(
         ValueError: If bed dimensions minus margin <= 0.
         RuntimeError: If splitting fails after 20 recursion levels.
     """
-    results = auto_section_with_axis(
+    results = auto_section_with_meta(
         solid, bed_x, bed_y, bed_z, design=design, component=component
     )
     return [item[0] for item in results]
@@ -145,6 +145,33 @@ def auto_section_with_axis(
         indicating which axis the section was cut along. For unsplit solids,
         the axis defaults to "Y".
     """
+    full = auto_section_with_meta(solid, bed_x, bed_y, bed_z, design=design, component=component)
+    return [(item[0], item[1]) for item in full]
+
+
+def auto_section_with_meta(
+    solid: cq.Workplane,
+    bed_x: float,
+    bed_y: float,
+    bed_z: float,
+    design: AircraftDesign | None = None,
+    component: str = "",
+) -> list[tuple[cq.Workplane, str, float, bool]]:
+    """Like auto_section_with_axis but also returns split metadata (Issue #147).
+
+    Args:
+        solid:  CadQuery Workplane to section.
+        bed_x/y/z: Print bed dimensions in mm.
+        design: Aircraft parameters for smart split optimization. When None,
+            falls back to pure midpoint (backward compatible).
+        component: Component name for avoidance zone selection.
+
+    Returns:
+        List of (solid, split_axis, split_position_mm, avoidance_zone_hit) tuples.
+        split_axis: "X", "Y", or "Z".
+        split_position_mm: Absolute coordinate of the split plane (0.0 if not split).
+        avoidance_zone_hit: True if the optimizer moved the split from midpoint.
+    """
     import cadquery as cq  # noqa: F811
 
     usable_x = bed_x - _JOINT_MARGIN_MM
@@ -157,9 +184,15 @@ def auto_section_with_axis(
             f"{_JOINT_MARGIN_MM} mm margin leave no usable volume."
         )
 
+    # Compute full-component bounding box ONCE at the top level and pass it
+    # through recursion so that avoidance zones stay stable (Gemini #1/#7 fix).
+    comp_bb = solid.val().BoundingBox()
+    comp_bbox = (comp_bb.xmin, comp_bb.ymin, comp_bb.zmin,
+                 comp_bb.xmax, comp_bb.ymax, comp_bb.zmax)
+
     return _recursive_section(
         cq, solid, usable_x, usable_y, usable_z, depth=0,
-        design=design, component=component,
+        design=design, component=component, comp_bbox=comp_bbox,
     )
 
 
@@ -196,22 +229,26 @@ def _compute_avoidance_zones(
     design: AircraftDesign,
     component: str,
     axis: int,
-    axis_min: float,
-    axis_max: float,
+    comp_axis_min: float,
+    comp_axis_max: float,
 ) -> list[tuple[float, float]]:
     """Return list of (zone_min, zone_max) avoidance zones for the split axis.
 
-    Coordinates are in the solid's local bounding-box coordinate space
-    (i.e., the absolute axis values from the solid's BoundingBox, not
-    normalised or relative).
+    IMPORTANT: ``comp_axis_min`` / ``comp_axis_max`` must be the bounding-box
+    extents of the *full* component (not a sub-piece), so that zone positions
+    remain stable across recursive splits.  The zones are expressed as absolute
+    coordinates along the same axis, so they can be compared directly against
+    any candidate split position (even one inside a sub-piece).
 
     Wing (axis=1, spanwise Y):
-        - Zone A: Root attachment region (first ROOT_ZONE_MM from root face).
+        - Zone A: Both ends of the full-component extent, ±ROOT_ZONE_MM.
+          (covers left-wing root at max-Y and right-wing root at min-Y alike)
         - Zone B: Panel break positions ±PANEL_BREAK_ZONE_MM (if wing_sections > 1).
-        - Zone C: Near-tip region (last TIP_ZONE_MM before tip face).
+        - Zone C: Near-tip regions at BOTH extremes (TIP_ZONE_MM inward).
 
     Fuselage (axis=0, fore-aft X):
-        - Zone D: Wing-mount saddle ±FUSE_WING_ZONE_MM around the saddle X position.
+        - Zone D: Wing-mount saddle ±FUSE_WING_ZONE_MM around the absolute
+          saddle position (wing_x_frac * fuselage_length from axis_min).
     """
     zones: list[tuple[float, float]] = []
 
@@ -221,40 +258,43 @@ def _compute_avoidance_zones(
         comp = "wing"
 
     if comp == "wing" and axis == 1:  # Y-axis (spanwise)
-        # Zone A: root attachment — first ROOT_ZONE_MM from the root face (axis_min)
-        zones.append((axis_min, axis_min + _ROOT_ZONE_MM))
+        # Zone A: Root attachment — protect BOTH ends of the full-component span.
+        # Right wing: root is at comp_axis_min (Y≈0), tip at comp_axis_max.
+        # Left  wing: root is at comp_axis_max (Y≈0), tip at comp_axis_min (negative).
+        # By adding zones at both ends we handle both orientations correctly.
+        zones.append((comp_axis_min, comp_axis_min + _ROOT_ZONE_MM))
+        zones.append((comp_axis_max - _ROOT_ZONE_MM, comp_axis_max))
 
         # Zone B: panel break positions (requires wing_sections + panel_break_positions)
         wing_sections = getattr(design, "wing_sections", 1)
         if wing_sections > 1:
             panel_break_positions = getattr(design, "panel_break_positions", [])
-            half_span = design.wing_span / 2.0
-            span_extent = axis_max - axis_min
+            span_extent = comp_axis_max - comp_axis_min
             for frac in panel_break_positions:
-                # Scale break fraction over the bounding-box extent
-                break_local = axis_min + (frac / 100.0) * span_extent
+                # Scale break fraction over the full-component extent
+                break_absolute = comp_axis_min + (frac / 100.0) * span_extent
                 zones.append((
-                    break_local - _PANEL_BREAK_ZONE_MM,
-                    break_local + _PANEL_BREAK_ZONE_MM,
+                    break_absolute - _PANEL_BREAK_ZONE_MM,
+                    break_absolute + _PANEL_BREAK_ZONE_MM,
                 ))
 
-        # Zone C: near-tip region — last TIP_ZONE_MM before the tip face (axis_max)
-        zones.append((axis_max - _TIP_ZONE_MM, axis_max))
+        # Zone C is now incorporated into Zone A (both ends protected).
+        # The tip zone is the same as the "other end" root zone above.
 
     elif comp == "fuselage" and axis == 0:  # X-axis (fore-aft)
-        # Zone D: wing-mount saddle, computed from design params
+        # Zone D: wing-mount saddle.
+        # The saddle is at wing_x_frac * fuselage_length measured from the
+        # component's own bounding-box start (comp_axis_min).
         try:
             from backend.geometry.engine import _WING_X_FRACTION
             wing_x_frac = _WING_X_FRACTION.get(design.fuselage_preset, 0.30)
         except (ImportError, AttributeError):
             wing_x_frac = 0.30
 
-        # The fuselage solid starts at its own bounding-box origin.
-        # wing_x in model coords = fuselage_length * wing_x_frac from the nose.
-        # We map that onto the bounding-box extent:
-        span_extent = axis_max - axis_min
-        saddle_local = axis_min + (design.fuselage_length * wing_x_frac / design.fuselage_length) * span_extent
-        zones.append((saddle_local - _FUSE_WING_ZONE_MM, saddle_local + _FUSE_WING_ZONE_MM))
+        # Absolute saddle position: comp_axis_min + wing_x_frac * full_span
+        full_span = comp_axis_max - comp_axis_min
+        saddle_absolute = comp_axis_min + wing_x_frac * full_span
+        zones.append((saddle_absolute - _FUSE_WING_ZONE_MM, saddle_absolute + _FUSE_WING_ZONE_MM))
 
     return zones
 
@@ -264,6 +304,8 @@ def _find_smart_split_position(
     axis: int,
     design: AircraftDesign | None = None,
     component: str = "",
+    comp_axis_min: float | None = None,
+    comp_axis_max: float | None = None,
 ) -> tuple[float, bool]:
     """Find the optimal split position along the given axis.
 
@@ -272,18 +314,26 @@ def _find_smart_split_position(
     all offsets also hit avoidance zones (or if design=None).
 
     Avoidance zones (active when design is provided):
-        - Wing (axis=1): root attachment (15mm), near-tip (30mm), panel breaks (±8mm)
+        - Wing (axis=1): root attachment at both ends (15mm), panel breaks (±8mm)
         - Fuselage (axis=0): wing-mount saddle (±20mm)
+
+    Zones are computed from ``comp_axis_min``/``comp_axis_max`` (the FULL
+    component's bounding-box extent, not the current sub-piece's extent).
+    This ensures zone positions remain stable across recursive splits.
+    If not provided, falls back to the current solid's own bbox (correct only
+    for non-recursive callers such as tests).
 
     Minimum segment enforcement: candidates that would produce a section
     shorter than _MIN_SEGMENT_MM (30mm) are discarded. If no valid candidate
     remains after filtering, midpoint is returned as-is.
 
     Args:
-        solid:     CadQuery solid being split.
-        axis:      0=X, 1=Y, 2=Z.
-        design:    Aircraft parameters (for avoidance zones). None = pure midpoint.
-        component: Component name ('wing', 'fuselage', etc.) for zone selection.
+        solid:          CadQuery solid being split (the current sub-piece).
+        axis:           0=X, 1=Y, 2=Z.
+        design:         Aircraft parameters (for avoidance zones). None = pure midpoint.
+        component:      Component name ('wing', 'fuselage', etc.) for zone selection.
+        comp_axis_min:  Full-component bounding-box minimum along axis (from root call).
+        comp_axis_max:  Full-component bounding-box maximum along axis (from root call).
 
     Returns:
         Tuple of (split_position_mm, avoidance_zone_hit).
@@ -292,25 +342,31 @@ def _find_smart_split_position(
             to avoid a feature zone.
     """
     bb = _get_bounding_box(solid)
-    axis_min = bb[axis]
-    axis_max = bb[axis + 3]
+    axis_min = bb[axis]          # current sub-piece min (for midpoint + min-segment)
+    axis_max = bb[axis + 3]      # current sub-piece max (for midpoint + min-segment)
     midpoint = (axis_min + axis_max) / 2.0
 
     # When no design is available, fall back to pure midpoint (backward compat)
     if design is None:
         return midpoint, False
 
-    # Build avoidance zones in this solid's bounding-box coordinate space
-    zones = _compute_avoidance_zones(design, component, axis, axis_min, axis_max)
+    # Use the full-component bounds for zone computation if provided;
+    # fall back to the current solid's bounds (caller is responsible for passing these).
+    cmin = comp_axis_min if comp_axis_min is not None else axis_min
+    cmax = comp_axis_max if comp_axis_max is not None else axis_max
+
+    # Build avoidance zones from the full-component bounding-box coordinates
+    zones = _compute_avoidance_zones(design, component, axis, cmin, cmax)
 
     # No zones for this component/axis combination — use midpoint directly
     if not zones:
         return midpoint, False
 
-    # Build candidate positions: midpoint + search offsets
+    # Build candidate positions: midpoint of the CURRENT PIECE + search offsets
     candidates = [midpoint + off for off in _SEARCH_OFFSETS]
 
     # Filter to positions that leave at least _MIN_SEGMENT_MM on both sides
+    # of the CURRENT piece (not the full component).
     valid_candidates = [
         c for c in candidates
         if axis_min + _MIN_SEGMENT_MM <= c <= axis_max - _MIN_SEGMENT_MM
@@ -406,13 +462,20 @@ def _recursive_section(
     usable_z: float,
     depth: int,
     last_split_axis: str = "Y",
+    last_split_pos: float = 0.0,
+    last_zone_hit: bool = False,
     design: AircraftDesign | None = None,
     component: str = "",
-) -> list[tuple[cq.Workplane, str]]:
+    comp_bbox: tuple[float, float, float, float, float, float] | None = None,
+) -> list[tuple[cq.Workplane, str, float, bool]]:
     """Recursively split solid until all pieces fit the usable volume.
 
-    Returns list of (solid, split_axis) tuples where split_axis is the axis
-    along which the most recent split was performed ("X", "Y", or "Z").
+    Returns list of (solid, split_axis, split_position_mm, avoidance_zone_hit)
+    tuples where:
+        split_axis: axis of the most recent split ("X", "Y", or "Z").
+        split_position_mm: absolute coordinate of the split plane that produced
+            this section (0.0 for the root call if no split was needed).
+        avoidance_zone_hit: True if the optimizer moved the split from midpoint.
 
     Args:
         cq_mod:    The cadquery module.
@@ -420,8 +483,14 @@ def _recursive_section(
         usable_x/y/z: Usable bed dimensions (bed minus margin).
         depth:     Current recursion depth.
         last_split_axis: Axis of the most recent split (propagated to leaves).
+        last_split_pos: Split coordinate that produced the current fragment
+            (propagated to leaves so callers can read the cut position).
+        last_zone_hit: Whether the split producing this fragment was adjusted.
         design:    Aircraft parameters for smart split optimization (optional).
         component: Component name for avoidance zone selection (optional).
+        comp_bbox: Full-component bounding box (xmin,ymin,zmin,xmax,ymax,zmax)
+            from the root invocation. Passed unchanged through recursion so that
+            avoidance zones are computed against the whole component, not sub-pieces.
     """
     if depth > _MAX_RECURSION:
         raise RuntimeError(
@@ -436,18 +505,24 @@ def _recursive_section(
     # Check if it fits
     overshoot = [dims[i] - usable[i] for i in range(3)]
     if all(o <= 0 for o in overshoot):
-        return [(solid, last_split_axis)]
+        return [(solid, last_split_axis, last_split_pos, last_zone_hit)]
 
     # Find axis with largest overshoot
     axis = overshoot.index(max(overshoot))
     axis_name = _AXIS_NAMES[axis]
 
+    # Extract full-component bounding-box extents along this axis
+    comp_axis_min = comp_bbox[axis] if comp_bbox else None
+    comp_axis_max = comp_bbox[axis + 3] if comp_bbox else None
+
     # Determine split position using smart optimizer (or midpoint fallback)
-    split_pos, _zone_hit = _find_smart_split_position(
-        solid, axis, design=design, component=component
+    split_pos, zone_hit = _find_smart_split_position(
+        solid, axis, design=design, component=component,
+        comp_axis_min=comp_axis_min, comp_axis_max=comp_axis_max,
     )
 
     # Try bisecting at the chosen position
+    actual_split_pos = split_pos
     try:
         lower, upper = _bisect_solid(cq_mod, solid, axis, split_pos)
 
@@ -459,37 +534,40 @@ def _recursive_section(
             # Degenerate -- try midpoint + offset as fallback
             bb = _get_bounding_box(solid)
             midpoint = (bb[axis] + bb[axis + 3]) / 2.0
-            lower, upper = _bisect_solid(
-                cq_mod, solid, axis, midpoint + _SPLIT_OFFSET_MM
-            )
+            actual_split_pos = midpoint + _SPLIT_OFFSET_MM
+            lower, upper = _bisect_solid(cq_mod, solid, axis, actual_split_pos)
     except Exception:
         # If bisection fails, try with offset from midpoint
         try:
             bb = _get_bounding_box(solid)
             midpoint = (bb[axis] + bb[axis + 3]) / 2.0
-            lower, upper = _bisect_solid(
-                cq_mod, solid, axis, midpoint + _SPLIT_OFFSET_MM
-            )
+            actual_split_pos = midpoint + _SPLIT_OFFSET_MM
+            lower, upper = _bisect_solid(cq_mod, solid, axis, actual_split_pos)
         except Exception:
             # Last resort: try the other direction
             bb = _get_bounding_box(solid)
             midpoint = (bb[axis] + bb[axis + 3]) / 2.0
-            lower, upper = _bisect_solid(
-                cq_mod, solid, axis, midpoint - _SPLIT_OFFSET_MM
-            )
+            actual_split_pos = midpoint - _SPLIT_OFFSET_MM
+            lower, upper = _bisect_solid(cq_mod, solid, axis, actual_split_pos)
 
-    # Recurse on each half
-    result: list[tuple[cq.Workplane, str]] = []
+    # Recurse on each half — propagate the split position and full-component bbox
+    result: list[tuple[cq.Workplane, str, float, bool]] = []
     result.extend(
         _recursive_section(
-            cq_mod, lower, usable_x, usable_y, usable_z, depth + 1, axis_name,
-            design=design, component=component,
+            cq_mod, lower, usable_x, usable_y, usable_z, depth + 1,
+            last_split_axis=axis_name,
+            last_split_pos=actual_split_pos,
+            last_zone_hit=zone_hit,
+            design=design, component=component, comp_bbox=comp_bbox,
         )
     )
     result.extend(
         _recursive_section(
-            cq_mod, upper, usable_x, usable_y, usable_z, depth + 1, axis_name,
-            design=design, component=component,
+            cq_mod, upper, usable_x, usable_y, usable_z, depth + 1,
+            last_split_axis=axis_name,
+            last_split_pos=actual_split_pos,
+            last_zone_hit=zone_hit,
+            design=design, component=component, comp_bbox=comp_bbox,
         )
     )
 

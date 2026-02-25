@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
 from backend.geometry.engine import assemble_aircraft, _cadquery_limiter
-from backend.export.section import auto_section, auto_section_with_axis, create_section_parts, SectionPart
+from backend.export.section import auto_section, auto_section_with_axis, auto_section_with_meta, create_section_parts, SectionPart
 from backend.export.joints import add_tongue_and_groove
 from backend.export.package import build_zip, build_step_zip, build_dxf_zip, build_svg_zip, EXPORT_TMP_DIR
 from backend.models import (
@@ -98,9 +98,8 @@ def _generate_sections(design: AircraftDesign) -> list[SectionPart]:
         if comp_category in ("h", "v"):
             comp_category = comp_name.replace("_left", "").replace("_right", "")
 
-        # Use auto_section_with_axis to get split axis info (#163)
-        # Pass design + component for smart split-point optimization (#147)
-        pieces_with_axis = auto_section_with_axis(
+        # Use auto_section_with_meta to get split axis + smart split metadata (#147)
+        pieces_with_meta = auto_section_with_meta(
             solid,
             bed_x=design.print_bed_x,
             bed_y=design.print_bed_y,
@@ -108,8 +107,10 @@ def _generate_sections(design: AircraftDesign) -> list[SectionPart]:
             design=design,
             component=comp_category,
         )
-        pieces = [p[0] for p in pieces_with_axis]
-        split_axes = [p[1] for p in pieces_with_axis]
+        pieces = [p[0] for p in pieces_with_meta]
+        split_axes = [p[1] for p in pieces_with_meta]
+        split_positions = [p[2] for p in pieces_with_meta]
+        avoidance_hits = [p[3] for p in pieces_with_meta]
 
         section_parts = create_section_parts(
             comp_category,
@@ -117,6 +118,8 @@ def _generate_sections(design: AircraftDesign) -> list[SectionPart]:
             pieces,
             start_assembly_order=assembly_order,
             split_axes=split_axes,
+            split_positions=split_positions,
+            avoidance_hits=avoidance_hits,
         )
 
         all_sections.extend(section_parts)
