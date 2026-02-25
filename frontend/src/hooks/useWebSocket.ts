@@ -147,10 +147,12 @@ export function useWebSocket(): {
       }
 
       // If onerror already set 'error' state, preserve it briefly before
-      // starting reconnection so the UI can display the error (#193)
+      // starting reconnection so the UI can display the error (#193).
+      // Use reconnectTimerRef so the timeout is cleared on unmount/disconnect.
       const currentState = useConnectionStore.getState().state;
       if (currentState === 'error') {
-        setTimeout(() => {
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
           startReconnect();
         }, 1500);
         return;
