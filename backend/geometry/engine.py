@@ -205,12 +205,8 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
 
     aspect_ratio = (design.wing_span ** 2) / wing_area_mm2 if wing_area_mm2 > 0 else 0.0
 
-    mean_aero_chord_mm = (
-        (2.0 / 3.0)
-        * design.wing_chord
-        * (1.0 + lambda_ + lambda_ ** 2)
-        / (1.0 + lambda_)
-    ) if (1.0 + lambda_) > 0 else design.wing_chord
+    # MAC and y_mac: use cranked formula for multi-section wings (v0.7 #143)
+    mean_aero_chord_mm, y_mac = _compute_mac_cranked(design)
 
     taper_ratio = tip_chord_mm / design.wing_chord if design.wing_chord > 0 else 0.0
 
@@ -224,11 +220,7 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
 
     # Full CG calculator (v0.6 #139) — weighted average of all mass positions.
     # All X positions are measured from the aircraft nose (X=0).
-    half_span = design.wing_span / 2.0
     sweep_rad = math.radians(design.wing_sweep)
-    y_mac = (
-        (half_span / 3.0) * (1.0 + 2.0 * lambda_) / (1.0 + lambda_)
-    ) if (1.0 + lambda_) > 0 else 0.0
 
     estimated_cg_mm = _compute_cg(
         design, weights, mean_aero_chord_mm, y_mac, sweep_rad,
@@ -245,6 +237,88 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
         "wall_thickness_mm": wall_thickness_mm,
         **weights,
     }
+
+
+def _compute_mac_cranked(design: AircraftDesign) -> tuple[float, float]:
+    """Compute Mean Aerodynamic Chord and its spanwise position.
+
+    For single-section wings, uses the standard taper formula.
+    For multi-section (cranked) wings, computes the area-weighted MAC
+    across all panels (guidance doc §1.11).
+
+    Returns:
+        (mac_mm, y_mac_mm) — MAC length and its spanwise position from root.
+    """
+    n = design.wing_sections
+    root_chord = design.wing_chord
+    tip_chord = root_chord * design.wing_tip_root_ratio
+    half_span = design.wing_span / 2.0
+
+    if n <= 1:
+        # Classic single-panel formula
+        lam = design.wing_tip_root_ratio
+        if (1.0 + lam) == 0:
+            mac = root_chord
+        else:
+            mac = (2.0 / 3.0) * root_chord * (1.0 + lam + lam ** 2) / (1.0 + lam)
+        # Spanwise position of MAC from root
+        y_mac = (
+            (half_span / 3.0) * (1.0 + 2.0 * lam) / (1.0 + lam)
+            if (1.0 + lam) > 0 else 0.0
+        )
+        return mac, y_mac
+
+    # Multi-panel: build station list
+    n_breaks = n - 1
+    break_fracs = [
+        design.panel_break_positions[i] / 100.0
+        for i in range(n_breaks)
+    ]
+    station_fracs = [0.0] + break_fracs + [1.0]
+    station_chords = [
+        root_chord + (tip_chord - root_chord) * frac
+        for frac in station_fracs
+    ]
+
+    total_area = 0.0
+    mac_area_sum = 0.0
+    y_mac_area_sum = 0.0
+
+    for panel_idx in range(n):
+        c_in = station_chords[panel_idx]
+        c_out = station_chords[panel_idx + 1]
+        frac_in = station_fracs[panel_idx]
+        frac_out = station_fracs[panel_idx + 1]
+        b_panel = half_span * (frac_out - frac_in)  # panel span (mm)
+
+        area = 0.5 * (c_in + c_out) * b_panel  # trapezoidal area
+
+        lam_p = c_out / c_in if c_in > 0 else 1.0
+        # Panel MAC
+        if abs(1.0 + lam_p) > 1e-9:
+            mac_panel = (2.0 / 3.0) * c_in * (1.0 + lam_p + lam_p ** 2) / (1.0 + lam_p)
+        else:
+            mac_panel = c_in
+
+        # Spanwise position of panel MAC from root (local + accumulated)
+        y_local = (b_panel / 3.0) * (1.0 + 2.0 * lam_p) / (1.0 + lam_p) if abs(1.0 + lam_p) > 1e-9 else b_panel / 2.0
+        y_panel_root = frac_in * half_span
+        y_mac_panel = y_panel_root + y_local
+
+        total_area += area
+        mac_area_sum += mac_panel * area
+        y_mac_area_sum += y_mac_panel * area
+
+    if total_area <= 0:
+        # Fallback to simple formula
+        lam = design.wing_tip_root_ratio
+        mac = (2.0 / 3.0) * root_chord * (1.0 + lam + lam ** 2) / max(1.0 + lam, 1e-9)
+        y_mac = half_span / 2.0
+        return mac, y_mac
+
+    mac_cranked = mac_area_sum / total_area
+    y_mac_cranked = y_mac_area_sum / total_area
+    return mac_cranked, y_mac_cranked
 
 
 def _compute_weight_estimates(design: AircraftDesign) -> dict[str, float]:

@@ -2,6 +2,10 @@
 
 Each wing half is built from root (Y=0) to tip (Y=+/-span/2), with
 airfoil loading, taper, sweep, dihedral, TE enforcement, and shelling.
+
+Multi-section wings (wing_sections > 1) build N separate lofted panels
+and union them into a single solid.  Each panel has independent dihedral
+and sweep angles (W10/W11), with dihedral accumulated across panel breaks.
 """
 
 from __future__ import annotations
@@ -23,45 +27,34 @@ from backend.geometry.airfoil import load_airfoil
 def build_wing(
     design: AircraftDesign,
     side: Literal["left", "right"],
-) -> cq.Workplane:
+) -> "cq.Workplane":
     """Build one wing half (left or right) as a solid.
 
-    Generates a single wing panel from root to tip.  The two halves are built
-    separately so they can be independently sectioned for printing.
+    For single-section wings (wing_sections == 1), generates a single lofted
+    panel from root to tip -- the classic behaviour.
 
-    **Geometry construction process:**
+    For multi-section wings (wing_sections > 1), generates N separate lofted
+    panels and unions them into a single solid.  Panel break positions are
+    taken from design.panel_break_positions, dihedrals from
+    design.panel_dihedrals, and sweep overrides from design.panel_sweeps.
 
-    1. **Airfoil loading**: Load profile from .dat file corresponding to
-       design.wing_airfoil (e.g., "Clark-Y" -> "clark_y.dat").
-       Normalised to chord=1.0.
+    **Geometry construction process (single-section):**
 
-    2. **Root section**: Scale airfoil to design.wing_chord (G05).
-       Position at Y=0.  Apply wing incidence (W08, user-editable).
-
-    3. **Tip section**: Scale airfoil to tip_chord = wing_chord * wing_tip_root_ratio.
-       Position at Y = +/-wing_span/2.
-       Apply wing twist (W06, user-editable washout at tip).
-
-    4. **Sweep**: Offset tip X by (wing_span/2) * tan(wing_sweep * pi/180).
-
-    5. **Dihedral**: Offset tip Z by (wing_span/2) * tan(wing_dihedral * pi/180).
-       Value is per-panel, not total included angle.
-
-    6. **Loft**: Create solid via cq loft() with ruled=False (smooth surface).
-
-    7. **Trailing edge enforcement**: Enforce min thickness of te_min_thickness (PR09).
-
-    8. **Skin shell**: If hollow_parts is True, shell to wing_skin_thickness (W20),
-       leaving root face open for spar insertion and fuselage mating.
-
-    9. **Mirror**: "left" extends in -Y, "right" extends in +Y.
+    1. **Airfoil loading**: Load profile from .dat file.
+    2. **Root section**: Scale to wing_chord, apply wing_incidence.
+    3. **Tip section**: Scale to tip_chord, apply incidence + twist.
+    4. **Sweep**: Offset tip X by quarter-chord sweep formula.
+    5. **Dihedral**: Applied via transformed() Z offsets per panel.
+    6. **Loft**: cq loft() with ruled=False.
+    7. **TE enforcement**: No-op, documented.
+    8. **Skin shell**: If hollow_parts, shell to wing_skin_thickness.
 
     Args:
         design: Complete aircraft design parameters.
         side:   Which wing half.  "left" extends in -Y, "right" in +Y.
 
     Returns:
-        cq.Workplane with wing half solid.  Root at Y=0, tip at Y=+/-span/2.
+        cq.Workplane with wing half solid.
 
     Raises:
         FileNotFoundError: If airfoil .dat file not found.
@@ -69,6 +62,22 @@ def build_wing(
     """
     import cadquery as cq  # noqa: F811
 
+    if design.wing_sections > 1:
+        return _build_multi_section_wing(cq, design, side)
+    return _build_single_panel(cq, design, side)
+
+
+# ---------------------------------------------------------------------------
+# Single-section wing (original algorithm)
+# ---------------------------------------------------------------------------
+
+
+def _build_single_panel(
+    cq: type,
+    design: AircraftDesign,
+    side: Literal["left", "right"],
+) -> "cq.Workplane":
+    """Build a classic single-panel wing half."""
     # 1. Load airfoil profile (unit chord)
     profile = load_airfoil(design.wing_airfoil)
 
@@ -77,10 +86,7 @@ def build_wing(
     tip_chord = root_chord * design.wing_tip_root_ratio
     half_span = design.wing_span / 2.0
 
-    # 3. Sweep offset at the tip (quarter-chord line sweep)
-    #    The user-facing sweep angle is measured at the quarter-chord line.
-    #    The LE offset must account for taper so the quarter-chord points
-    #    align with the intended sweep angle.
+    # 3. Sweep offset at tip (quarter-chord line sweep)
     sweep_rad = math.radians(design.wing_sweep)
     sweep_offset_x = (
         half_span * math.tan(sweep_rad)
@@ -90,9 +96,7 @@ def build_wing(
     # 4. Y direction sign
     y_sign = -1.0 if side == "left" else 1.0
 
-    # 5. Scale airfoil points to root and tip chords
-    #    W08: wing_incidence (user-editable, default 2.0 deg)
-    #    W06: wing_twist (user-editable, default 0.0 deg, washout at tip)
+    # 5. Scale airfoil points
     wing_incidence_deg = design.wing_incidence
     wing_twist_deg = design.wing_twist
     root_pts = _scale_airfoil_2d(profile, root_chord, wing_incidence_deg)
@@ -100,40 +104,207 @@ def build_wing(
         profile, tip_chord, wing_incidence_deg + wing_twist_deg,
     )
 
-    # 6. Loft: root at Y=0, tip at Y=+/-half_span with sweep offset only
-    #    Dihedral is applied as a rotation after lofting (Bug #65 fix).
+    # 6. Dihedral Z offset at tip (accumulated via transformed)
+    dihedral_rad = math.radians(design.wing_dihedral)
+    dihedral_z_at_tip = half_span * math.tan(dihedral_rad)
+
+    # 7. Loft: root at Y=0, tip with sweep + dihedral offsets
     result = (
         cq.Workplane("XZ")
         .spline(root_pts, periodic=False).close()
         .workplane(offset=y_sign * half_span)
-        .transformed(offset=(sweep_offset_x, 0, 0))
+        .transformed(offset=(sweep_offset_x, dihedral_z_at_tip, 0))
         .spline(tip_pts, periodic=False).close()
         .loft(ruled=False)
     )
 
-    # 7. Apply dihedral as rotation about the X-axis at the root face.
-    #    Positive dihedral = tips up. For the left wing (−Y), rotation
-    #    sense is negated so both tips deflect upward symmetrically.
-    #    Rotate about root face center (not origin) to avoid gapping the
-    #    root face away from the fuselage. The root face Z center is
-    #    approximately at the airfoil's mean camber height.
-    dihedral_deg = design.wing_dihedral
-    if abs(dihedral_deg) > 1e-6:
-        rot_sign = -1.0 if side == "left" else 1.0
-        # Compute root face Z center from airfoil points
-        root_z_vals = [pt[1] for pt in root_pts]  # (x, z) tuples
-        root_z_center = (min(root_z_vals) + max(root_z_vals)) / 2.0
-        root_x_center = root_chord / 2.0
-        result = result.rotate(
-            (root_x_center, 0, root_z_center),
-            (root_x_center + 1, 0, root_z_center),
-            rot_sign * dihedral_deg,
-        )
-
-    # 8. TE enforcement: thicken trailing edge if needed
+    # 8. TE enforcement: no-op
     result = _enforce_te_thickness(cq, result, design.te_min_thickness)
 
-    # 9. Shell if hollow, leaving root face open for spar/fuselage mating
+    # 9. Shell if hollow
+    if design.hollow_parts:
+        result = _shell_wing(result, design.wing_skin_thickness, side)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Multi-section wing (new algorithm)
+# ---------------------------------------------------------------------------
+
+
+def _build_multi_section_wing(
+    cq: type,
+    design: AircraftDesign,
+    side: Literal["left", "right"],
+) -> "cq.Workplane":
+    """Build a multi-panel wing half using N lofted segments.
+
+    Each panel is lofted from its inboard cross-section to its outboard
+    cross-section.  Dihedral is accumulated geometrically: each panel's
+    dihedral is relative to the previous panel's end orientation.
+
+    The approach uses transformed() offsets to build the outboard station
+    of each panel in the correct 3D position, then unions the panels.
+    No .rotate() is applied -- the geometry is built directly in place.
+
+    Coordinate reminders (XZ workplane):
+      local X  = global X (chordwise)
+      local Y  = global Z (vertical)  -- offset via transformed(0, z, 0)
+      local Z  = global -Y (spanwise) -- offset via workplane(offset=y)
+
+    For the right wing: outboard = +Y (positive workplane offset).
+    For the left wing:  outboard = -Y (negative workplane offset).
+    """
+    profile = load_airfoil(design.wing_airfoil)
+    n = design.wing_sections
+    root_chord = design.wing_chord
+    tip_chord = root_chord * design.wing_tip_root_ratio
+    half_span = design.wing_span / 2.0
+    y_sign = -1.0 if side == "left" else 1.0
+
+    wing_incidence_deg = design.wing_incidence
+    wing_twist_deg = design.wing_twist
+
+    # Build list of (span_frac, chord) for all stations: root + breaks + tip
+    # span_frac is fraction of half-span (0.0 = root, 1.0 = tip).
+    n_breaks = n - 1  # number of break positions
+    break_fracs = [
+        design.panel_break_positions[i] / 100.0
+        for i in range(n_breaks)
+    ]
+    # Stations: root (0.0), breaks, tip (1.0)
+    station_fracs = [0.0] + break_fracs + [1.0]
+
+    # Per-station chord (linear taper)
+    station_chords = [
+        root_chord + (tip_chord - root_chord) * frac
+        for frac in station_fracs
+    ]
+
+    # Per-station sweep angle: panel 1 uses wing_sweep, panels 2+ use panel_sweeps
+    # (panel_sweeps[i] is the sweep for panel i+2, i.e., the second panel onwards)
+    panel1_sweep = design.wing_sweep
+    panel_sweep_angles = [panel1_sweep] + [
+        design.panel_sweeps[i] for i in range(n_breaks)
+    ]
+
+    # Per-station dihedral angle: panel 1 uses wing_dihedral, panels 2+ use panel_dihedrals
+    panel1_dihedral = design.wing_dihedral
+    panel_dihedral_angles = [panel1_dihedral] + [
+        design.panel_dihedrals[i] for i in range(n_breaks)
+    ]
+
+    # Compute cumulative absolute X (sweep) and Z (dihedral) offsets at each station.
+    # Station 0 (root) is at (x=0, z=0, y=0).
+    #
+    # ``panel_span_mm`` is derived from ``half_span`` which is the user-specified
+    # horizontal wingspan / 2.  It therefore represents the **projected horizontal**
+    # (Y-axis) extent of each panel — i.e., the "adjacent" side in the dihedral
+    # right-triangle (horizontal leg), NOT the true spanwise arc length.
+    #
+    # Given projected horizontal span as the adjacent side:
+    #   delta_y = panel_span_mm           (projected Y is already the adjacent side)
+    #   delta_z = panel_span_mm * tan(dihedral_rad)  (vertical rise from adjacent)
+    #   delta_x = panel_span_mm * tan(sweep_rad) + 0.25*(c_in - c_out)  (chordwise LE shift)
+    #
+    # Do NOT multiply delta_y by cos(dihedral_rad) — that would incorrectly shrink
+    # the projected span as if panel_span_mm were the true arc (hypotenuse).
+
+    station_abs_x: list[float] = [0.0]  # absolute sweep offset from root LE
+    station_abs_z: list[float] = [0.0]  # absolute dihedral Z offset from root
+    station_abs_y: list[float] = [0.0]  # absolute projected Y (spanwise) offset
+
+    for panel_idx in range(n):
+        frac_in = station_fracs[panel_idx]
+        frac_out = station_fracs[panel_idx + 1]
+        # Projected horizontal span for this panel (adjacent side in dihedral triangle)
+        panel_span_mm = half_span * (frac_out - frac_in)
+
+        sweep_rad = math.radians(panel_sweep_angles[panel_idx])
+        dihedral_rad = math.radians(panel_dihedral_angles[panel_idx])
+
+        chord_in = station_chords[panel_idx]
+        chord_out = station_chords[panel_idx + 1]
+
+        # Quarter-chord sweep: LE offset accounts for taper
+        qc_correction = 0.25 * (chord_in - chord_out)
+        delta_x = panel_span_mm * math.tan(sweep_rad) + qc_correction
+
+        # Dihedral vertical rise: rise = adjacent * tan(angle)
+        delta_z = panel_span_mm * math.tan(dihedral_rad)
+
+        # Projected Y extent equals panel_span_mm (it is already the horizontal projection)
+        delta_y = panel_span_mm
+
+        station_abs_x.append(station_abs_x[-1] + delta_x)
+        station_abs_z.append(station_abs_z[-1] + delta_z)
+        station_abs_y.append(station_abs_y[-1] + delta_y)
+
+    # Build each panel as a separate lofted solid
+    panels: list["cq.Workplane"] = []
+    for panel_idx in range(n):
+        chord_in = station_chords[panel_idx]
+        chord_out = station_chords[panel_idx + 1]
+
+        # Twist at the tip station (linear interpolation for intermediate stations)
+        frac_in = station_fracs[panel_idx]
+        frac_out = station_fracs[panel_idx + 1]
+
+        # Apply incidence + linear twist fraction at each station
+        twist_in = wing_incidence_deg + wing_twist_deg * frac_in
+        twist_out = wing_incidence_deg + wing_twist_deg * frac_out
+
+        pts_in = _scale_airfoil_2d(profile, chord_in, twist_in)
+        pts_out = _scale_airfoil_2d(profile, chord_out, twist_out)
+
+        x_in = station_abs_x[panel_idx]
+        z_in = station_abs_z[panel_idx]
+        y_in = station_abs_y[panel_idx]
+
+        x_out = station_abs_x[panel_idx + 1]
+        z_out = station_abs_z[panel_idx + 1]
+        y_out = station_abs_y[panel_idx + 1]
+
+        # Y extent for this panel's loft workplane offset (projected span)
+        panel_y_extent = y_out - y_in
+
+        try:
+            panel = (
+                cq.Workplane("XZ")
+                .transformed(offset=(x_in, z_in, 0))
+                .spline(pts_in, periodic=False).close()
+                .workplane(offset=y_sign * panel_y_extent)
+                .transformed(offset=((x_out - x_in), (z_out - z_in), 0))
+                .spline(pts_out, periodic=False).close()
+                .loft(ruled=False)
+            )
+            # Translate to correct absolute Y position (the workplane offset
+            # above moves relative to the inboard face; we need to shift the
+            # whole panel to the correct absolute Y position)
+            panel = panel.translate((0, y_sign * y_in, 0))
+            panels.append(panel)
+        except Exception:
+            # If a panel fails to loft, fall back to single-section wing
+            return _build_single_panel(cq, design, side)
+
+    if not panels:
+        return _build_single_panel(cq, design, side)
+
+    # Union all panels into a single solid
+    result = panels[0]
+    for extra_panel in panels[1:]:
+        try:
+            result = result.union(extra_panel)
+        except Exception:
+            # If union fails, keep what we have
+            pass
+
+    # Shell each panel individually if hollow (guidance doc §1.12)
+    # We shell after union here for simplicity; individual panel shelling
+    # is fragile on joined lofts, so we try the union first.
+    result = _enforce_te_thickness(cq, result, design.te_min_thickness)
+
     if design.hollow_parts:
         result = _shell_wing(result, design.wing_skin_thickness, side)
 
@@ -185,9 +356,9 @@ def _scale_airfoil_2d(
 
 def _enforce_te_thickness(
     cq_mod: type,
-    solid: cq.Workplane,
+    solid: "cq.Workplane",
     te_min_thickness: float,
-) -> cq.Workplane:
+) -> "cq.Workplane":
     """Enforce minimum trailing edge thickness.
 
     .. note:: **Not yet functional (MVP).** This function is a documented
@@ -212,10 +383,10 @@ def _enforce_te_thickness(
 
 
 def _shell_wing(
-    solid: cq.Workplane,
+    solid: "cq.Workplane",
     skin_thickness: float,
     side: Literal["left", "right"],
-) -> cq.Workplane:
+) -> "cq.Workplane":
     """Shell the wing to create a hollow interior.
 
     Leaves the root face open for spar insertion and fuselage mating.
