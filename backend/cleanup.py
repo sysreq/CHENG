@@ -12,8 +12,9 @@ from pathlib import Path
 
 logger = logging.getLogger("cheng.cleanup")
 
-# Default temp directory — matches the export module's EXPORT_TMP_DIR.
-DEFAULT_TMP_DIR = Path("/data/tmp")
+# Authoritative temp directory — imported from the export module so that
+# cleanup and export always reference the same path (#262, #276).
+from backend.export.package import EXPORT_TMP_DIR as DEFAULT_TMP_DIR  # noqa: E402
 
 # Files older than this (seconds) are considered orphaned.
 MAX_AGE_SECONDS = 3600  # 1 hour
