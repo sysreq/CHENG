@@ -33,8 +33,11 @@ export type JointType = 'Tongue-and-Groove' | 'Dowel-Pin' | 'Flat-with-Alignment
 /** 3D print support generation strategy. */
 export type SupportStrategy = 'none' | 'minimal' | 'full';
 
+/** Landing gear configuration. */
+export type LandingGearType = 'None' | 'Tricycle' | 'Taildragger';
+
 /** Selectable component in the 3D viewport. */
-export type ComponentSelection = 'wing' | 'tail' | 'fuselage' | null;
+export type ComponentSelection = 'wing' | 'tail' | 'fuselage' | 'landing_gear' | null;
 
 /** Sub-element within a wing component. */
 export type WingSubElement = 'left-panel' | 'right-panel';
@@ -50,6 +53,7 @@ export const COMPONENT_SUB_ELEMENTS: Record<Exclude<ComponentSelection, null>, r
   wing: ['left-panel', 'right-panel'] as const,
   tail: ['h-stab', 'v-stab'] as const,
   fuselage: ['nose', 'cabin', 'tail-cone'] as const,
+  landing_gear: ['main_left', 'main_right', 'nose_gear', 'tail_wheel'] as const,
 };
 
 /** Infill density hint for per-component print settings. */
@@ -66,7 +70,7 @@ export interface ComponentPrintSettings {
 }
 
 /** Map of component name to its print settings overrides. */
-export type PerComponentPrintSettings = Partial<Record<'wing' | 'tail' | 'fuselage', ComponentPrintSettings>>;
+export type PerComponentPrintSettings = Partial<Record<'wing' | 'tail' | 'fuselage' | 'landing_gear', ComponentPrintSettings>>;
 
 /** Source of a parameter change — controls debounce/throttle timing. */
 export type ChangeSource = 'slider' | 'text' | 'immediate';
@@ -162,6 +166,28 @@ export interface AircraftDesign {
   /** Fuselage wall thickness. @unit mm @min 0.8 @max 4.0 @default 1.5 */
   wallThickness: number;
 
+  // ── Landing Gear (L01-L11) ────────────────────────────────────────
+  /** Landing gear configuration. @default 'None' */
+  landingGearType: LandingGearType;
+  /** Main gear longitudinal position as % of fuselage length from nose.
+   *  @unit % @min 25 @max 55 @default 35 */
+  mainGearPosition: number;
+  /** Main gear strut height (ground clearance). @unit mm @min 15 @max 150 @default 40 */
+  mainGearHeight: number;
+  /** Lateral distance between left and right main wheels. @unit mm @min 30 @max 400 @default 120 */
+  mainGearTrack: number;
+  /** Main wheel diameter. @unit mm @min 10 @max 80 @default 30 */
+  mainWheelDiameter: number;
+  /** Nose gear strut height (Tricycle only). @unit mm @min 15 @max 150 @default 45 */
+  noseGearHeight: number;
+  /** Nose wheel diameter (Tricycle only). @unit mm @min 8 @max 60 @default 20 */
+  noseWheelDiameter: number;
+  /** Tail wheel diameter (Taildragger only). @unit mm @min 5 @max 40 @default 12 */
+  tailWheelDiameter: number;
+  /** Tail gear longitudinal position as % of fuselage length from nose (Taildragger only).
+   *  @unit % @min 85 @max 98 @default 92 */
+  tailGearPosition: number;
+
   // ── Export / Print ────────────────────────────────────────────────
   /** Printer bed X. @unit mm @min 100 @max 500 @default 220 */
   printBedX: number;
@@ -219,8 +245,10 @@ export interface DerivedValues {
 export type StructuralWarningId = 'V01' | 'V02' | 'V03' | 'V04' | 'V05' | 'V06' | 'V07' | 'V08';
 /** Print warning IDs (V16-V23). */
 export type PrintWarningId = 'V16' | 'V17' | 'V18' | 'V20' | 'V21' | 'V22' | 'V23';
+/** Landing gear warning IDs (V31). */
+export type LandingGearWarningId = 'V31';
 /** All warning IDs. */
-export type WarningId = StructuralWarningId | PrintWarningId;
+export type WarningId = StructuralWarningId | PrintWarningId | LandingGearWarningId;
 
 /** Non-blocking validation warning from the backend. */
 export interface ValidationWarning {
@@ -236,7 +264,10 @@ export interface ValidationWarning {
 // ---------------------------------------------------------------------------
 
 /** Per-component face index ranges for selection highlighting. */
-export type ComponentRanges = Partial<Record<'fuselage' | 'wing' | 'tail', [number, number]>>;
+export type ComponentRanges = Partial<Record<
+  'fuselage' | 'wing' | 'tail' | 'gear_main_left' | 'gear_main_right' | 'gear_nose' | 'gear_tail',
+  [number, number]
+>>;
 
 /** Parsed mesh from WebSocket binary protocol (spec S6.2). */
 export interface MeshData {

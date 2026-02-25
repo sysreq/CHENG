@@ -26,6 +26,7 @@ FuselagePreset = Literal["Pod", "Conventional", "Blended-Wing-Body"]
 MotorConfig = Literal["Tractor", "Pusher"]
 WingMountType = Literal["High-Wing", "Mid-Wing", "Low-Wing", "Shoulder-Wing"]
 TailType = Literal["Conventional", "T-Tail", "V-Tail", "Cruciform"]
+LandingGearType = Literal["None", "Tricycle", "Taildragger"]
 WingAirfoil = Literal[
     "Flat-Plate", "NACA-0012", "NACA-2412", "NACA-4412", "NACA-6412",
     "Clark-Y", "Eppler-193", "Eppler-387", "Selig-1223", "AG-25",
@@ -123,6 +124,23 @@ class AircraftDesign(CamelModel):
     motor_weight_g: float = Field(default=60.0, ge=0, le=500)
     battery_weight_g: float = Field(default=150.0, ge=0, le=2000)
     battery_position_frac: float = Field(default=0.30, ge=0.0, le=1.0)
+
+    # ── Landing Gear (L01-L11) ────────────────────────────────────────
+    landing_gear_type: LandingGearType = "None"
+
+    # Main gear (L03-L06) — applies to both Tricycle and Taildragger
+    main_gear_position: float = Field(default=35.0, ge=25.0, le=55.0)   # % fuselage length
+    main_gear_height: float = Field(default=40.0, ge=15.0, le=150.0)    # mm
+    main_gear_track: float = Field(default=120.0, ge=30.0, le=400.0)    # mm
+    main_wheel_diameter: float = Field(default=30.0, ge=10.0, le=80.0)  # mm
+
+    # Nose gear (L08-L09) — Tricycle only
+    nose_gear_height: float = Field(default=45.0, ge=15.0, le=150.0)    # mm
+    nose_wheel_diameter: float = Field(default=20.0, ge=8.0, le=60.0)   # mm
+
+    # Tail wheel (L10-L11) — Taildragger only
+    tail_wheel_diameter: float = Field(default=12.0, ge=5.0, le=40.0)   # mm
+    tail_gear_position: float = Field(default=92.0, ge=85.0, le=98.0)   # % fuselage length
 
 
 # ---------------------------------------------------------------------------
