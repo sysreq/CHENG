@@ -149,6 +149,10 @@ class TestAssemblyCacheThreadSafety:
         """Concurrent calls to _get_or_assemble_async must not raise."""
         from backend.routes import export as export_module
 
+        # Reset module-level asyncio.Lock so it is created fresh inside the
+        # new event loop started by asyncio.run() — avoids cross-loop RuntimeError.
+        export_module._assembly_cache_lock = None
+
         # Patch assemble_aircraft to return a trivial dict quickly
         dummy_components = {"fuselage": MagicMock()}
 
@@ -174,6 +178,10 @@ class TestAssemblyCacheThreadSafety:
     def test_cache_eviction_under_lock(self) -> None:
         """Cache eviction does not corrupt state when called concurrently."""
         from backend.routes import export as export_module
+
+        # Reset module-level asyncio.Lock so it is created fresh inside the
+        # new event loop started by asyncio.run() — avoids cross-loop RuntimeError.
+        export_module._assembly_cache_lock = None
 
         dummy = {"fuselage": MagicMock()}
 
