@@ -69,9 +69,9 @@ def _make_temp_zip(design: AircraftDesign) -> tuple[Path, Path]:
     tmp_dir = EXPORT_TMP_DIR
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    # #258: sanitize design.name to prevent path traversal
+    # #258: sanitize both design.name and design.id to prevent path traversal
     safe_name = _sanitize_filename(design.name)
-    design_id = design.id[:8] if design.id else "export"
+    design_id = _sanitize_filename(design.id[:8]) if design.id else "export"
     # #259: append UUID suffix to prevent concurrent-export filename collisions
     unique_suffix = uuid.uuid4().hex[:8]
     zip_filename = f"cheng_{safe_name}_{design_id}_{unique_suffix}.zip"
