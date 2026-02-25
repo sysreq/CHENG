@@ -289,16 +289,22 @@ def _build_v_tail_half(
     dihedral_rad = math.radians(dihedral)
     sweep_rad = math.radians(sweep_deg)
 
-    # Tip offset due to dihedral
+    # Tip offset due to dihedral (projected onto Y and Z world axes)
     tip_y = y_sign * half_span * math.cos(dihedral_rad)
     tip_z = half_span * math.sin(dihedral_rad)
 
-    # Sweep offset: tip LE moves aft along X
+    # #216: Sweep offset — tip chord centre moves aft in world X.
+    # tip_x = root_x + half_span * tan(sweep_rad).
+    # In the XZ workplane local frame: local-X = world-X, local-Y = world-Z,
+    # so transformed(offset=(sweep_offset_x, tip_z, 0)) after
+    # workplane(offset=tip_y) places the tip correctly in world space.
     sweep_offset_x = half_span * math.tan(sweep_rad)
 
-    # Loft from root to tip using chained workplane offsets
-    # workplane(offset=tip_y) moves along Y (XZ plane normal),
-    # transformed adds the Z offset from dihedral and X offset from sweep
+    # Loft from root to tip using chained workplane offsets.
+    # Incidence is applied via transformed(rotate=(0, 0, -incidence)) at the
+    # root workplane.  In the XZ plane, local Z = world -Y (spanwise axis),
+    # so rotating around local Z pitches the chord — this is the correct axis
+    # for incidence (commit 1856acb: fix yaw→pitch).
     result = (
         cq.Workplane("XZ")
         .transformed(rotate=(0, 0, -incidence))
