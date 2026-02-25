@@ -290,7 +290,7 @@ export function GlobalPanel(): React.JSX.Element {
         >
           {PRESET_OPTIONS.map((name) => (
             <option key={name} value={name}>
-              {PRESET_DISPLAY_LABELS[name]}
+              {PRESET_DISPLAY_LABELS[name]} — {PRESET_DESCRIPTIONS[name]}
             </option>
           ))}
           {activePreset === 'Custom' && (
