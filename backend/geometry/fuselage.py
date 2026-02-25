@@ -244,6 +244,9 @@ def _add_motor_boss(
     """
     cq = cq_mod
 
+    # engine_count is restricted to 0 or 1 as of v0.7.1 (#240).
+    # Multi-engine nacelles (count 2-4) are not yet implemented.
+    # TODO v0.8: add nacelle geometry for engine_count > 1
     if design.engine_count == 0:
         return solid
 

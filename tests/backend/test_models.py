@@ -55,11 +55,31 @@ class TestAircraftDesign:
             AircraftDesign(wing_chord=600)
 
     def test_range_validation_engine_count(self) -> None:
-        """Engine count outside 0-4 should fail validation."""
+        """Engine count outside 0-1 should fail validation (#240).
+
+        Values 2-4 are clamped to 1 for backward compat (see clamp_engine_count).
+        Negative values are still rejected.
+        """
         with pytest.raises(ValidationError):
             AircraftDesign(engine_count=-1)
+        # Values above 1 that are <= 4 are silently clamped to 1 (legacy designs)
+        d = AircraftDesign(engine_count=2)
+        assert d.engine_count == 1
+        d = AircraftDesign(engine_count=3)
+        assert d.engine_count == 1
+        d = AircraftDesign(engine_count=4)
+        assert d.engine_count == 1
+        # Values > 4 are also clamped (not rejected, since clamp runs before le check)
+        # but primary constraint remains le=1 after clamping
         with pytest.raises(ValidationError):
-            AircraftDesign(engine_count=5)
+            AircraftDesign(engine_count=-2)
+
+    def test_engine_count_valid_values(self) -> None:
+        """engine_count=0 and engine_count=1 are valid (#240)."""
+        d0 = AircraftDesign(engine_count=0)
+        assert d0.engine_count == 0
+        d1 = AircraftDesign(engine_count=1)
+        assert d1.engine_count == 1
 
     def test_range_validation_tip_root_ratio(self) -> None:
         """Tip/root ratio outside 0.3-1.0 should fail."""
