@@ -194,16 +194,18 @@ export function WingPanel(): React.JSX.Element {
     [setParam],
   );
 
-  // ── Sliders ─────────────────────────────────────────────────────────
+  // ── Wing Sections stepper (#243) ────────────────────────────────────
+  const wingSections = design.wingSections;
+  const decrementSections = useCallback(
+    () => setParam('wingSections', Math.max(1, wingSections - 1), 'immediate'),
+    [setParam, wingSections],
+  );
+  const incrementSections = useCallback(
+    () => setParam('wingSections', Math.min(4, wingSections + 1), 'immediate'),
+    [setParam, wingSections],
+  );
 
-  const setSectionsSlider = useCallback(
-    (v: number) => setParam('wingSections', Math.round(v), 'immediate'),
-    [setParam],
-  );
-  const setSectionsInput = useCallback(
-    (v: number) => setParam('wingSections', Math.round(v), 'immediate'),
-    [setParam],
-  );
+  // ── Sliders ─────────────────────────────────────────────────────────
 
   const setSweepSlider = useCallback(
     (v: number) => setParam('wingSweep', v, 'slider'),
@@ -337,17 +339,40 @@ export function WingPanel(): React.JSX.Element {
         hasWarning={fieldHasWarning(warnings, 'wingAirfoil')}
       />
 
-      {/* W08 — Wing Sections (multi-section #143) */}
-      <ParamSlider
-        label="Wing Sections"
-        value={design.wingSections}
-        min={1}
-        max={4}
-        step={1}
-        onSliderChange={setSectionsSlider}
-        onInputChange={setSectionsInput}
+      {/* W08 — Wing Sections stepper (#243) */}
+      <div
+        className="flex items-center justify-between mb-2"
         title="Number of spanwise wing panels per half. 1 = straight, 2–4 = polyhedral or cranked planform."
-      />
+      >
+        <span className="text-xs text-zinc-300">Wing Sections</span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={decrementSections}
+            disabled={wingSections <= 1}
+            className="w-6 h-6 flex items-center justify-center rounded
+              bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed
+              text-zinc-200 text-sm font-bold transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500"
+            aria-label="Decrease wing sections"
+          >
+            −
+          </button>
+          <span className="w-6 text-center text-sm font-mono text-zinc-100 select-none">
+            {wingSections}
+          </span>
+          <button
+            type="button"
+            onClick={incrementSections}
+            disabled={wingSections >= 4}
+            className="w-6 h-6 flex items-center justify-center rounded
+              bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed
+              text-zinc-200 text-sm font-bold transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500"
+            aria-label="Increase wing sections"
+          >
+            +
+          </button>
+        </div>
+      </div>
 
       {/* W05 — Wing Sweep */}
       <ParamSlider
