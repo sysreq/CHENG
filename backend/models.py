@@ -226,3 +226,16 @@ class SavePresetRequest(CamelModel):
 
     name: str
     design: AircraftDesign
+
+
+class TestJointExportRequest(CamelModel):
+    """Request body for POST /api/export/test-joint.
+
+    Subset of AircraftDesign containing only the parameters that affect
+    the joint geometry — no full design needed for this calibration print.
+    """
+
+    joint_type: JointType = "Tongue-and-Groove"   # PR10
+    joint_tolerance: float = Field(default=0.15, ge=0.05, le=0.5)   # PR11, mm
+    section_overlap: float = Field(default=15.0, ge=5.0, le=30.0)   # PR05, mm
+    nozzle_diameter: float = Field(default=0.4, ge=0.2, le=1.0)     # PR06, mm
