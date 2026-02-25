@@ -45,6 +45,37 @@ _WING_Z_FRACTION: dict[str, float] = {
     "Low-Wing": -0.4,
 }
 
+# Minimum tail absolute position as a fraction of fuselage_length (#212).
+# The tail must sit at least this far aft of the nose, so that increasing
+# fuselage_length pushes the tail backwards even when the user hasn't
+# adjusted tail_arm.  0.75 puts the minimum tail at 75% of fuselage length.
+_MIN_TAIL_POS_FRAC: float = 0.75
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _compute_tail_x(design: AircraftDesign) -> float:
+    """Compute the tail X position with a minimum fuselage-proportional floor.
+
+    #212: tail_arm is user-set and doesn't auto-scale with fuselage_length.
+    We compute a minimum absolute tail position (_MIN_TAIL_POS_FRAC * fuse_length)
+    and derive the minimum arm from it.  The effective tail arm is:
+        effective_arm = max(design.tail_arm, min_tail_pos - wing_x)
+    so that tail_x >= min_tail_pos always holds.  When the user's tail_arm is
+    already larger, their value is used unchanged.
+    """
+    wing_x_frac = _WING_X_FRACTION.get(design.fuselage_preset, 0.30)
+    wing_x = design.fuselage_length * wing_x_frac
+    # Minimum absolute tail position: 75% of fuselage length from nose.
+    min_tail_pos = design.fuselage_length * _MIN_TAIL_POS_FRAC
+    # Convert to minimum arm (distance from wing mount to tail).
+    min_tail_arm = max(0.0, min_tail_pos - wing_x)
+    effective_tail_arm = max(design.tail_arm, min_tail_arm)
+    return wing_x + effective_tail_arm
+
 
 # ---------------------------------------------------------------------------
 # Public API: Assembly
@@ -161,8 +192,8 @@ def assemble_aircraft(design: AircraftDesign) -> dict[str, cq.Workplane]:
     fuselage = _cut_wing_saddle(cq, fuselage, design, wing_x, wing_z)
     components["fuselage"] = fuselage
 
-    # 3. Tail surfaces: position at X = wing_x + tail_arm
-    tail_x = wing_x + design.tail_arm
+    # 3. Tail surfaces: position at X = effective tail_x (see _compute_tail_x)
+    tail_x = _compute_tail_x(design)
     tail_components = build_tail(design)
 
     # Apply control surface cuts to tail components BEFORE translation
@@ -599,7 +630,10 @@ def _compute_cg(
     wing_le_offset = y_mac * math.tan(sweep_rad)
     wing_cg_x = wing_x + wing_le_offset + 0.25 * mac
 
-    # Tail CG: wing mount + tail_arm + 50% of tail chord
+    # Tail CG: effective tail_x + 50% of tail chord.
+    # Uses _compute_tail_x() so the CG stays consistent with the actual
+    # tail position in the 3D assembly (#212).
+    tail_x = _compute_tail_x(design)
     if design.tail_type == "V-Tail":
         tail_chord = design.v_tail_chord
     else:
@@ -611,7 +645,7 @@ def _compute_cg(
             (design.h_stab_chord * h_weight + design.v_stab_root_chord * v_weight)
             / max(total, 1.0)
         )
-    tail_cg_x = wing_x + design.tail_arm + 0.5 * tail_chord
+    tail_cg_x = tail_x + 0.5 * tail_chord
 
     # Fuselage CG: center of mass (slightly forward of geometric center due
     # to nose taper being more gradual than tail cone)

@@ -208,11 +208,28 @@ def _build_bwb(cq_mod: type, design: AircraftDesign, length: float) -> cq.Workpl
     nose_width = max_width * 0.3
     nose_height = max_height * 0.8
 
+    # #219: Station positions derived from design section-length parameters so
+    # nose_length / cabin_length / tail_taper_length sliders update the preview.
+    # Scale proportionally so sections sum to fuselage_length (same as Conventional).
+    section_sum = (
+        design.fuselage_nose_length
+        + design.fuselage_cabin_length
+        + design.fuselage_tail_length
+    )
+    if section_sum > 0:
+        nose_end = length * (design.fuselage_nose_length / section_sum)
+        cabin_end = length * (
+            (design.fuselage_nose_length + design.fuselage_cabin_length) / section_sum
+        )
+    else:
+        nose_end = length * 0.2
+        cabin_end = length * 0.8
+
     stations = [
         (0.0, nose_width, nose_height),
-        (length * 0.2, max_width * 0.7, max_height * 0.9),
-        (length * 0.5, max_width, max_height),
-        (length * 0.8, max_width * 0.9, max_height * 0.8),
+        (nose_end, max_width * 0.7, max_height * 0.9),
+        (cabin_end * 0.5 + nose_end * 0.5, max_width, max_height),
+        (cabin_end, max_width * 0.9, max_height * 0.8),
         (length, max_width * 0.3, max_height * 0.3),
     ]
 
@@ -274,10 +291,14 @@ def _add_motor_boss(
             .extrude(-boss_depth)
         )
     else:
-        # Pusher: boss at tail, extends in +X from X=length
+        # Pusher: boss at tail, extends in +X from X=length.
+        # #218: Use workplane(offset=length) to correctly position the YZ plane at
+        # X=length along the fuselage axis (world X = YZ plane normal direction).
+        # Previously used transformed(offset=(length,0,0)) which shifted in local X
+        # of the YZ plane (= world Y, sideways), creating a stray circle at Y=length.
         boss = (
             cq.Workplane("YZ")
-            .transformed(offset=(length, 0, 0))
+            .workplane(offset=length)
             .circle(boss_r)
             .extrude(boss_depth)
         )
