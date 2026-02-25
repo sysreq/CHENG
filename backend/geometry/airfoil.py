@@ -68,6 +68,13 @@ def load_airfoil(name: str) -> list[tuple[float, float]]:
     Returns coordinates in Selig order: TE upper -> LE -> TE lower.
     Normalised to unit chord (x in [0, 1]).  Minimum 10 points enforced.
 
+    Special case: "Flat-Plate" uses the programmatic ``generate_flat_plate()``
+    generator instead of the .dat file.  The .dat file only achieves 3% total
+    thickness (1.5% per surface), which is insufficient for stable CadQuery
+    lofting in combination with sweep, taper, or incidence.  The programmatic
+    profile guarantees a 6% diamond cross-section that is geometrically robust
+    across all parameter combinations, and requires no file I/O.
+
     Args:
         name: Display name of the airfoil (e.g. "Clark-Y", "NACA-2412").
 
@@ -83,6 +90,14 @@ def load_airfoil(name: str) -> list[tuple[float, float]]:
             f"Unsupported airfoil '{name}'. "
             f"Supported: {', '.join(SUPPORTED_AIRFOILS)}"
         )
+
+    # Flat-Plate: use programmatic generator instead of the .dat file.
+    # flat_plate.dat is only 3% total thickness (1.5% per surface).  Under
+    # sweep, taper, or high incidence, this thin profile can produce an invalid
+    # or degenerate loft solid in CadQuery.  generate_flat_plate() produces a
+    # 6% diamond that is robust across all parameter combinations.
+    if name == "Flat-Plate":
+        return generate_flat_plate()
 
     # Resolve filename via explicit map, with fallback
     filename = _NAME_TO_FILE.get(name)
