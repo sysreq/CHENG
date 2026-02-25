@@ -12,6 +12,22 @@ import type { AircraftDesign } from '@/types/design';
 /** Extract only numeric keys from AircraftDesign for type-safe editing. */
 type NumericDesignKey = { [K in keyof AircraftDesign]: AircraftDesign[K] extends number ? K : never }[keyof AircraftDesign];
 
+/** Parameter ranges for clamping direct-edit annotation values (#199). */
+const PARAM_RANGES: Partial<Record<NumericDesignKey, { min: number; max: number }>> = {
+  wingSpan: { min: 300, max: 3000 },
+  wingChord: { min: 50, max: 500 },
+  fuselageLength: { min: 150, max: 2000 },
+  hStabSpan: { min: 100, max: 1200 },
+  hStabChord: { min: 30, max: 250 },
+  vStabHeight: { min: 30, max: 400 },
+  vTailSpan: { min: 80, max: 600 },
+  vTailChord: { min: 30, max: 200 },
+  fuselageNoseLength: { min: 20, max: 1000 },
+  fuselageCabinLength: { min: 30, max: 1500 },
+  fuselageTailLength: { min: 20, max: 1000 },
+  wingSweep: { min: -10, max: 45 },
+};
+
 const LABEL_STYLE: React.CSSProperties = {
   fontSize: 10,
   fontFamily: 'monospace',
@@ -80,8 +96,15 @@ function EditableLabel({
 
   const handleCommit = useCallback(() => {
     const parsed = parseFloat(editValue);
-    if (!isNaN(parsed) && parsed !== value) {
-      setParam(paramKey, parsed as AircraftDesign[typeof paramKey]);
+    if (!isNaN(parsed)) {
+      // Clamp to valid range if defined (#199)
+      const range = PARAM_RANGES[paramKey];
+      const clamped = range
+        ? Math.min(range.max, Math.max(range.min, parsed))
+        : parsed;
+      if (clamped !== value) {
+        setParam(paramKey, clamped as AircraftDesign[typeof paramKey]);
+      }
     }
     setEditing(false);
   }, [editValue, value, paramKey, setParam]);

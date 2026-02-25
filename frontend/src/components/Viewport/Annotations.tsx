@@ -4,6 +4,7 @@
 // 3D dimension annotations are rendered inside Canvas via DimensionLines.
 // ============================================================================
 
+import { useState, useCallback } from 'react';
 import { useDesignStore } from '@/store/designStore';
 
 interface AnnotationsProps {
@@ -49,13 +50,35 @@ function SelectedComponentBadge() {
 export default function Annotations({ onResetCamera }: AnnotationsProps) {
   const selectedComponent = useDesignStore((state) => state.selectedComponent);
   const derived = useDesignStore((state) => state.derived);
+  const [hudCollapsed, setHudCollapsed] = useState(false);
+
+  const toggleHud = useCallback(() => setHudCollapsed((v) => !v), []);
 
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 10 }}>
-      {/* HUD info overlay */}
-      <div style={{ position: 'absolute', top: 8, left: 8, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontFamily: 'monospace', color: 'rgba(255,255,255,0.7)', backgroundColor: 'rgba(30, 30, 34, 0.75)', padding: '6px 10px', borderRadius: 4 }}>
-        {derived && (
-          <>
+      {/* HUD info overlay — collapsible to avoid overlapping annotations (#206) */}
+      <div style={{
+        position: 'absolute', top: 8, left: 8,
+        fontSize: 11, fontFamily: 'monospace', color: 'rgba(255,255,255,0.7)',
+        backgroundColor: 'rgba(30, 30, 34, 0.85)', backdropFilter: 'blur(4px)',
+        padding: hudCollapsed ? '4px 8px' : '6px 10px', borderRadius: 4,
+        pointerEvents: 'auto', userSelect: 'none',
+      }}>
+        <div
+          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+          onClick={toggleHud}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleHud(); }}
+          aria-label={hudCollapsed ? 'Expand aero data' : 'Collapse aero data'}
+        >
+          <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>
+            {hudCollapsed ? '\u25B6' : '\u25BC'}
+          </span>
+          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em' }}>AERO</span>
+        </div>
+        {!hudCollapsed && derived && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
             <span>Wing Area: {derived.wingAreaCm2.toFixed(1)} cm2</span>
             <span>AR: {derived.aspectRatio.toFixed(2)}</span>
             <span>MAC: {derived.meanAeroChordMm.toFixed(1)} mm</span>
@@ -63,7 +86,7 @@ export default function Annotations({ onResetCamera }: AnnotationsProps) {
             {derived.meanAeroChordMm > 0 && (
               <span>SM: {((derived.estimatedCgMm / derived.meanAeroChordMm) * 100).toFixed(1)}% MAC</span>
             )}
-          </>
+          </div>
         )}
       </div>
 

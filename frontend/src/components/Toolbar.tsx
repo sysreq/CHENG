@@ -9,6 +9,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { useStore } from 'zustand';
 import { useDesignStore } from '../store/designStore';
 import { getWarningCountBadge } from '../lib/validation';
+import { useConnectionStore } from '../store/connectionStore';
 import { HistoryPanel } from './HistoryPanel';
 
 // ---------------------------------------------------------------------------
@@ -173,6 +174,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
   const fileError = useDesignStore((s) => s.fileError);
   const clearFileError = useDesignStore((s) => s.clearFileError);
   const setCameraPreset = useDesignStore((s) => s.setCameraPreset);
+  const isConnected = useConnectionStore((s) => s.state === 'connected');
 
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -276,22 +278,23 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
         return;
       }
 
-      // Single-key camera shortcuts (only when no input is focused and no modifiers)
+      // Single-key camera shortcuts — number keys following Blender/CAD conventions (#202)
+      // (only when no input is focused and no modifiers)
       if (!isEditable && !e.altKey && !e.shiftKey) {
-        switch (e.key.toLowerCase()) {
-          case 'f':
+        switch (e.key) {
+          case '1':
             e.preventDefault();
             handleViewFront();
             break;
-          case 's':
+          case '2':
             e.preventDefault();
             handleViewSide();
             break;
-          case 't':
+          case '3':
             e.preventDefault();
             handleViewTop();
             break;
-          case 'd':
+          case '4':
             e.preventDefault();
             handleViewPerspective();
             break;
@@ -425,7 +428,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
           <button
             onClick={handleViewFront}
             className="w-7 h-7 flex items-center justify-center text-[10px] font-bold text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-600"
-            title="Front view (F)"
+            title="Front view (1)"
             aria-label="Front view"
           >
             F
@@ -433,7 +436,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
           <button
             onClick={handleViewSide}
             className="w-7 h-7 flex items-center justify-center text-[10px] font-bold text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-600"
-            title="Side view (S)"
+            title="Side view (2)"
             aria-label="Side view"
           >
             S
@@ -441,7 +444,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
           <button
             onClick={handleViewTop}
             className="w-7 h-7 flex items-center justify-center text-[10px] font-bold text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-600"
-            title="Top view (T)"
+            title="Top view (3)"
             aria-label="Top view"
           >
             T
@@ -449,7 +452,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
           <button
             onClick={handleViewPerspective}
             className="w-7 h-7 flex items-center justify-center text-[10px] font-bold text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-600"
-            title="3D perspective view (D)"
+            title="3D perspective view (4)"
             aria-label="3D perspective view"
           >
             3D
@@ -560,11 +563,13 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
         {/* Export Button */}
         <button
           onClick={onOpenExport}
+          disabled={!isConnected}
           className="px-3 py-1 text-xs font-medium text-zinc-100 bg-blue-600
             rounded hover:bg-blue-500 focus:outline-none focus:ring-2
-            focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900"
+            focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900
+            disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Export STL
+          Export...
         </button>
       </div>
 

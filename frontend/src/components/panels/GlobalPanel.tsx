@@ -37,6 +37,16 @@ const PRESET_OPTIONS: readonly (Exclude<PresetName, 'Custom'>)[] = [
   'Scale',
 ] as const;
 
+/** Display labels for preset names — handles multi-word names like FlyingWing (#197). */
+const PRESET_DISPLAY_LABELS: Record<Exclude<PresetName, 'Custom'>, string> = {
+  Trainer: 'Trainer',
+  Sport: 'Sport',
+  Aerobatic: 'Aerobatic',
+  Glider: 'Glider',
+  FlyingWing: 'Flying Wing',
+  Scale: 'Scale',
+};
+
 const FUSELAGE_PRESET_OPTIONS: readonly FuselagePreset[] = [
   'Pod',
   'Conventional',
@@ -107,6 +117,7 @@ export function GlobalPanel(): React.JSX.Element {
   const [presetError, setPresetError] = useState<string | null>(null);
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isLoadingPreset, setIsLoadingPreset] = useState(false);
+  const [pendingDeletePreset, setPendingDeletePreset] = useState<CustomPresetSummary | null>(null);
 
   // Fetch custom presets on mount
   const refreshPresets = useCallback(async () => {
@@ -155,17 +166,20 @@ export function GlobalPanel(): React.JSX.Element {
     [loadCustomPresetDesign],
   );
 
-  const handleDeleteCustomPreset = useCallback(
-    async (id: string) => {
+  const handleConfirmDeletePreset = useCallback(
+    async () => {
+      if (!pendingDeletePreset) return;
       setPresetError(null);
       try {
-        await deleteCustomPreset(id);
+        await deleteCustomPreset(pendingDeletePreset.id);
         await refreshPresets();
       } catch (err) {
         setPresetError(err instanceof Error ? err.message : 'Failed to delete preset');
+      } finally {
+        setPendingDeletePreset(null);
       }
     },
-    [refreshPresets],
+    [pendingDeletePreset, refreshPresets],
   );
 
   // ── Param Setters (dropdowns — immediate source) ────────────────────
@@ -264,8 +278,8 @@ export function GlobalPanel(): React.JSX.Element {
 
   return (
     <div className="p-3">
-      {/* ── Preset Selector ─────────────────────────────────────────── */}
-      <div className="mb-4">
+      {/* ── Preset Section Card (#205) ────────────────────────────────── */}
+      <div className="mb-4 p-2.5 bg-zinc-800/40 border border-zinc-700/50 rounded-lg">
         <label className="block text-xs font-medium text-zinc-300 mb-1">Preset</label>
         <select
           value={activePreset}
@@ -276,7 +290,7 @@ export function GlobalPanel(): React.JSX.Element {
         >
           {PRESET_OPTIONS.map((name) => (
             <option key={name} value={name}>
-              {name}
+              {PRESET_DISPLAY_LABELS[name]} — {PRESET_DESCRIPTIONS[name]}
             </option>
           ))}
           {activePreset === 'Custom' && (
@@ -300,7 +314,7 @@ export function GlobalPanel(): React.JSX.Element {
                 Load Preset
               </AlertDialog.Title>
               <AlertDialog.Description className="text-xs text-zinc-400 mb-4">
-                Load <span className="text-zinc-200 font-medium">{pendingPreset}</span> preset?
+                Load <span className="text-zinc-200 font-medium">{pendingPreset ? PRESET_DISPLAY_LABELS[pendingPreset] : ''}</span> preset?
                 This will replace all parameters.
               </AlertDialog.Description>
               <div className="flex justify-end gap-2">
@@ -324,7 +338,6 @@ export function GlobalPanel(): React.JSX.Element {
             </AlertDialog.Content>
           </AlertDialog.Portal>
         </AlertDialog.Root>
-      </div>
 
       {/* ── Save as Preset Button ────────────────────────────────────── */}
       <button
@@ -414,10 +427,10 @@ export function GlobalPanel(): React.JSX.Element {
                   Load
                 </button>
                 <button
-                  onClick={() => handleDeleteCustomPreset(p.id)}
+                  onClick={() => setPendingDeletePreset(p)}
                   className="px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-red-400
                     hover:bg-red-500/10 rounded transition-colors
-                    opacity-0 group-hover:opacity-100"
+                    opacity-60 group-hover:opacity-100"
                   title="Delete this preset"
                 >
                   Del
@@ -430,6 +443,39 @@ export function GlobalPanel(): React.JSX.Element {
           )}
         </div>
       )}
+
+      {/* Delete preset confirmation dialog (#198) */}
+      <AlertDialog.Root open={pendingDeletePreset !== null} onOpenChange={(open) => { if (!open) setPendingDeletePreset(null); }}>
+        <AlertDialog.Portal>
+          <AlertDialog.Overlay className="fixed inset-0 bg-black/60 z-50" />
+          <AlertDialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl z-50 p-5">
+            <AlertDialog.Title className="text-sm font-semibold text-zinc-200 mb-2">
+              Delete Preset
+            </AlertDialog.Title>
+            <AlertDialog.Description className="text-xs text-zinc-400 mb-4">
+              Delete preset <span className="text-zinc-200 font-medium">{pendingDeletePreset?.name}</span>? This cannot be undone.
+            </AlertDialog.Description>
+            <div className="flex justify-end gap-2">
+              <AlertDialog.Cancel asChild>
+                <button
+                  className="px-3 py-1.5 text-xs text-zinc-400 bg-zinc-800 border border-zinc-700 rounded hover:bg-zinc-700 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+                >
+                  Cancel
+                </button>
+              </AlertDialog.Cancel>
+              <AlertDialog.Action asChild>
+                <button
+                  onClick={handleConfirmDeletePreset}
+                  className="px-3 py-1.5 text-xs font-medium text-zinc-100 bg-red-600 rounded hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-400"
+                >
+                  Delete
+                </button>
+              </AlertDialog.Action>
+            </div>
+          </AlertDialog.Content>
+        </AlertDialog.Portal>
+      </AlertDialog.Root>
+      </div>
 
       {/* ── Separator ───────────────────────────────────────────────── */}
       <div className="border-t border-zinc-700/50 mb-3 mt-3" />

@@ -96,13 +96,15 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
       return;
     }
 
+    // Clone typed arrays to avoid mutating Zustand store state when
+    // translate() modifies vertex positions in-place (#192)
     const frame: MeshFrame = {
       type: 0x01,
       vertexCount: meshData.vertexCount,
       faceCount: meshData.faceCount,
-      vertices: meshData.vertices,
-      normals: meshData.normals,
-      faces: meshData.faces,
+      vertices: new Float32Array(meshData.vertices),
+      normals: new Float32Array(meshData.normals),
+      faces: new Uint32Array(meshData.faces),
       derived: {
         tipChordMm: 0, wingAreaCm2: 0, aspectRatio: 0,
         meanAeroChordMm: 0, taperRatio: 0, estimatedCgMm: 0,

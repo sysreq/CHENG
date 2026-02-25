@@ -28,6 +28,8 @@ export interface ParamSliderProps {
   warningText?: string;
   /** Optional tooltip/description */
   title?: string;
+  /** Whether the control is disabled (e.g. when disconnected) */
+  disabled?: boolean;
 }
 
 /**
@@ -50,6 +52,7 @@ export function ParamSlider({
   hasWarning = false,
   warningText,
   title,
+  disabled = false,
 }: ParamSliderProps): React.JSX.Element {
   const id = useId();
 
@@ -163,8 +166,10 @@ export function ParamSlider({
         step={step}
         value={value}
         onChange={handleSliderChange}
+        disabled={disabled}
         className={`w-full h-1.5 rounded-full appearance-none cursor-pointer
-          bg-zinc-700 accent-blue-500 ${warningRing}`}
+          bg-zinc-700 accent-blue-500 ${warningRing}
+          disabled:opacity-50 disabled:cursor-not-allowed`}
         aria-label={`${label} slider`}
       />
 
@@ -180,10 +185,12 @@ export function ParamSlider({
         onFocus={handleFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
+        disabled={disabled}
         className={`mt-1 w-full px-2 py-1 text-xs text-zinc-100 bg-zinc-800
           border ${outOfRangeBorder} rounded focus:outline-none focus:border-blue-500
           [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none
-          [&::-webkit-inner-spin-button]:appearance-none ${warningRing}`}
+          [&::-webkit-inner-spin-button]:appearance-none ${warningRing}
+          disabled:opacity-50 disabled:cursor-not-allowed`}
       />
     </div>
   );

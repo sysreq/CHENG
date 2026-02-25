@@ -15,6 +15,8 @@ export interface ParamToggleProps {
   hasWarning?: boolean;
   /** Optional tooltip/description */
   title?: string;
+  /** Whether the control is disabled (e.g. when disconnected) */
+  disabled?: boolean;
 }
 
 /**
@@ -27,6 +29,7 @@ export function ParamToggle({
   onChange,
   hasWarning = false,
   title,
+  disabled = false,
 }: ParamToggleProps): React.JSX.Element {
   const id = useId();
 
@@ -44,8 +47,10 @@ export function ParamToggle({
         type="checkbox"
         checked={checked}
         onChange={handleChange}
+        disabled={disabled}
         className="h-4 w-4 rounded border-zinc-600 bg-zinc-800 text-blue-500
-          focus:ring-blue-500 focus:ring-offset-0 cursor-pointer accent-blue-500"
+          focus:ring-blue-500 focus:ring-offset-0 cursor-pointer accent-blue-500
+          disabled:opacity-50 disabled:cursor-not-allowed"
       />
       <label htmlFor={id} className="text-xs font-medium text-zinc-300 cursor-pointer">
         {label}
