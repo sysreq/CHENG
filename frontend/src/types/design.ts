@@ -147,6 +147,9 @@ export interface AircraftDesign {
    *  Array length >= wingSections - 1.
    *  @unit deg @min -10 @max 45 */
   panelSweeps: number[];
+  /** W12: per-panel airfoil overrides for panels 2–4. null = inherit wingAirfoil.
+   *  Array length = 3 (index 0 = panel 2, index 1 = panel 3, index 2 = panel 4). */
+  panelAirfoils: (WingAirfoil | null)[];
 
   // ── Tail (Conventional / T-Tail / Cruciform) ──────────────────────
   /** H-stab span. @unit mm @min 100 @max 1200 @default 350 */

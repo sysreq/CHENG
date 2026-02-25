@@ -12,6 +12,7 @@ import type {
   ChangeSource,
   PerComponentPrintSettings,
   ComponentPrintSettings,
+  WingAirfoil,
 } from '../types/design';
 import { COMPONENT_SUB_ELEMENTS } from '../types/design';
 import { createDesignFromPreset, DEFAULT_PRESET, PRESET_FACTORIES } from '../lib/presets';
@@ -145,13 +146,15 @@ export interface DesignStore {
   commitSliderChange: () => void;
   loadPreset: (name: Exclude<PresetName, 'Custom'>) => void;
 
-  // ── Multi-Section Wing Panel Array Actions (#143) ────────────────
+  // ── Multi-Section Wing Panel Array Actions (#143, #245) ──────────
   /** Set a specific panel break position by index (0-based). */
   setPanelBreak: (index: number, value: number) => void;
   /** Set a specific panel dihedral by index (0-based, panel 2+ only). */
   setPanelDihedral: (index: number, value: number) => void;
   /** Set a specific panel sweep by index (0-based, panel 2+ only). */
   setPanelSweep: (index: number, value: number) => void;
+  /** Set a specific panel airfoil by index (0-based, panel 2+ only). null = inherit root. */
+  setPanelAirfoil: (index: number, value: WingAirfoil | null) => void;
 
   // ── Derived Values (from backend, read-only) ────────────────────
   derived: DerivedValues | null;
@@ -243,6 +246,7 @@ export const useDesignStore = create<DesignStore>()(
               const oldBreaks = state.design.panelBreakPositions;
               const oldDihedrals = state.design.panelDihedrals;
               const oldSweeps = state.design.panelSweeps;
+              const oldAirfoils = state.design.panelAirfoils;
 
               if (oldBreaks.length < targetLen) {
                 // Append default entries for new panels
@@ -251,12 +255,14 @@ export const useDesignStore = create<DesignStore>()(
                   oldBreaks.push(breakPct);
                   oldDihedrals.push(10);
                   oldSweeps.push(state.design.wingSweep);
+                  oldAirfoils.push(null);
                 }
               }
               // Truncate arrays (Immer splice is fine here)
               state.design.panelBreakPositions = oldBreaks.slice(0, targetLen);
               state.design.panelDihedrals = oldDihedrals.slice(0, targetLen);
               state.design.panelSweeps = oldSweeps.slice(0, targetLen);
+              state.design.panelAirfoils = oldAirfoils.slice(0, targetLen);
             }
           }),
         );
@@ -298,6 +304,19 @@ export const useDesignStore = create<DesignStore>()(
             state.activePreset = 'Custom';
             state.lastChangeSource = 'immediate';
             state.lastAction = `Set Panel ${index + 2} Sweep to ${value}°`;
+            state.isDirty = true;
+          }),
+        ),
+
+      setPanelAirfoil: (index, value) =>
+        set(
+          produce((state: DesignStore) => {
+            state.design.panelAirfoils[index] = value;
+            state.activePreset = 'Custom';
+            state.lastChangeSource = 'immediate';
+            state.lastAction = value
+              ? `Set Panel ${index + 2} Airfoil to ${value}`
+              : `Reset Panel ${index + 2} Airfoil to inherit`;
             state.isDirty = true;
           }),
         ),

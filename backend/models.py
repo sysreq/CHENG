@@ -13,7 +13,7 @@ API Naming Contract:
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
@@ -116,6 +116,11 @@ class AircraftDesign(CamelModel):
     # NaN encodes "inherit panel 1 sweep" — stored as 0.0 by default here.
     panel_sweeps: list[float] = Field(
         default_factory=lambda: [0.0, 0.0, 0.0]
+    )
+    # W12: airfoil override for panels 2, 3, 4. None = inherit wing_airfoil.
+    panel_airfoils: list[Optional[WingAirfoil]] = Field(
+        default_factory=lambda: [None, None, None],
+        description="W12: per-panel airfoil override (index 0 = panel 2, 1 = panel 3, 2 = panel 4). None = inherit wing_airfoil."
     )
 
     # ── Tail (Conventional / T-Tail / Cruciform) ──────────────────────

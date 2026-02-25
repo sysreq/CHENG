@@ -255,11 +255,12 @@ function serializeDesign(design: AircraftDesign): Record<string, unknown> {
     wing_incidence: design.wingIncidence,
     wing_twist: design.wingTwist,
 
-    // Multi-section wing (#143)
+    // Multi-section wing (#143, #245)
     wing_sections: design.wingSections,
     panel_break_positions: design.panelBreakPositions,
     panel_dihedrals: design.panelDihedrals,
     panel_sweeps: design.panelSweeps,
+    panel_airfoils: design.panelAirfoils,
 
     // Tail (Conventional / T-Tail / Cruciform)
     h_stab_span: design.hStabSpan,

@@ -12,8 +12,8 @@ const ALL_PARAM_KEYS: (keyof AircraftDesign)[] = [
   'wingMountType', 'fuselageLength', 'tailType', 'wingAirfoil', 'wingSweep',
   'wingTipRootRatio', 'wingDihedral', 'wingSkinThickness',
   'wingIncidence', 'wingTwist',
-  // Multi-section wing params (#143)
-  'wingSections', 'panelBreakPositions', 'panelDihedrals', 'panelSweeps',
+  // Multi-section wing params (#143, #245)
+  'wingSections', 'panelBreakPositions', 'panelDihedrals', 'panelSweeps', 'panelAirfoils',
   'hStabSpan', 'hStabChord', 'hStabIncidence', 'vStabHeight', 'vStabRootChord',
   'vTailDihedral', 'vTailSpan', 'vTailChord', 'vTailIncidence', 'vTailSweep',
   'tailArm',

@@ -156,7 +156,7 @@ def _build_multi_section_wing(
     For the right wing: outboard = +Y (positive workplane offset).
     For the left wing:  outboard = -Y (negative workplane offset).
     """
-    profile = load_airfoil(design.wing_airfoil)
+    root_profile = load_airfoil(design.wing_airfoil)
     n = design.wing_sections
     root_chord = design.wing_chord
     tip_chord = root_chord * design.wing_tip_root_ratio
@@ -254,6 +254,14 @@ def _build_multi_section_wing(
         # Apply incidence + linear twist fraction at each station
         twist_in = wing_incidence_deg + wing_twist_deg * frac_in
         twist_out = wing_incidence_deg + wing_twist_deg * frac_out
+
+        # W12: per-panel airfoil selection.
+        # panel_idx 0 = innermost panel (always uses root airfoil).
+        # panel_idx 1, 2, 3 = panels 2, 3, 4 — use override if set.
+        if panel_idx == 0 or design.panel_airfoils[panel_idx - 1] is None:
+            profile = root_profile
+        else:
+            profile = load_airfoil(design.panel_airfoils[panel_idx - 1])
 
         pts_in = _scale_airfoil_2d(profile, chord_in, twist_in)
         pts_out = _scale_airfoil_2d(profile, chord_out, twist_out)
