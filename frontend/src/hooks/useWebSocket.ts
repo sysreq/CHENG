@@ -146,6 +146,16 @@ export function useWebSocket(): {
         return;
       }
 
+      // If onerror already set 'error' state, preserve it briefly before
+      // starting reconnection so the UI can display the error (#193)
+      const currentState = useConnectionStore.getState().state;
+      if (currentState === 'error') {
+        setTimeout(() => {
+          startReconnect();
+        }, 1500);
+        return;
+      }
+
       // Unintentional close — start reconnection
       startReconnect();
     };
