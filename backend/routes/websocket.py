@@ -324,9 +324,17 @@ def _generate_mesh(design: AircraftDesign):
         all_normals.append(mesh.normals)
         all_faces.append(mesh.faces + offset)
 
-        # Map component name to category
+        # Map component name to category for the combined range
         if "fuselage" in name:
             category = "fuselage"
+        elif name in ("wing_left", "wing_right"):
+            category = "wing"
+        elif name.startswith("aileron") or name.startswith("elevon"):
+            category = name  # control surfaces keep their own key
+        elif name.startswith("elevator") or name.startswith("rudder") or name.startswith("ruddervator"):
+            category = name  # control surfaces keep their own key
+        elif name.startswith("gear_"):
+            category = name  # gear components keep their own key
         elif "wing" in name:
             category = "wing"
         else:
@@ -334,11 +342,17 @@ def _generate_mesh(design: AircraftDesign):
 
         start_face = face_offset
         end_face = face_offset + mesh.face_count
-        if category in component_ranges:
-            # Extend existing range (e.g. wing_left + wing_right)
-            component_ranges[category][1] = end_face
-        else:
-            component_ranges[category] = [start_face, end_face]
+
+        # Store per-component range for detailed frontend queries
+        # (e.g. wing_left, wing_right for distinct shading)
+        component_ranges[name] = [start_face, end_face]
+
+        # Also maintain the combined category range for backward compatibility
+        if category != name:
+            if category in component_ranges:
+                component_ranges[category][1] = end_face
+            else:
+                component_ranges[category] = [start_face, end_face]
 
         offset += mesh.vertex_count
         face_offset += mesh.face_count
