@@ -431,7 +431,7 @@ export function GlobalPanel(): React.JSX.Element {
                   onClick={() => setPendingDeletePreset(p)}
                   className="px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-red-400
                     hover:bg-red-500/10 rounded transition-colors
-                    opacity-0 group-hover:opacity-100"
+                    opacity-60 group-hover:opacity-100"
                   title="Delete this preset"
                 >
                   Del
