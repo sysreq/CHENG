@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
@@ -44,9 +45,31 @@ class LocalStorage:
         return self.base_path / f"{safe_id}.cheng"
 
     def save_design(self, design_id: str, data: dict) -> None:
-        """Write design data as pretty-printed JSON."""
-        path = self._path(design_id)
-        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        """Write design data as pretty-printed JSON using an atomic write.
+
+        Writes to a sibling temp file first, then uses os.replace() to
+        atomically swap it into place.  This prevents a crash mid-write from
+        leaving a truncated / corrupt JSON file (#263).
+
+        os.replace() is atomic on POSIX (rename syscall) and best-effort on
+        Windows (no rename-over-open-file guarantee, but still far safer than
+        a direct write).
+        """
+        target = self._path(design_id)
+        data_str = json.dumps(data, indent=2)
+        tmp_fd, tmp_path_str = tempfile.mkstemp(
+            dir=target.parent, prefix=".tmp_", suffix=".json"
+        )
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                f.write(data_str)
+            os.replace(tmp_path_str, target)
+        except Exception:
+            try:
+                os.unlink(tmp_path_str)
+            except OSError:
+                pass
+            raise
 
     def load_design(self, design_id: str) -> dict:
         """Read and parse a saved design.  Raises FileNotFoundError if missing."""

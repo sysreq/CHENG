@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.cleanup import cleanup_tmp_files, periodic_cleanup
+from backend.export.package import EXPORT_TMP_DIR
 from backend.routes.designs import router as designs_router
 from backend.routes.generate import router as generate_router
 from backend.routes.export import router as export_router
@@ -45,15 +46,17 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("CadQuery warm-up failed: %s — geometry may be slow on first request", exc)
 
-    # 2. Ensure export tmp directory exists (needed outside Docker)
-    tmp_dir = Path("/data/tmp")
+    # 2. Ensure export tmp directory exists (needed outside Docker).
+    # Use the authoritative EXPORT_TMP_DIR constant from the export module so
+    # this path is always in sync with where exports actually write (#262, #276).
+    tmp_dir = EXPORT_TMP_DIR
     try:
         tmp_dir.mkdir(parents=True, exist_ok=True)
         logger.info("Export tmp directory ready: %s", tmp_dir)
     except OSError:
-        # On Windows or non-Docker, /data/tmp may not be writable.
+        # On Windows or non-Docker, the directory may not be writable.
         # Fall back to system temp — the export module handles this via EXPORT_TMP_DIR.
-        logger.info("Cannot create /data/tmp — export will use module default")
+        logger.info("Cannot create %s — export will use module default", tmp_dir)
 
     # 3. Ensure designs storage directory exists
     designs_dir = Path("/data/designs")
