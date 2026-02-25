@@ -473,6 +473,214 @@ def _check_v23(design: AircraftDesign, out: list[ValidationWarning]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Printability analysis  (V24 - V28)  [v0.6]
+# ---------------------------------------------------------------------------
+
+
+def _check_v24(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V24: Overhang analysis.
+
+    FDM printers struggle with overhangs > 45 degrees. For aircraft:
+    - Wing dihedral > 45° creates unsupported overhangs on the underside
+    - Wing sweep > 30° combined with dihedral creates compound overhangs
+    - V-tail dihedral > 45° creates overhangs on inner surfaces
+    """
+    if abs(design.wing_dihedral) > 45:
+        out.append(
+            ValidationWarning(
+                id="V24",
+                message=(
+                    f"Wing dihedral ({design.wing_dihedral:.0f}°) exceeds 45° — "
+                    f"underside overhang requires support material"
+                ),
+                fields=["wing_dihedral"],
+            )
+        )
+    elif abs(design.wing_dihedral) > 30 and abs(design.wing_sweep) > 15:
+        out.append(
+            ValidationWarning(
+                id="V24",
+                message=(
+                    f"Combined dihedral ({design.wing_dihedral:.0f}°) and sweep "
+                    f"({design.wing_sweep:.0f}°) may create compound overhangs"
+                ),
+                fields=["wing_dihedral", "wing_sweep"],
+            )
+        )
+
+    if design.tail_type == "V-Tail" and design.v_tail_dihedral > 45:
+        out.append(
+            ValidationWarning(
+                id="V24",
+                message=(
+                    f"V-tail dihedral ({design.v_tail_dihedral:.0f}°) exceeds 45° — "
+                    f"inner surfaces need support"
+                ),
+                fields=["v_tail_dihedral"],
+            )
+        )
+
+
+def _check_v25(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V25: Trailing edge sharpness.
+
+    If te_min_thickness is set below a printable threshold, warn the user.
+    Also check if the tip chord is so small that the TE becomes impractically
+    thin (tip chord * 0.02 for typical TE = ~2% of chord).
+    """
+    if design.te_min_thickness < 0.8:
+        out.append(
+            ValidationWarning(
+                id="V25",
+                message=(
+                    f"Trailing edge thickness ({design.te_min_thickness:.1f} mm) "
+                    f"below 0.8 mm — may not print reliably"
+                ),
+                fields=["te_min_thickness"],
+            )
+        )
+
+    # Check tip chord TE
+    tip_chord = design.wing_chord * design.wing_tip_root_ratio
+    # TE is typically ~2% of chord for thin airfoils; thicker for NACA 0012 etc.
+    tip_te_estimate = tip_chord * 0.02
+    if tip_te_estimate < design.te_min_thickness and tip_chord < 80:
+        out.append(
+            ValidationWarning(
+                id="V25",
+                message=(
+                    f"Tip chord ({tip_chord:.0f} mm) too small for reliable TE printing — "
+                    f"consider increasing taper ratio"
+                ),
+                fields=["wing_chord", "wing_tip_root_ratio", "te_min_thickness"],
+            )
+        )
+
+
+def _check_v26(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V26: Connector/joint clearance check.
+
+    Tongue-and-groove joints need sufficient depth relative to the wall
+    thickness. If joint_tolerance is very tight AND section_overlap is short,
+    the joint may not engage properly with FDM dimensional variance.
+
+    Also check that the joint tolerance is compatible with the nozzle diameter
+    (tolerance should be at least nozzle_diameter / 4 for reliable fit).
+    """
+    min_clearance = design.nozzle_diameter / 4.0
+    if design.joint_tolerance < min_clearance:
+        out.append(
+            ValidationWarning(
+                id="V26",
+                message=(
+                    f"Joint tolerance ({design.joint_tolerance:.2f} mm) below "
+                    f"{min_clearance:.2f} mm — too tight for {design.nozzle_diameter:.1f} mm nozzle"
+                ),
+                fields=["joint_tolerance", "nozzle_diameter"],
+            )
+        )
+
+    # Check joint depth relative to wall/skin
+    if design.joint_type == "Tongue-and-Groove":
+        # Tongue depth is typically section_overlap * 0.5
+        tongue_depth = design.section_overlap * 0.5
+        min_wall = min(design.wing_skin_thickness, design.wall_thickness)
+        if tongue_depth < 2.0 * min_wall:
+            out.append(
+                ValidationWarning(
+                    id="V26",
+                    message=(
+                        f"Joint tongue depth ({tongue_depth:.1f} mm) may be too shallow "
+                        f"relative to wall thickness ({min_wall:.1f} mm)"
+                    ),
+                    fields=["section_overlap", "wing_skin_thickness", "wall_thickness"],
+                )
+            )
+
+
+def _check_v27(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V27: Per-part print orientation recommendation.
+
+    For FDM printing of aircraft parts:
+    - Wings: print chord-wise (LE down, TE up) for best surface finish
+    - Fuselage: print lengthwise (nose forward) — but may need splitting
+    - Tail: similar to wings
+
+    Warn if dimensions suggest difficult print orientations.
+    """
+    # Check if fuselage height exceeds bed Z
+    preset = design.fuselage_preset
+    if preset == "Pod":
+        fuse_height = design.wing_chord * 0.45
+    elif preset == "Blended-Wing-Body":
+        fuse_height = design.wing_chord * 0.15
+    else:
+        fuse_height = design.wing_chord * 0.35 * 1.1
+
+    # Wing chord is the critical dimension for print orientation
+    # If chord > bed_z, the wing cannot be printed chord-upright
+    if design.wing_chord > design.print_bed_z:
+        out.append(
+            ValidationWarning(
+                id="V27",
+                message=(
+                    f"Wing chord ({design.wing_chord:.0f} mm) exceeds bed height "
+                    f"({design.print_bed_z:.0f} mm) — cannot print upright for best finish"
+                ),
+                fields=["wing_chord", "print_bed_z"],
+            )
+        )
+
+    if fuse_height > design.print_bed_z:
+        out.append(
+            ValidationWarning(
+                id="V27",
+                message=(
+                    f"Fuselage cross-section ({fuse_height:.0f} mm) exceeds bed height "
+                    f"({design.print_bed_z:.0f} mm) — print on side or split vertically"
+                ),
+                fields=["wing_chord", "fuselage_preset", "print_bed_z"],
+            )
+        )
+
+
+def _check_v28(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V28: Layer adhesion warning for thin walls.
+
+    For FDM-printed aircraft, wall thickness should be at least 2x nozzle
+    diameter for structural integrity (2 perimeters minimum). 1-perimeter
+    walls are possible but fragile. 3x is ideal for high-stress areas
+    but too heavy for full-wing skins.
+    """
+    min_perimeters = 2.0
+    min_wall = min_perimeters * design.nozzle_diameter
+
+    if design.wing_skin_thickness < min_wall:
+        out.append(
+            ValidationWarning(
+                id="V28",
+                message=(
+                    f"Wing skin ({design.wing_skin_thickness:.1f} mm) below "
+                    f"{min_wall:.1f} mm (3x nozzle) — weak layer adhesion"
+                ),
+                fields=["wing_skin_thickness", "nozzle_diameter"],
+            )
+        )
+
+    if design.wall_thickness < min_wall:
+        out.append(
+            ValidationWarning(
+                id="V28",
+                message=(
+                    f"Fuselage wall ({design.wall_thickness:.1f} mm) below "
+                    f"{min_wall:.1f} mm (3x nozzle) — weak layer adhesion"
+                ),
+                fields=["wall_thickness", "nozzle_diameter"],
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -512,5 +720,12 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
     _check_v21(design, warnings)
     _check_v22(design, warnings)
     _check_v23(design, warnings)
+
+    # Printability analysis (V24-V28)
+    _check_v24(design, warnings)
+    _check_v25(design, warnings)
+    _check_v26(design, warnings)
+    _check_v27(design, warnings)
+    _check_v28(design, warnings)
 
     return warnings
