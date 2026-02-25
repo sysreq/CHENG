@@ -208,7 +208,7 @@ def _estimate_weight_kg(design: AircraftDesign) -> float:
     return (airframe_g + design.motor_weight_g + design.battery_weight_g) / 1000.0
 
 
-def _check_v09(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+def _check_v09(design: AircraftDesign, out: list[ValidationWarning], weight_kg: float) -> None:
     """V09: Wing bending moment check.
 
     Rough estimate: root bending moment from lift ≈ (W * b) / (4 * pi).
@@ -219,7 +219,6 @@ def _check_v09(design: AircraftDesign, out: list[ValidationWarning]) -> None:
     The threshold is empirically set: above ~2.5, a 1.2mm skin PLA wing
     is at risk of creasing under moderate g-loads (2-3g maneuvers).
     """
-    weight_kg = _estimate_weight_kg(design)
     span_m = design.wing_span / 1000.0
     skin_t = design.wing_skin_thickness
 
@@ -333,7 +332,7 @@ def _check_v11(design: AircraftDesign, out: list[ValidationWarning]) -> None:
         )
 
 
-def _check_v12(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+def _check_v12(design: AircraftDesign, out: list[ValidationWarning], weight_kg: float) -> None:
     """V12: Wing loading check.
 
     Wing loading = weight / wing_area.
@@ -343,7 +342,6 @@ def _check_v12(design: AircraftDesign, out: list[ValidationWarning]) -> None:
       > 80 g/dm² = heavy — needs higher speed, harder landings
       > 120 g/dm² = very heavy — not suitable for beginners
     """
-    weight_kg = _estimate_weight_kg(design)
     weight_g = weight_kg * 1000.0
     wing_area_dm2 = _wing_area_m2(design) * 100.0  # m² to dm²
 
@@ -370,7 +368,7 @@ def _check_v12(design: AircraftDesign, out: list[ValidationWarning]) -> None:
         )
 
 
-def _check_v13(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+def _check_v13(design: AircraftDesign, out: list[ValidationWarning], weight_kg: float) -> None:
     """V13: Stall speed estimate.
 
     V_stall = sqrt(2 * W / (rho * S * Cl_max))
@@ -384,7 +382,6 @@ def _check_v13(design: AircraftDesign, out: list[ValidationWarning]) -> None:
     Warn if stall speed > 15 m/s (54 km/h) — difficult for beginners.
     Info if stall speed > 10 m/s (36 km/h).
     """
-    weight_kg = _estimate_weight_kg(design)
     weight_n = weight_kg * 9.81
     wing_area_m2 = _wing_area_m2(design)
 
@@ -1018,6 +1015,9 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
     """
     warnings: list[ValidationWarning] = []
 
+    # Pre-compute expensive weight estimate once — shared by V09, V12, V13.
+    weight_kg = _estimate_weight_kg(design)
+
     # Structural / geometric (V01-V08)
     _check_v01(design, warnings)
     _check_v02(design, warnings)
@@ -1029,11 +1029,11 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
     _check_v08(design, warnings)
 
     # Aerodynamic / structural analysis (V09-V13)
-    _check_v09(design, warnings)
+    _check_v09(design, warnings, weight_kg)
     _check_v10(design, warnings)
     _check_v11(design, warnings)
-    _check_v12(design, warnings)
-    _check_v13(design, warnings)
+    _check_v12(design, warnings, weight_kg)
+    _check_v13(design, warnings, weight_kg)
 
     # 3D printing (V16-V23)
     _check_v16(design, warnings)
