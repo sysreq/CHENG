@@ -321,8 +321,10 @@ export type MultiSectionWarningId = 'V29';
 export type ControlSurfaceWarningId = 'V30';
 /** Landing gear warning IDs (V31). */
 export type LandingGearWarningId = 'V31';
+/** Tail arm clamping warning IDs (V32). */
+export type TailArmWarningId = 'V32';
 /** All warning IDs. */
-export type WarningId = StructuralWarningId | PrintWarningId | AeroWarningId | PrintabilityWarningId | MultiSectionWarningId | ControlSurfaceWarningId | LandingGearWarningId;
+export type WarningId = StructuralWarningId | PrintWarningId | AeroWarningId | PrintabilityWarningId | MultiSectionWarningId | ControlSurfaceWarningId | LandingGearWarningId | TailArmWarningId;
 
 /** Non-blocking validation warning from the backend. */
 export interface ValidationWarning {
