@@ -10,6 +10,20 @@ import { ParamSlider, ParamSelect, DerivedField } from '../ui';
 import { PrintSettingsSection } from './PrintSettingsSection';
 import type { WingAirfoil } from '../../types/design';
 
+// (Re-exported so WingPanelSection can use without prop-drilling)
+const WING_AIRFOIL_OPTIONS_LIST: readonly WingAirfoil[] = [
+  'Flat-Plate',
+  'NACA-0012',
+  'NACA-2412',
+  'NACA-4412',
+  'NACA-6412',
+  'Clark-Y',
+  'Eppler-193',
+  'Eppler-387',
+  'Selig-1223',
+  'AG-25',
+] as const;
+
 // ---------------------------------------------------------------------------
 // Collapsible control surface section — local panel-only component
 // ---------------------------------------------------------------------------
@@ -49,18 +63,7 @@ function ControlSurfaceSection({
 // Option Constants
 // ---------------------------------------------------------------------------
 
-const WING_AIRFOIL_OPTIONS: readonly WingAirfoil[] = [
-  'Flat-Plate',
-  'NACA-0012',
-  'NACA-2412',
-  'NACA-4412',
-  'NACA-6412',
-  'Clark-Y',
-  'Eppler-193',
-  'Eppler-387',
-  'Selig-1223',
-  'AG-25',
-] as const;
+const WING_AIRFOIL_OPTIONS: readonly WingAirfoil[] = WING_AIRFOIL_OPTIONS_LIST;
 
 // ---------------------------------------------------------------------------
 // WingPanelSection sub-component (for each panel break when wingSections > 1)
@@ -75,6 +78,7 @@ function WingPanelSection({ index }: WingPanelSectionProps): React.JSX.Element {
   const setPanelBreak = useDesignStore((s) => s.setPanelBreak);
   const setPanelDihedral = useDesignStore((s) => s.setPanelDihedral);
   const setPanelSweep = useDesignStore((s) => s.setPanelSweep);
+  const setPanelAirfoil = useDesignStore((s) => s.setPanelAirfoil);
 
   // Open by default for index 0 (first outer panel), collapsed for higher
   const [open, setOpen] = useState(index === 0);
@@ -82,6 +86,7 @@ function WingPanelSection({ index }: WingPanelSectionProps): React.JSX.Element {
   const breakVal = design.panelBreakPositions[index] ?? 60;
   const dihedralVal = design.panelDihedrals[index] ?? 10;
   const sweepVal = design.panelSweeps[index] ?? 0;
+  const airfoilVal = design.panelAirfoils[index] ?? null;
 
   const setBreak = useCallback(
     (v: number) => setPanelBreak(index, v),
@@ -96,6 +101,11 @@ function WingPanelSection({ index }: WingPanelSectionProps): React.JSX.Element {
   const setSweep = useCallback(
     (v: number) => setPanelSweep(index, v),
     [setPanelSweep, index],
+  );
+
+  const setAirfoil = useCallback(
+    (v: WingAirfoil | null) => setPanelAirfoil(index, v),
+    [setPanelAirfoil, index],
   );
 
   // Inline validation: break must be < next break (if it exists)
@@ -171,6 +181,32 @@ function WingPanelSection({ index }: WingPanelSectionProps): React.JSX.Element {
             onInputChange={setSweep}
             title={`Leading-edge sweep of panel ${index + 2}. Defaults to global sweep when section is created.`}
           />
+
+          {/* W12 — Airfoil override for this panel */}
+          <div className="flex items-center justify-between py-1">
+            <span
+              className="text-xs text-zinc-400"
+              title={`Airfoil profile for panel ${index + 2}. "(inherit)" uses the root airfoil.`}
+            >
+              Airfoil
+            </span>
+            <select
+              value={airfoilVal ?? ''}
+              onChange={(e) => {
+                const v = e.target.value;
+                setAirfoil(v === '' ? null : (v as WingAirfoil));
+              }}
+              className="text-xs bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              title={`Airfoil for panel ${index + 2}. Leave blank to inherit the root airfoil (${design.wingAirfoil}).`}
+            >
+              <option value="">(inherit {design.wingAirfoil})</option>
+              {WING_AIRFOIL_OPTIONS_LIST.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       )}
     </div>

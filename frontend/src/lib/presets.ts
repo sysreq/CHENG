@@ -1,4 +1,4 @@
-import type { AircraftDesign, PresetName } from '../types/design';
+import type { AircraftDesign, PresetName, WingAirfoil } from '../types/design';
 
 // ---------------------------------------------------------------------------
 // Preset Descriptions
@@ -66,6 +66,7 @@ const MULTI_SECTION_DEFAULTS = {
   panelBreakPositions: [60.0, 80.0, 90.0],
   panelDihedrals: [10.0, 5.0, 5.0],
   panelSweeps: [0.0, 0.0, 0.0],
+  panelAirfoils: [null, null, null] as (WingAirfoil | null)[],
 };
 
 // Shared landing gear defaults — all presets default to 'None' (belly land)
@@ -337,6 +338,7 @@ function createGliderPreset(): AircraftDesign {
     panelBreakPositions: [60.0, 80.0, 90.0],
     panelDihedrals: [10.0, 5.0, 5.0],
     panelSweeps: [0.0, 0.0, 0.0],
+    panelAirfoils: [null, null, null] as (WingAirfoil | null)[],
   };
 }
 
