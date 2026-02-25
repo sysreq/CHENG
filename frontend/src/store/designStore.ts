@@ -32,6 +32,9 @@ const PRESET_COMPARE_KEYS: (keyof AircraftDesign)[] = [
   'jointType', 'jointTolerance', 'nozzleDiameter', 'hollowParts', 'teMinThickness',
   'supportStrategy',
   'wingSections',
+  'landingGearType', 'mainGearPosition', 'mainGearHeight', 'mainGearTrack',
+  'mainWheelDiameter', 'noseGearHeight', 'noseWheelDiameter',
+  'tailWheelDiameter', 'tailGearPosition',
 ];
 
 function detectPreset(design: AircraftDesign): PresetName {
@@ -87,6 +90,15 @@ const PARAM_LABELS: Partial<Record<keyof AircraftDesign, string>> = {
   jointTolerance: 'Joint Tolerance',
   nozzleDiameter: 'Nozzle Diameter',
   teMinThickness: 'TE Min Thickness',
+  landingGearType: 'Landing Gear Type',
+  mainGearPosition: 'Main Gear Position',
+  mainGearHeight: 'Main Gear Height',
+  mainGearTrack: 'Main Gear Track',
+  mainWheelDiameter: 'Main Wheel Dia',
+  noseGearHeight: 'Nose Gear Height',
+  noseWheelDiameter: 'Nose Wheel Dia',
+  tailWheelDiameter: 'Tail Wheel Dia',
+  tailGearPosition: 'Tail Gear Position',
 };
 
 export interface DesignStore {
@@ -129,10 +141,10 @@ export interface DesignStore {
   // ── Per-Component Print Settings (#128) ────────────────────────
   componentPrintSettings: PerComponentPrintSettings;
   setComponentPrintSetting: (
-    component: 'wing' | 'tail' | 'fuselage',
+    component: 'wing' | 'tail' | 'fuselage' | 'landing_gear',
     settings: Partial<ComponentPrintSettings>,
   ) => void;
-  clearComponentPrintSettings: (component: 'wing' | 'tail' | 'fuselage') => void;
+  clearComponentPrintSettings: (component: 'wing' | 'tail' | 'fuselage' | 'landing_gear') => void;
 
   // ── Viewport Selection ──────────────────────────────────────────
   selectedComponent: ComponentSelection;
@@ -286,14 +298,14 @@ export const useDesignStore = create<DesignStore>()(
       setComponentPrintSetting: (component, settings) =>
         set(
           produce((state: DesignStore) => {
-            const existing = state.componentPrintSettings[component] ?? {};
-            state.componentPrintSettings[component] = { ...existing, ...settings };
+            const existing = state.componentPrintSettings[component as 'wing' | 'tail' | 'fuselage' | 'landing_gear'] ?? {};
+            state.componentPrintSettings[component as 'wing' | 'tail' | 'fuselage' | 'landing_gear'] = { ...existing, ...settings };
           }),
         ),
       clearComponentPrintSettings: (component) =>
         set(
           produce((state: DesignStore) => {
-            delete state.componentPrintSettings[component];
+            delete state.componentPrintSettings[component as 'wing' | 'tail' | 'fuselage' | 'landing_gear'];
           }),
         ),
 

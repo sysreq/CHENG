@@ -24,6 +24,10 @@ const COMPONENT_COLORS: Record<string, string> = {
   wing: '#5c9ce6',
   fuselage: '#8b8b8b',
   tail: '#e6a65c',
+  gear_main_left: '#22c55e',
+  gear_main_right: '#22c55e',
+  gear_nose: '#22c55e',
+  gear_tail: '#22c55e',
 };
 const DEFAULT_COLOR = '#a0a0a8';
 
@@ -156,9 +160,15 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
     if (!fullGeometry || !meshData?.componentRanges) return null;
 
     const ranges = meshData.componentRanges;
-    const result: Partial<Record<'fuselage' | 'wing' | 'tail', THREE.BufferGeometry>> = {};
+    const result: Partial<Record<
+      'fuselage' | 'wing' | 'tail' | 'gear_main_left' | 'gear_main_right' | 'gear_nose' | 'gear_tail',
+      THREE.BufferGeometry
+    >> = {};
 
-    for (const key of ['fuselage', 'wing', 'tail'] as const) {
+    for (const key of [
+      'fuselage', 'wing', 'tail',
+      'gear_main_left', 'gear_main_right', 'gear_nose', 'gear_tail',
+    ] as const) {
       const range = ranges[key];
       if (range) {
         result[key] = createSubGeometry(fullGeometry, range[0], range[1]);
@@ -234,16 +244,36 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
       fuselage: 'Fuselage',
       wing: 'Wing',
       tail: 'Tail',
+      gear_main_left: 'Landing Gear (Main Left)',
+      gear_main_right: 'Landing Gear (Main Right)',
+      gear_nose: 'Landing Gear (Nose)',
+      gear_tail: 'Landing Gear (Tail Wheel)',
     };
+
+    // Map gear mesh keys to the 'landing_gear' ComponentSelection
+    const GEAR_MESH_KEYS = new Set([
+      'gear_main_left', 'gear_main_right', 'gear_nose', 'gear_tail',
+    ] as const);
+
+    const getComponentSelection = (key: string): ComponentSelection => {
+      if (GEAR_MESH_KEYS.has(key as 'gear_main_left')) return 'landing_gear';
+      return key as ComponentSelection;
+    };
+
+    const allKeys = [
+      'fuselage', 'wing', 'tail',
+      'gear_main_left', 'gear_main_right', 'gear_nose', 'gear_tail',
+    ] as const;
 
     return (
       <group ref={groupRef} rotation={[-Math.PI / 2, 0, Math.PI / 2]} onPointerMissed={handleMissClick}>
-        {(['fuselage', 'wing', 'tail'] as const).map((key) => {
+        {allKeys.map((key) => {
           const geom = componentGeometries[key];
           if (!geom) return null;
 
+          const componentSel = getComponentSelection(key);
           const isHovered = hoveredComponent === key;
-          const isSelected = selectedComponent === key;
+          const isSelected = selectedComponent === componentSel;
           const hasSubSelection = isSelected && selectedSubElement !== null;
 
           let color: string;
@@ -265,9 +295,9 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
             <group key={key}>
               <mesh
                 geometry={geom}
-                onClick={handleComponentClick(key)}
-                onPointerEnter={handlePointerEnter(key)}
-                onPointerLeave={handlePointerLeave(key)}
+                onClick={handleComponentClick(componentSel)}
+                onPointerEnter={handlePointerEnter(componentSel)}
+                onPointerLeave={handlePointerLeave(componentSel)}
               >
                 <meshStandardMaterial
                   color={color}

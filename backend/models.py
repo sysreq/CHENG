@@ -26,6 +26,7 @@ FuselagePreset = Literal["Pod", "Conventional", "Blended-Wing-Body"]
 MotorConfig = Literal["Tractor", "Pusher"]
 WingMountType = Literal["High-Wing", "Mid-Wing", "Low-Wing", "Shoulder-Wing"]
 TailType = Literal["Conventional", "T-Tail", "V-Tail", "Cruciform"]
+LandingGearType = Literal["None", "Tricycle", "Taildragger"]
 WingAirfoil = Literal[
     "Flat-Plate", "NACA-0012", "NACA-2412", "NACA-4412", "NACA-6412",
     "Clark-Y", "Eppler-193", "Eppler-387", "Selig-1223", "AG-25",
@@ -142,6 +143,23 @@ class AircraftDesign(CamelModel):
     battery_weight_g: float = Field(default=150.0, ge=0, le=2000)
     battery_position_frac: float = Field(default=0.30, ge=0.0, le=1.0)
 
+    # ── Landing Gear (L01-L11) ────────────────────────────────────────
+    landing_gear_type: LandingGearType = "None"
+
+    # Main gear (L03-L06) — applies to both Tricycle and Taildragger
+    main_gear_position: float = Field(default=35.0, ge=25.0, le=55.0)   # % fuselage length
+    main_gear_height: float = Field(default=40.0, ge=15.0, le=150.0)    # mm
+    main_gear_track: float = Field(default=120.0, ge=30.0, le=400.0)    # mm
+    main_wheel_diameter: float = Field(default=30.0, ge=10.0, le=80.0)  # mm
+
+    # Nose gear (L08-L09) — Tricycle only
+    nose_gear_height: float = Field(default=45.0, ge=15.0, le=150.0)    # mm
+    nose_wheel_diameter: float = Field(default=20.0, ge=8.0, le=60.0)   # mm
+
+    # Tail wheel (L10-L11) — Taildragger only
+    tail_wheel_diameter: float = Field(default=12.0, ge=5.0, le=40.0)   # mm
+    tail_gear_position: float = Field(default=92.0, ge=85.0, le=98.0)   # % fuselage length
+
 
 # ---------------------------------------------------------------------------
 # Derived Values — computed by geometry engine, read-only
@@ -207,6 +225,10 @@ class ExportPreviewPart(CamelModel):
     print_orientation: str
     assembly_order: int
     fits_bed: bool
+    # ── Issue #147: Smart split metadata (optional — only present for multi-section parts) ──
+    cut_position_mm: float | None = None    # actual cut coordinate along split axis
+    cut_adjusted: bool = False              # True if optimizer moved from midpoint
+    cut_adjust_reason: str = ""             # e.g. "Avoided wing root zone"
 
 
 class ExportPreviewResponse(CamelModel):
@@ -240,3 +262,16 @@ class SavePresetRequest(CamelModel):
 
     name: str
     design: AircraftDesign
+
+
+class TestJointExportRequest(CamelModel):
+    """Request body for POST /api/export/test-joint.
+
+    Subset of AircraftDesign containing only the parameters that affect
+    the joint geometry — no full design needed for this calibration print.
+    """
+
+    joint_type: JointType = "Tongue-and-Groove"   # PR10
+    joint_tolerance: float = Field(default=0.15, ge=0.05, le=0.5)   # PR11, mm
+    section_overlap: float = Field(default=15.0, ge=5.0, le=30.0)   # PR05, mm
+    nozzle_diameter: float = Field(default=0.4, ge=0.2, le=1.0)     # PR06, mm

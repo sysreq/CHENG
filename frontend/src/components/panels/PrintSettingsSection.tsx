@@ -40,7 +40,7 @@ const SUPPORT_LABELS: Record<SupportStrategy, string> = {
 
 interface PrintSettingsSectionProps {
   /** Which component these settings apply to */
-  component: 'wing' | 'tail' | 'fuselage';
+  component: 'wing' | 'tail' | 'fuselage' | 'landing_gear';
 }
 
 // ---------------------------------------------------------------------------
