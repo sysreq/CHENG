@@ -115,10 +115,15 @@ class AircraftDesign(CamelModel):
     # ── Shared Tail ───────────────────────────────────────────────────
     tail_arm: float = Field(default=180, ge=80, le=1500)
 
-    # ── Fuselage Section Lengths ──────────────────────────────────────
-    fuselage_nose_length: float = Field(default=75, ge=20, le=1000)
-    fuselage_cabin_length: float = Field(default=150, ge=30, le=1500)
-    fuselage_tail_length: float = Field(default=75, ge=20, le=1000)
+    # ── Fuselage Section Transition Points (F11/F12) ──────────────────
+    # Replace the three independent absolute-length sliders with two
+    # percentage breakpoints so sections always sum to fuselage_length.
+    #   nose_length  = nose_cabin_break_pct / 100 × fuselage_length
+    #   cabin_length = (cabin_tail_break_pct - nose_cabin_break_pct) / 100 × fuselage_length
+    #   tail_length  = (100 - cabin_tail_break_pct) / 100 × fuselage_length
+    # Constraint: nose_cabin_break_pct < cabin_tail_break_pct (enforced via V07 warning).
+    nose_cabin_break_pct: float = Field(default=25.0, ge=10.0, le=85.0)   # F11
+    cabin_tail_break_pct: float = Field(default=75.0, ge=15.0, le=90.0)   # F12
 
     # ── Fuselage Wall Thickness ───────────────────────────────────────
     wall_thickness: float = Field(default=1.5, ge=0.8, le=4.0)

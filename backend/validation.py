@@ -117,31 +117,25 @@ def _check_v06(design: AircraftDesign, out: list[ValidationWarning]) -> None:
 
 
 def _check_v07(design: AircraftDesign, out: list[ValidationWarning]) -> None:
-    """V07: fuselage section lengths don't sum to fuselage_length (>5% deviation)."""
-    section_sum = (
-        design.fuselage_nose_length
-        + design.fuselage_cabin_length
-        + design.fuselage_tail_length
-    )
-    if design.fuselage_length > 0:
-        deviation = abs(section_sum - design.fuselage_length) / design.fuselage_length
-        if deviation > 0.05:
-            out.append(
-                ValidationWarning(
-                    id="V07",
-                    message=(
-                        f"Section lengths sum ({section_sum:.0f} mm) differs from "
-                        f"fuselage length ({design.fuselage_length:.0f} mm) by "
-                        f"{deviation*100:.0f}% — sections will be scaled proportionally"
-                    ),
-                    fields=[
-                        "fuselage_nose_length",
-                        "fuselage_cabin_length",
-                        "fuselage_tail_length",
-                        "fuselage_length",
-                    ],
-                )
+    """V07: nose_cabin_break_pct must be strictly less than cabin_tail_break_pct.
+
+    The Pydantic field constraints guarantee each is within its own [min,max] range,
+    but cannot enforce the cross-field ordering. A minimum gap of 5% is required
+    so the cabin section is never zero-length.
+    """
+    gap = design.cabin_tail_break_pct - design.nose_cabin_break_pct
+    if gap < 5.0:
+        out.append(
+            ValidationWarning(
+                id="V07",
+                message=(
+                    f"Nose/cabin break ({design.nose_cabin_break_pct:.0f}%) must be "
+                    f"at least 5% below cabin/tail break ({design.cabin_tail_break_pct:.0f}%) "
+                    f"— cabin section is too short (gap={gap:.0f}%)"
+                ),
+                fields=["nose_cabin_break_pct", "cabin_tail_break_pct"],
             )
+        )
 
 
 def _check_v08(design: AircraftDesign, out: list[ValidationWarning]) -> None:

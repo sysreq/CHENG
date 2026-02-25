@@ -108,21 +108,10 @@ def _build_conventional(cq_mod: type, design: AircraftDesign, length: float) -> 
     nose_radius = max_width * 0.15
     tail_radius = max_width * 0.2
 
-    # Zone boundaries along X — F05/F06/F07: user-editable section lengths.
-    # Scale proportionally so sections sum to fuselage_length.
-    section_sum = (
-        design.fuselage_nose_length
-        + design.fuselage_cabin_length
-        + design.fuselage_tail_length
-    )
-    if section_sum > 0:
-        nose_end = length * (design.fuselage_nose_length / section_sum)
-        cabin_end = length * (
-            (design.fuselage_nose_length + design.fuselage_cabin_length) / section_sum
-        )
-    else:
-        nose_end = length * 0.25
-        cabin_end = length * 0.75
+    # Zone boundaries along X — F11/F12: transition-point percentages.
+    # Sections always sum to fuselage_length by construction.
+    nose_end = length * (design.nose_cabin_break_pct / 100.0)
+    cabin_end = length * (design.cabin_tail_break_pct / 100.0)
 
     # Wing mount Z offset
     mount_z = _wing_mount_z_offset(design, max_height)
@@ -161,20 +150,10 @@ def _build_pod(cq_mod: type, design: AircraftDesign, length: float) -> cq.Workpl
     nose_radius = max_width * 0.3  # blunter nose
     tail_radius = max_width * 0.15
 
-    # Zone boundaries — F05/F06/F07: user-editable section lengths.
-    section_sum = (
-        design.fuselage_nose_length
-        + design.fuselage_cabin_length
-        + design.fuselage_tail_length
-    )
-    if section_sum > 0:
-        nose_end = length * (design.fuselage_nose_length / section_sum)
-        cabin_end = length * (
-            (design.fuselage_nose_length + design.fuselage_cabin_length) / section_sum
-        )
-    else:
-        nose_end = length * 0.15
-        cabin_end = length * 0.75
+    # Zone boundaries — F11/F12: transition-point percentages.
+    # Sections always sum to fuselage_length by construction.
+    nose_end = length * (design.nose_cabin_break_pct / 100.0)
+    cabin_end = length * (design.cabin_tail_break_pct / 100.0)
 
     stations = [
         (0.0, nose_radius, nose_radius),
@@ -208,22 +187,10 @@ def _build_bwb(cq_mod: type, design: AircraftDesign, length: float) -> cq.Workpl
     nose_width = max_width * 0.3
     nose_height = max_height * 0.8
 
-    # #219: Station positions derived from design section-length parameters so
-    # nose_length / cabin_length / tail_taper_length sliders update the preview.
-    # Scale proportionally so sections sum to fuselage_length (same as Conventional).
-    section_sum = (
-        design.fuselage_nose_length
-        + design.fuselage_cabin_length
-        + design.fuselage_tail_length
-    )
-    if section_sum > 0:
-        nose_end = length * (design.fuselage_nose_length / section_sum)
-        cabin_end = length * (
-            (design.fuselage_nose_length + design.fuselage_cabin_length) / section_sum
-        )
-    else:
-        nose_end = length * 0.2
-        cabin_end = length * 0.8
+    # Station positions derived from F11/F12 transition-point percentages.
+    # Sections always sum to fuselage_length by construction.
+    nose_end = length * (design.nose_cabin_break_pct / 100.0)
+    cabin_end = length * (design.cabin_tail_break_pct / 100.0)
 
     stations = [
         (0.0, nose_width, nose_height),

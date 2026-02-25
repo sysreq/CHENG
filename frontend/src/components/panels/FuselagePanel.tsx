@@ -70,32 +70,26 @@ export function FuselagePanel(): React.JSX.Element {
     [setParam],
   );
 
-  // ── Section length sliders (F05/F06/F07) ────────────────────────────
+  // ── Section transition-point sliders (F11/F12) ──────────────────────
+  // noseCabinBreakPct: where nose ends / cabin begins (% of fuselage length)
+  // cabinTailBreakPct: where cabin ends / tail begins (% of fuselage length)
+  // Constraint: noseCabinBreakPct < cabinTailBreakPct (enforced via dynamic min/max)
 
-  const setNoseLengthSlider = useCallback(
-    (v: number) => setParam('fuselageNoseLength', v, 'slider'),
+  const setNoseCabinBreakSlider = useCallback(
+    (v: number) => setParam('noseCabinBreakPct', v, 'slider'),
     [setParam],
   );
-  const setNoseLengthInput = useCallback(
-    (v: number) => setParam('fuselageNoseLength', v, 'text'),
-    [setParam],
-  );
-
-  const setCabinLengthSlider = useCallback(
-    (v: number) => setParam('fuselageCabinLength', v, 'slider'),
-    [setParam],
-  );
-  const setCabinLengthInput = useCallback(
-    (v: number) => setParam('fuselageCabinLength', v, 'text'),
+  const setNoseCabinBreakInput = useCallback(
+    (v: number) => setParam('noseCabinBreakPct', v, 'text'),
     [setParam],
   );
 
-  const setTailLengthSlider = useCallback(
-    (v: number) => setParam('fuselageTailLength', v, 'slider'),
+  const setCabinTailBreakSlider = useCallback(
+    (v: number) => setParam('cabinTailBreakPct', v, 'slider'),
     [setParam],
   );
-  const setTailLengthInput = useCallback(
-    (v: number) => setParam('fuselageTailLength', v, 'text'),
+  const setCabinTailBreakInput = useCallback(
+    (v: number) => setParam('cabinTailBreakPct', v, 'text'),
     [setParam],
   );
 
@@ -166,51 +160,49 @@ export function FuselagePanel(): React.JSX.Element {
         hasWarning={fieldHasWarning(warnings, 'wingMountType')}
       />
 
-      {/* ── Section Lengths (F05/F06/F07) ─────────────────────────── */}
+      {/* ── Section Transition Points (F11/F12) ─────────────────────── */}
       <div className="border-t border-zinc-700/50 mt-4 mb-3" />
       <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">
-        Section Lengths
+        Section Proportions
       </h4>
 
       <ParamSlider
-        label="Nose Length"
-        unit="mm"
-        value={design.fuselageNoseLength}
-        min={20}
-        max={1000}
-        step={5}
-        onSliderChange={setNoseLengthSlider}
-        onInputChange={setNoseLengthInput}
-        hasWarning={fieldHasWarning(warnings, 'fuselageNoseLength')}
+        label="Nose/Cabin Break"
+        unit="%"
+        value={design.noseCabinBreakPct}
+        min={10}
+        max={design.cabinTailBreakPct - 5}
+        step={1}
+        onSliderChange={setNoseCabinBreakSlider}
+        onInputChange={setNoseCabinBreakInput}
+        hasWarning={fieldHasWarning(warnings, 'noseCabinBreakPct')}
+        warningText={warnText('noseCabinBreakPct')}
       />
       <ParamSlider
-        label="Cabin Length"
-        unit="mm"
-        value={design.fuselageCabinLength}
-        min={30}
-        max={1500}
-        step={5}
-        onSliderChange={setCabinLengthSlider}
-        onInputChange={setCabinLengthInput}
-        hasWarning={fieldHasWarning(warnings, 'fuselageCabinLength')}
-      />
-      <ParamSlider
-        label="Tail Cone Length"
-        unit="mm"
-        value={design.fuselageTailLength}
-        min={20}
-        max={1000}
-        step={5}
-        onSliderChange={setTailLengthSlider}
-        onInputChange={setTailLengthInput}
-        hasWarning={fieldHasWarning(warnings, 'fuselageTailLength')}
+        label="Cabin/Tail Break"
+        unit="%"
+        value={design.cabinTailBreakPct}
+        min={design.noseCabinBreakPct + 5}
+        max={90}
+        step={1}
+        onSliderChange={setCabinTailBreakSlider}
+        onInputChange={setCabinTailBreakInput}
+        hasWarning={fieldHasWarning(warnings, 'cabinTailBreakPct')}
+        warningText={warnText('cabinTailBreakPct')}
       />
 
-      {/* Sum indicator */}
-      <div className="text-xs text-zinc-500 mt-1 mb-2">
-        Sum: {(design.fuselageNoseLength + design.fuselageCabinLength + design.fuselageTailLength).toFixed(0)} mm
-        {' / '}Total: {design.fuselageLength} mm
-      </div>
+      {/* Computed section length summary */}
+      {(() => {
+        const L = design.fuselageLength;
+        const noseMm = (design.noseCabinBreakPct / 100) * L;
+        const cabinMm = ((design.cabinTailBreakPct - design.noseCabinBreakPct) / 100) * L;
+        const tailMm = ((100 - design.cabinTailBreakPct) / 100) * L;
+        return (
+          <div className="text-xs text-zinc-500 mt-1 mb-2">
+            Nose: {noseMm.toFixed(0)} mm | Cabin: {cabinMm.toFixed(0)} mm | Tail: {tailMm.toFixed(0)} mm
+          </div>
+        );
+      })()}
 
       {/* F14 — Wall Thickness */}
       <ParamSlider

@@ -125,10 +125,10 @@ function createTrainerPreset(): AircraftDesign {
     // V-tail defaults
     ...VTAIL_DEFAULTS,
 
-    // Fuselage sections (sum = 400 = fuselageLength)
-    fuselageNoseLength: 100,
-    fuselageCabinLength: 200,
-    fuselageTailLength: 100,
+    // Fuselage section transition points (F11/F12)
+    // nose=100/400=25%, nose+cabin=300/400=75%
+    noseCabinBreakPct: 25,
+    cabinTailBreakPct: 75,
 
     // Fuselage wall
     wallThickness: 1.6,
@@ -186,10 +186,10 @@ function createSportPreset(): AircraftDesign {
     // V-tail defaults
     ...VTAIL_DEFAULTS,
 
-    // Fuselage sections (sum = 300 = fuselageLength)
-    fuselageNoseLength: 75,
-    fuselageCabinLength: 150,
-    fuselageTailLength: 75,
+    // Fuselage section transition points (F11/F12)
+    // nose=75/300=25%, nose+cabin=225/300=75%
+    noseCabinBreakPct: 25,
+    cabinTailBreakPct: 75,
 
     // Fuselage wall
     wallThickness: 1.5,
@@ -247,10 +247,10 @@ function createAerobaticPreset(): AircraftDesign {
     // V-tail defaults
     ...VTAIL_DEFAULTS,
 
-    // Fuselage sections (sum = 280 = fuselageLength)
-    fuselageNoseLength: 70,
-    fuselageCabinLength: 140,
-    fuselageTailLength: 70,
+    // Fuselage section transition points (F11/F12)
+    // nose=70/280=25%, nose+cabin=210/280=75%
+    noseCabinBreakPct: 25,
+    cabinTailBreakPct: 75,
 
     // Fuselage wall
     wallThickness: 1.5,
@@ -312,10 +312,10 @@ function createGliderPreset(): AircraftDesign {
     vTailIncidence: 0,
     vTailSweep: 5,
 
-    // Fuselage sections (sum = 1000 = fuselageLength)
-    fuselageNoseLength: 200,
-    fuselageCabinLength: 300,
-    fuselageTailLength: 500,
+    // Fuselage section transition points (F11/F12)
+    // nose=200/1000=20%, nose+cabin=500/1000=50%
+    noseCabinBreakPct: 20,
+    cabinTailBreakPct: 50,
 
     // Fuselage wall
     wallThickness: 1.2,
@@ -379,10 +379,10 @@ function createFlyingWingPreset(): AircraftDesign {
     // V-tail defaults
     ...VTAIL_DEFAULTS,
 
-    // Fuselage sections (sum = 200 = fuselageLength)
-    fuselageNoseLength: 60,
-    fuselageCabinLength: 100,
-    fuselageTailLength: 40,
+    // Fuselage section transition points (F11/F12)
+    // nose=60/200=30%, nose+cabin=160/200=80%
+    noseCabinBreakPct: 30,
+    cabinTailBreakPct: 80,
 
     // Fuselage wall
     wallThickness: 1.5,
@@ -440,10 +440,10 @@ function createScalePreset(): AircraftDesign {
     // V-tail defaults
     ...VTAIL_DEFAULTS,
 
-    // Fuselage sections (sum = 1100 = fuselageLength)
-    fuselageNoseLength: 275,
-    fuselageCabinLength: 440,
-    fuselageTailLength: 385,
+    // Fuselage section transition points (F11/F12)
+    // nose=275/1100=25%, nose+cabin=715/1100=65%
+    noseCabinBreakPct: 25,
+    cabinTailBreakPct: 65,
 
     // Fuselage wall
     wallThickness: 1.5,
