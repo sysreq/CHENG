@@ -124,6 +124,29 @@ async def preview_websocket(ws: WebSocket) -> None:
                 # Handle both text and binary frames
                 if "text" in raw:
                     text = raw["text"]
+                    # Guard against None — ASGI can deliver {"type": "websocket.receive", "text": None, "bytes": ...}
+                    if text is None:
+                        # Fall through to bytes branch if present, otherwise skip
+                        if raw.get("bytes") is None:
+                            continue
+                        raw_bytes = raw["bytes"]
+                        if len(raw_bytes) > MAX_MESSAGE_SIZE:
+                            frame = _build_error_frame(
+                                error="Message too large",
+                                detail=f"Maximum message size is {MAX_MESSAGE_SIZE} bytes",
+                            )
+                            await _send_frame(frame)
+                            continue
+                        try:
+                            text = raw_bytes.decode("utf-8")
+                        except UnicodeDecodeError:
+                            logger.warning("Received non-UTF-8 binary frame, ignoring")
+                            frame = _build_error_frame(
+                                error="Invalid message format",
+                                detail="Expected UTF-8 encoded JSON text",
+                            )
+                            await _send_frame(frame)
+                            continue
                 elif "bytes" in raw:
                     raw_bytes = raw["bytes"]
                     if raw_bytes is None:
@@ -149,8 +172,14 @@ async def preview_websocket(ws: WebSocket) -> None:
                 else:
                     continue
 
-                # Reject oversized text messages (#182)
-                if len(text) > MAX_MESSAGE_SIZE:
+                # Reject oversized text messages (#182, #255)
+                # Use byte-length (not character count) to correctly reject
+                # non-ASCII payloads that could exceed the memory limit.
+                # Use errors="replace" to safely handle isolated surrogate
+                # characters (e.g. \ud800) that would raise UnicodeEncodeError
+                # with the default "strict" handler — those characters are rare
+                # in valid JSON but a malicious client could send them (#255).
+                if len(text.encode("utf-8", errors="replace")) > MAX_MESSAGE_SIZE:
                     frame = _build_error_frame(
                         error="Message too large",
                         detail=f"Maximum message size is {MAX_MESSAGE_SIZE} bytes",

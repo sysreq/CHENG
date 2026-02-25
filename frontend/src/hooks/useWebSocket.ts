@@ -30,7 +30,7 @@ const MAX_RECONNECT_MS = 30_000;
  * @returns send function to transmit design JSON, and disconnect to close.
  */
 export function useWebSocket(): {
-  send: (design: AircraftDesign) => void;
+  send: (design: AircraftDesign) => boolean;
   disconnect: () => void;
 } {
   const wsRef = useRef<WebSocket | null>(null);
@@ -50,8 +50,10 @@ export function useWebSocket(): {
   const startReconnect = useCallback(() => {
     const connStore = useConnectionStore.getState();
     connStore.setState('reconnecting');
-    connStore.incrementAttempt();
 
+    // Check BEFORE incrementing so that attempt #maxReconnectAttempts is
+    // actually executed (#268 — off-by-one: old code incremented first so
+    // the 5th attempt was skipped because count was already at 5).
     const { reconnectAttempts, maxReconnectAttempts } =
       useConnectionStore.getState();
 
@@ -61,9 +63,14 @@ export function useWebSocket(): {
       return;
     }
 
-    // Exponential backoff: 1s, 2s, 4s, 8s, 16s (capped at MAX_RECONNECT_MS)
+    connStore.incrementAttempt();
+
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s (capped at MAX_RECONNECT_MS).
+    // reconnectAttempts is the PRE-increment value (0-based), so:
+    //   attempt 1: reconnectAttempts=0 → 2^0=1s
+    //   attempt 2: reconnectAttempts=1 → 2^1=2s  ...etc.
     const delay = Math.min(
-      BASE_RECONNECT_MS * Math.pow(2, reconnectAttempts - 1),
+      BASE_RECONNECT_MS * Math.pow(2, reconnectAttempts),
       MAX_RECONNECT_MS,
     );
 
@@ -121,13 +128,16 @@ export function useWebSocket(): {
           actions.setDerived(frame.derived);
           actions.setWarnings(frame.validation);
         } else if (frame.type === 0x02) {
-          // Error frame — log for debugging
+          // Error frame — clear spinner and surface the error (#266)
+          useDesignStore.getState().setIsGenerating(false);
           console.error(
             `[WS Error] ${frame.error}: ${frame.detail}` +
               (frame.field ? ` (field: ${frame.field})` : ''),
           );
         }
       } catch (err) {
+        // Parse failure — clear spinner so the UI doesn't hang (#266)
+        useDesignStore.getState().setIsGenerating(false);
         console.error('[WS] Failed to parse binary frame:', err);
       }
     };
@@ -168,13 +178,16 @@ export function useWebSocket(): {
 
   /**
    * Send a design object as JSON to the backend via WebSocket.
-   * Silently drops if not connected.
+   * Returns true if the message was sent, false if the socket was not OPEN.
+   * Callers should only set isGenerating=true on a truthy return (#265).
    */
-  const send = useCallback((design: AircraftDesign) => {
+  const send = useCallback((design: AircraftDesign): boolean => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(serializeDesign(design)));
+      return true;
     }
+    return false;
   }, []);
 
   /**
