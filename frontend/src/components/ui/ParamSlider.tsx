@@ -7,7 +7,7 @@ import React, { useState, useCallback, useEffect, useId, useRef } from 'react';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { useDesignStore } from '../../store/designStore';
 import { useUnitStore } from '../../store/unitStore';
-import { toDisplayUnit, fromDisplayUnit, getDisplayUnit, convertSliderRange } from '../../lib/units';
+import { fromDisplayUnit, getDisplayUnit, convertSliderRange, MM_PER_INCH } from '../../lib/units';
 
 export interface ParamSliderProps {
   /** Display label */
@@ -71,8 +71,12 @@ export function ParamSlider({
   const isMmField = unit === 'mm';
   const displayUnit = unit ? getDisplayUnit(unit, unitSystem) : unit;
 
-  // Convert native mm value/range to display units
-  const displayValue = isMmField ? toDisplayUnit(value, unitSystem) : value;
+  // Convert native mm value/range to display units.
+  // For inches, round to 3 decimal places to avoid floating-point jitter
+  // (e.g. 1000mm = 39.370078... → 39.370 in)
+  const displayValue = isMmField
+    ? (unitSystem === 'in' ? parseFloat((value / MM_PER_INCH).toFixed(3)) : value)
+    : value;
   const displayRange = convertSliderRange({ min, max, step }, unit ?? '', unitSystem);
 
   // Track whether the slider is currently being dragged (for Zundo pause/resume)
@@ -83,13 +87,13 @@ export function ParamSlider({
   const [localValue, setLocalValue] = useState<string>(String(displayValue));
   const [isFocused, setIsFocused] = useState(false);
 
-  // Sync local value from prop when not focused (e.g. slider or preset change)
-  // Use displayValue so the local state reflects current unit system
+  // Sync local value from prop when not focused (e.g. slider or preset change or unit toggle).
+  // displayValue already incorporates both the current native value and unitSystem conversion,
+  // so it is the single source of truth for what the input shows.
   useEffect(() => {
     if (!isFocused) {
       setLocalValue(String(displayValue));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayValue, isFocused]);
 
   // Check if current local value is out of range (for red border)

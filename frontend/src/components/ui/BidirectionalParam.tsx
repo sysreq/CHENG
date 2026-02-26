@@ -2,11 +2,13 @@
 // CHENG — Bidirectional Parameter Toggle
 // Allows users to choose which of two related params to set directly,
 // with the other becoming a computed/read-only derived value.
-// Issue #121
+// Issue #121 | #153 (Unit toggle: mm / inches)
 // ============================================================================
 
 import React, { useCallback, useId } from 'react';
 import * as Tooltip from '@radix-ui/react-tooltip';
+import { useUnitStore } from '../../store/unitStore';
+import { toDisplayUnit, fromDisplayUnit, getDisplayUnit, convertSliderRange, MM_PER_INCH } from '../../lib/units';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -17,15 +19,15 @@ export interface BidirectionalParamProps {
   labelA: string;
   /** Label for param B (the "primary" when mode === 'b') */
   labelB: string;
-  /** Current value of param A */
+  /** Current value of param A (in native units — mm for mm fields) */
   valueA: number;
   /** Current value of param B */
   valueB: number;
-  /** Unit for param A */
+  /** Unit for param A. "mm" fields will be converted when in inches mode. */
   unitA?: string;
   /** Unit for param B */
   unitB?: string;
-  /** Min/max/step for param A slider */
+  /** Min/max/step for param A slider (in native units) */
   minA: number;
   maxA: number;
   stepA: number;
@@ -37,9 +39,9 @@ export interface BidirectionalParamProps {
   mode: 'a' | 'b';
   /** Called to toggle between modes */
   onModeChange: (mode: 'a' | 'b') => void;
-  /** Called when param A slider changes */
+  /** Called when param A slider changes (value in native units) */
   onSliderChangeA: (value: number) => void;
-  /** Called when param A input changes */
+  /** Called when param A input changes (value in native units) */
   onInputChangeA: (value: number) => void;
   /** Called when param B slider changes */
   onSliderChangeB: (value: number) => void;
@@ -61,7 +63,7 @@ export interface BidirectionalParamProps {
 }
 
 // ---------------------------------------------------------------------------
-// Internal: Inline mini slider+input (editable)
+// Internal: Inline mini slider+input (editable) — unit-aware
 // ---------------------------------------------------------------------------
 
 function InlineSliderInput({
@@ -70,6 +72,7 @@ function InlineSliderInput({
   min,
   max,
   step,
+  isMmField,
   onSliderChange,
   onInputChange,
   hasWarning,
@@ -81,30 +84,42 @@ function InlineSliderInput({
   min: number;
   max: number;
   step: number;
+  /** Whether this is an mm field that should be converted */
+  isMmField: boolean;
   onSliderChange: (v: number) => void;
   onInputChange: (v: number) => void;
   hasWarning?: boolean;
   warningText?: string;
   disabled?: boolean;
 }): React.JSX.Element {
-  const [localValue, setLocalValue] = React.useState<string>(String(value));
+  const unitSystem = useUnitStore((s) => s.unitSystem);
+
+  // Convert native value/range to display units
+  const displayValue = isMmField
+    ? (unitSystem === 'in' ? parseFloat((value / MM_PER_INCH).toFixed(3)) : value)
+    : value;
+  const displayRange = convertSliderRange({ min, max, step }, isMmField ? 'mm' : '', unitSystem);
+
+  const [localValue, setLocalValue] = React.useState<string>(String(displayValue));
   const [isFocused, setIsFocused] = React.useState(false);
 
   React.useEffect(() => {
     if (!isFocused) {
-      setLocalValue(String(value));
+      setLocalValue(String(displayValue));
     }
-  }, [value, isFocused]);
+  }, [displayValue, isFocused]);
 
   const parsed = parseFloat(localValue);
   const isOutOfRange =
-    isFocused && !Number.isNaN(parsed) && (parsed < min || parsed > max);
+    isFocused && !Number.isNaN(parsed) && (parsed < displayRange.min || parsed > displayRange.max);
 
   const handleSlider = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      onSliderChange(parseFloat(e.target.value));
+      const displayVal = parseFloat(e.target.value);
+      const nativeVal = isMmField ? fromDisplayUnit(displayVal, unitSystem) : displayVal;
+      onSliderChange(nativeVal);
     },
-    [onSliderChange],
+    [onSliderChange, isMmField, unitSystem],
   );
 
   const handleInput = useCallback(
@@ -117,14 +132,15 @@ function InlineSliderInput({
   const commitValue = useCallback(() => {
     const val = parseFloat(localValue);
     if (Number.isNaN(val)) {
-      setLocalValue(String(value));
+      setLocalValue(String(displayValue));
     } else {
-      const clamped = Math.min(max, Math.max(min, val));
+      const clamped = Math.min(displayRange.max, Math.max(displayRange.min, val));
       setLocalValue(String(clamped));
-      onInputChange(clamped);
+      const nativeVal = isMmField ? fromDisplayUnit(clamped, unitSystem) : clamped;
+      onInputChange(nativeVal);
     }
     setIsFocused(false);
-  }, [localValue, value, min, max, onInputChange]);
+  }, [localValue, displayValue, displayRange.min, displayRange.max, onInputChange, isMmField, unitSystem]);
 
   const handleFocus = useCallback(() => setIsFocused(true), []);
   const handleBlur = useCallback(() => commitValue(), [commitValue]);
@@ -146,10 +162,10 @@ function InlineSliderInput({
     <>
       <input
         type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
+        min={displayRange.min}
+        max={displayRange.max}
+        step={displayRange.step}
+        value={displayValue}
         onChange={handleSlider}
         disabled={disabled}
         className={`w-full h-1.5 rounded-full appearance-none cursor-pointer
@@ -160,9 +176,9 @@ function InlineSliderInput({
       <input
         id={id}
         type="number"
-        min={min}
-        max={max}
-        step={step}
+        min={displayRange.min}
+        max={displayRange.max}
+        step={displayRange.step}
         value={localValue}
         onChange={handleInput}
         onFocus={handleFocus}
@@ -192,7 +208,16 @@ function DerivedDisplay({
   unit?: string;
   decimals?: number;
 }): React.JSX.Element {
-  const formatted = `${value.toFixed(decimals)}${unit ? ` ${unit}` : ''}`;
+  const unitSystem = useUnitStore((s) => s.unitSystem);
+
+  // Convert mm values for display
+  const isMmField = unit === 'mm';
+  const displayUnit = unit ? getDisplayUnit(unit, unitSystem) : unit;
+  const displayValue = isMmField ? toDisplayUnit(value, unitSystem) : value;
+  // Use more decimal places for inch display
+  const displayDecimals = isMmField && unitSystem === 'in' ? decimals + 2 : decimals;
+
+  const formatted = `${displayValue.toFixed(displayDecimals)}${displayUnit ? ` ${displayUnit}` : ''}`;
   return (
     <div
       className="mt-1 w-full px-2 py-1 text-xs text-zinc-400 bg-zinc-800/50
@@ -237,6 +262,11 @@ export function BidirectionalParam({
 }: BidirectionalParamProps): React.JSX.Element {
   const idA = useId();
   const idB = useId();
+  const unitSystem = useUnitStore((s) => s.unitSystem);
+
+  // Determine display units
+  const isMmFieldA = unitA === 'mm';
+  const displayUnitA = unitA ? getDisplayUnit(unitA, unitSystem) : unitA;
 
   const toggleMode = useCallback(() => {
     onModeChange(mode === 'a' ? 'b' : 'a');
@@ -264,7 +294,7 @@ export function BidirectionalParam({
               </span>
             )}
           </label>
-          <span className="text-xs text-zinc-500">{unitA}</span>
+          <span className="text-xs text-zinc-500">{displayUnitA}</span>
         </div>
 
         {aIsEditable ? (
@@ -274,6 +304,7 @@ export function BidirectionalParam({
             min={minA}
             max={maxA}
             step={stepA}
+            isMmField={isMmFieldA}
             onSliderChange={onSliderChangeA}
             onInputChange={onInputChangeA}
             hasWarning={hasWarningA}
@@ -346,6 +377,7 @@ export function BidirectionalParam({
             min={minB}
             max={maxB}
             step={stepB}
+            isMmField={false}
             onSliderChange={onSliderChangeB}
             onInputChange={onInputChangeB}
             hasWarning={hasWarningB}
