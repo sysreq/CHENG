@@ -223,18 +223,21 @@ export interface DesignStore {
   exportDesignAsJson: () => void;
   /**
    * Import a design from a user-selected .cheng JSON file.
-   * In local mode: uploads the file to the backend via POST /api/designs/import
-   * so it is persisted to the Docker volume, then loads it into the store.
-   * In cloud mode: parses the JSON client-side, merges with known-good defaults
-   * to ensure schema completeness, and loads directly into the store.
+   *
+   * Both modes upload the file to POST /api/designs/import so that Pydantic
+   * validates and normalises the payload (handles camelCase from frontend
+   * exports and snake_case from backend-exported files).  In local mode the
+   * design is persisted to the Docker volume; in cloud mode it lands in
+   * MemoryStorage and the frontend (IndexedDB) becomes the canonical store.
    *
    * On error: rejects with a descriptive Error and resets isLoading to false.
-   * Does NOT set fileError (which is reserved for save operation failures and
-   * is displayed as "Save failed" in the Toolbar).  The caller is responsible
-   * for surfacing the error message in the UI.
+   * Does NOT set or clear fileError (which is reserved for save operation
+   * failures shown as "Save failed" in the Toolbar).  The caller must surface
+   * import errors through its own UI state.
    *
    * @param file - A File object from an <input type="file"> element.
-   * @param cloudMode - When true, skips the backend upload and merges locally.
+   * @param cloudMode - When true, marks the loaded design dirty so IndexedDB
+   *   persistence picks it up on the next save cycle.
    */
   importDesignFromJson: (file: File, cloudMode?: boolean) => Promise<void>;
 }
@@ -565,7 +568,10 @@ export const useDesignStore = create<DesignStore>()(
       },
 
       importDesignFromJson: async (file: File, cloudMode = false) => {
-        set({ isLoading: true, fileError: null });
+        // Note: do NOT clear fileError here — fileError is reserved for save
+        // operation failures.  Import errors are surfaced via the caller's
+        // own error state (e.g. Toolbar's local importError state).
+        set({ isLoading: true });
         try {
           const text = await file.text();
           let data: unknown;
@@ -579,98 +585,57 @@ export const useDesignStore = create<DesignStore>()(
             throw new Error('Invalid design file: not a JSON object');
           }
 
-          if (cloudMode) {
-            // Cloud mode: load design directly into the store (no backend persist).
-            // The design is stateless on the backend — IndexedDB handles persistence.
-            // Validate that this is a recognisable AircraftDesign before loading.
-            const obj = data as Record<string, unknown>;
-            const hasVersion = typeof obj['version'] === 'string';
-            const hasWingSpan =
-              typeof obj['wingSpan'] === 'number' || typeof obj['wing_span'] === 'number';
-            if (!hasVersion && !hasWingSpan) {
-              throw new Error(
-                'Invalid design file: missing required fields (expected "version" and/or "wingSpan")',
-              );
-            }
-            // Build a safe design object: start from known-good defaults (the
-            // current Trainer preset), then spread the imported data on top.
-            // This ensures all required AircraftDesign fields are present even if
-            // the imported file is from an older format or is partially filled.
-            const defaultDesign = createDesignFromPreset('Trainer');
-            const design: AircraftDesign = {
-              ...defaultDesign,
-              ...obj,
-              // Force primitive fields to correct types where they may be missing
-              version: typeof obj['version'] === 'string' ? obj['version'] : defaultDesign.version,
-              id: typeof obj['id'] === 'string' ? obj['id'] : defaultDesign.id,
-              name: typeof obj['name'] === 'string' ? obj['name'] : defaultDesign.name,
-            } as AircraftDesign;
-            set({
-              design,
-              designId: design.id || null,
-              designName: (design as { name?: string }).name ?? 'Imported Design',
-              activePreset: detectPreset(design),
-              lastChangeSource: 'immediate' as ChangeSource,
-              lastAction: `Imported design ${(design as { name?: string }).name ?? 'Imported Design'}`,
-              isDirty: true,
-              isLoading: false,
-              fileError: null,
-              derived: null,
-              warnings: [],
-              meshData: null,
-              isGenerating: false,
-              selectedComponent: 'global' as ComponentSelection,
-              selectedSubElement: null,
-              selectedPanel: null,
-              componentPrintSettings: {},
-              meshOffset: [0, 0, 0],
-            });
-          } else {
-            // Local mode: upload to the backend so the design is persisted to
-            // the Docker volume; then load the returned id into the store.
-            const formData = new FormData();
-            formData.append('file', file);
+          // Upload to the backend for Pydantic validation and normalisation
+          // (handles both camelCase from frontend exports and snake_case from
+          // backend-exported .cheng files).  In cloud mode the design is saved
+          // to MemoryStorage and the frontend (IndexedDB) becomes the canonical
+          // persistence layer; in local mode it is saved to the Docker volume.
+          const formData = new FormData();
+          formData.append('file', file);
 
-            const res = await fetch('/api/designs/import', {
-              method: 'POST',
-              body: formData,
-            });
+          const res = await fetch('/api/designs/import', {
+            method: 'POST',
+            body: formData,
+          });
 
-            if (!res.ok) {
-              const errBody = (await res.json().catch(() => ({ detail: res.statusText }))) as {
-                detail?: string;
-              };
-              throw new Error(errBody.detail ?? `Import failed: ${res.status}`);
-            }
-
-            const { id } = (await res.json()) as { id: string };
-
-            // Load the just-imported design from the backend (normalized by Pydantic)
-            const loadRes = await fetch(`/api/designs/${id}`);
-            if (!loadRes.ok) throw new Error(`Failed to load imported design: ${loadRes.status}`);
-            const loadedData = (await loadRes.json()) as AircraftDesign;
-
-            set({
-              design: loadedData,
-              designId: id,
-              designName: loadedData.name,
-              activePreset: detectPreset(loadedData),
-              lastChangeSource: 'immediate' as ChangeSource,
-              lastAction: `Imported design ${loadedData.name}`,
-              isDirty: false,
-              isLoading: false,
-              fileError: null,
-              derived: null,
-              warnings: [],
-              meshData: null,
-              isGenerating: false,
-              selectedComponent: 'global' as ComponentSelection,
-              selectedSubElement: null,
-              selectedPanel: null,
-              componentPrintSettings: {},
-              meshOffset: [0, 0, 0],
-            });
+          if (!res.ok) {
+            const errBody = (await res.json().catch(() => ({ detail: res.statusText }))) as {
+              detail?: string;
+            };
+            throw new Error(errBody.detail ?? `Import failed: ${res.status}`);
           }
+
+          const { id } = (await res.json()) as { id: string };
+
+          // Load the just-imported design from the backend (normalised by Pydantic,
+          // camelCase keys via CamelModel alias_generator).
+          const loadRes = await fetch(`/api/designs/${id}`);
+          if (!loadRes.ok) throw new Error(`Failed to load imported design: ${loadRes.status}`);
+          const loadedData = (await loadRes.json()) as AircraftDesign;
+
+          set({
+            design: loadedData,
+            designId: id,
+            designName: loadedData.name,
+            activePreset: detectPreset(loadedData),
+            lastChangeSource: 'immediate' as ChangeSource,
+            lastAction: `Imported design ${loadedData.name}`,
+            // In cloud mode the design was just written to MemoryStorage but has
+            // not yet been persisted to IndexedDB.  Mark dirty so that the
+            // IndexedDB persistence hook picks it up on the next save cycle.
+            isDirty: cloudMode,
+            isLoading: false,
+            fileError: null,
+            derived: null,
+            warnings: [],
+            meshData: null,
+            isGenerating: false,
+            selectedComponent: 'global' as ComponentSelection,
+            selectedSubElement: null,
+            selectedPanel: null,
+            componentPrintSettings: {},
+            meshOffset: [0, 0, 0],
+          });
         } catch (err) {
           // Reset loading state only — do NOT set fileError here.
           // fileError is reserved for save operations and would display as
