@@ -4,6 +4,7 @@ import { useDesignSync } from '@/hooks/useDesignSync';
 import { useConnectionStore } from '@/store/connectionStore';
 import { useChengMode } from '@/hooks/useChengMode';
 import { useIndexedDbPersistence } from '@/hooks/useIndexedDbPersistence';
+import { usePrintBedPreferences } from '@/hooks/usePrintBedPreferences';
 import { Toolbar } from '@/components/Toolbar';
 import Scene from '@/components/Viewport/Scene';
 import { ComponentPanel } from '@/components/panels/ComponentPanel';
@@ -51,6 +52,12 @@ export default function App() {
 
   // Enable IndexedDB auto-save + restore in cloud mode
   useIndexedDbPersistence(isCloudMode);
+
+  // Issue #155: load + apply saved print bed preferences on startup.
+  // The hook returns helpers that are passed down to the ExportDialog via
+  // the exportOpen state (the dialog reads them from context / callback props).
+  const { saveAsDefault: saveBedAsDefault, resetToDefaults: resetBedToDefaults } =
+    usePrintBedPreferences();
 
   const [exportOpen, setExportOpen] = useState(false);
   const isConnected = useConnectionStore((s) => s.state === 'connected');
@@ -137,7 +144,12 @@ export default function App() {
       </footer>
 
       {/* Modal overlay */}
-      <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
+      <ExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        onSaveBedAsDefault={saveBedAsDefault}
+        onResetBedToDefaults={resetBedToDefaults}
+      />
     </div>
   );
 }

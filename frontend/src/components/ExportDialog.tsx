@@ -40,6 +40,10 @@ type DialogStep = 'settings' | 'preview';
 interface ExportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Issue #155: save the current bed dimensions as the user's default. */
+  onSaveBedAsDefault?: () => void;
+  /** Issue #155: reset bed dimensions to factory defaults. */
+  onResetBedToDefaults?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -589,7 +593,12 @@ function TestJointDiagram({
 // Component
 // ---------------------------------------------------------------------------
 
-export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.JSX.Element {
+export function ExportDialog({
+  open,
+  onOpenChange,
+  onSaveBedAsDefault,
+  onResetBedToDefaults,
+}: ExportDialogProps): React.JSX.Element {
   const design = useDesignStore((s) => s.design);
   const warnings = useDesignStore((s) => s.warnings);
   const setParam = useDesignStore((s) => s.setParam);
@@ -597,6 +606,10 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
   const [step, setStep] = useState<DialogStep>('settings');
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('stl');
   const [isExporting, setIsExporting] = useState(false);
+
+  // Issue #155: feedback for "Save as default" button
+  const [bedSavedFlash, setBedSavedFlash] = useState(false);
+  const bedSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState(false);
@@ -617,6 +630,11 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      // Clean up bed-saved flash timer on unmount
+      if (bedSavedTimerRef.current) {
+        clearTimeout(bedSavedTimerRef.current);
+        bedSavedTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -666,8 +684,25 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
       setExportSuccess(false);
       setTestJointError(null);
       setTestJointSuccess(false);
+      // Clear bed-saved flash on close
+      setBedSavedFlash(false);
+      if (bedSavedTimerRef.current) {
+        clearTimeout(bedSavedTimerRef.current);
+        bedSavedTimerRef.current = null;
+      }
     }
   }, [open]);
+
+  // Issue #155: handler for "Save as default" button
+  const handleSaveBedAsDefault = useCallback(() => {
+    onSaveBedAsDefault?.();
+    setBedSavedFlash(true);
+    if (bedSavedTimerRef.current) clearTimeout(bedSavedTimerRef.current);
+    bedSavedTimerRef.current = setTimeout(() => {
+      setBedSavedFlash(false);
+      bedSavedTimerRef.current = null;
+    }, 2500);
+  }, [onSaveBedAsDefault]);
 
   // ── Number input handlers ──────────────────────────────────────────
 
@@ -1015,6 +1050,37 @@ export function ExportDialog({ open, onOpenChange }: ExportDialogProps): React.J
                         hasWarning={fieldHasWarning(warnings, 'printBedZ')}
                       />
                     </div>
+                  </div>
+
+                  {/* Issue #155: Save bed dims as default + reset to factory defaults */}
+                  <div className="mb-3 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveBedAsDefault}
+                      className="text-[10px] text-zinc-400 hover:text-zinc-200 underline
+                        focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-1
+                        whitespace-nowrap"
+                      title="Save these bed dimensions as your default for new designs and preset loads"
+                    >
+                      Save as default
+                    </button>
+                    {onResetBedToDefaults && (
+                      <button
+                        type="button"
+                        onClick={onResetBedToDefaults}
+                        className="text-[10px] text-zinc-500 hover:text-zinc-300 underline
+                          focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-1
+                          whitespace-nowrap"
+                        title="Reset bed dimensions to factory defaults (220 x 220 x 250 mm)"
+                      >
+                        Reset to defaults
+                      </button>
+                    )}
+                    {bedSavedFlash && (
+                      <span className="text-[10px] text-green-400 ml-1 animate-pulse">
+                        Saved!
+                      </span>
+                    )}
                   </div>
 
                   {/* Estimated parts */}
