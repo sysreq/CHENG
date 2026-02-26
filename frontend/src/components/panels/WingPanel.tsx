@@ -1,6 +1,7 @@
 // ============================================================================
 // CHENG — Wing Panel: Wing geometry + airfoil selection + derived values
 // Issue #26 | Multi-section wings #143 | Control surfaces #144
+// Issue #154 — Parameter renaming for beginners
 // ============================================================================
 
 import React, { useState, useCallback } from 'react';
@@ -132,7 +133,7 @@ function WingPanelSection({ index }: WingPanelSectionProps): React.JSX.Element {
             step={0.5}
             onSliderChange={setDihedral}
             onInputChange={setDihedral}
-            title={`Dihedral of panel ${index + 2}, measured from horizontal`}
+            title={`How much panel ${index + 2} tilts upward from horizontal. Positive = tips up.`}
           />
 
           {/* Outer Sweep */}
@@ -196,7 +197,7 @@ export function WingPanel(): React.JSX.Element {
     [setParam],
   );
 
-  // ── Wing Sections stepper (#243) ────────────────────────────────────
+  // ── Wing Panels stepper (#243) ───────────────────────────────────────
   const wingSections = design.wingSections;
   const decrementSections = useCallback(
     () => setParam('wingSections', Math.max(1, wingSections - 1), 'immediate'),
@@ -341,12 +342,12 @@ export function WingPanel(): React.JSX.Element {
         hasWarning={fieldHasWarning(warnings, 'wingAirfoil')}
       />
 
-      {/* W08 — Wing Sections stepper (#243) */}
+      {/* W08 — Wing Panels stepper (#243, renamed from Wing Sections in #154) */}
       <div
         className="flex items-center justify-between mb-2"
-        title="Number of spanwise wing panels per half. 1 = straight, 2–4 = polyhedral or cranked planform."
+        title="Number of spanwise panels per half-wing. 1 = straight wing, 2–4 = polyhedral or cranked planform."
       >
-        <span className="text-xs text-zinc-300">Wing Sections</span>
+        <span className="text-xs text-zinc-300">Wing Panels</span>
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -355,7 +356,7 @@ export function WingPanel(): React.JSX.Element {
             className="w-6 h-6 flex items-center justify-center rounded
               bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed
               text-zinc-200 text-sm font-bold transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500"
-            aria-label="Decrease wing sections"
+            aria-label="Decrease wing panels"
           >
             −
           </button>
@@ -369,7 +370,7 @@ export function WingPanel(): React.JSX.Element {
             className="w-6 h-6 flex items-center justify-center rounded
               bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed
               text-zinc-200 text-sm font-bold transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500"
-            aria-label="Increase wing sections"
+            aria-label="Increase wing panels"
           >
             +
           </button>
@@ -388,11 +389,12 @@ export function WingPanel(): React.JSX.Element {
         onInputChange={setSweepInput}
         hasWarning={fieldHasWarning(warnings, 'wingSweep')}
         warningText={warnText('wingSweep')}
+        title="How far the wing is swept back. 0 = straight, positive = swept back (like a jet)."
       />
 
-      {/* W04 — Wing Tip/Root Ratio */}
+      {/* W04 — Wing Taper (Tip/Root Ratio) */}
       <ParamSlider
-        label="Tip/Root Chord Ratio"
+        label="Taper (Tip/Root)"
         unit="ratio"
         value={design.wingTipRootRatio}
         min={0.3}
@@ -402,7 +404,7 @@ export function WingPanel(): React.JSX.Element {
         onInputChange={setTipRootInput}
         hasWarning={fieldHasWarning(warnings, 'wingTipRootRatio')}
         warningText={warnText('wingTipRootRatio')}
-        title="1.0 = rectangular wing, lower values = more tapered toward the tip"
+        title="How much the wing narrows from root to tip. 1.0 = rectangular (same width tip to root), lower = more tapered."
       />
 
       {/* W07 — Wing Dihedral (panel 1) */}
@@ -417,11 +419,12 @@ export function WingPanel(): React.JSX.Element {
         onInputChange={setDihedralInput}
         hasWarning={fieldHasWarning(warnings, 'wingDihedral')}
         warningText={warnText('wingDihedral')}
+        title="How much the wings angle upward from root to tip. Positive = tips up. Improves stability."
       />
 
-      {/* W08 — Wing Incidence */}
+      {/* W06 — Wing Angle (incidence) */}
       <ParamSlider
-        label="Incidence"
+        label="Wing Angle"
         unit="deg"
         value={design.wingIncidence}
         min={-5}
@@ -430,11 +433,12 @@ export function WingPanel(): React.JSX.Element {
         onSliderChange={setIncidenceSlider}
         onInputChange={setIncidenceInput}
         hasWarning={fieldHasWarning(warnings, 'wingIncidence')}
+        title="Tilts the wing up or down relative to the fuselage. Positive = front of wing tilts up. Most planes use 1–3 degrees."
       />
 
-      {/* W06 — Wing Twist (washout) */}
+      {/* W16 — Tip Twist (washout) */}
       <ParamSlider
-        label="Twist (washout)"
+        label="Tip Twist"
         unit="deg"
         value={design.wingTwist}
         min={-5}
@@ -443,7 +447,7 @@ export function WingPanel(): React.JSX.Element {
         onSliderChange={setTwistSlider}
         onInputChange={setTwistInput}
         hasWarning={fieldHasWarning(warnings, 'wingTwist')}
-        title="Negative = washout (tip nose-down), positive = washin"
+        title="Twists the wing tip compared to the root. Negative = tip nose-down (washout), which prevents tip stalls. Positive = washin."
       />
 
       {/* W20 — Wing Skin Thickness */}
@@ -458,6 +462,7 @@ export function WingPanel(): React.JSX.Element {
         onInputChange={setSkinInput}
         hasWarning={fieldHasWarning(warnings, 'wingSkinThickness')}
         warningText={warnText('wingSkinThickness')}
+        title="Thickness of the printed wing shell. Thicker = stronger but heavier."
       />
 
       {/* ── Control Surfaces (Issue #144) ─────────────────────────── */}
@@ -487,6 +492,7 @@ export function WingPanel(): React.JSX.Element {
             onInputChange={setElevonSpanStartInput}
             disabled={!design.elevonEnable}
             hasWarning={fieldHasWarning(warnings, 'elevonSpanStart')}
+            title="Inner edge of the elevon surface as % of half-span from root."
           />
           <ParamSlider
             label="Elevon Outboard"
@@ -499,6 +505,7 @@ export function WingPanel(): React.JSX.Element {
             onInputChange={setElevonSpanEndInput}
             disabled={!design.elevonEnable}
             hasWarning={fieldHasWarning(warnings, 'elevonSpanEnd')}
+            title="Outer edge of the elevon surface as % of half-span."
           />
           <ParamSlider
             label="Elevon Chord %"
@@ -593,28 +600,33 @@ export function WingPanel(): React.JSX.Element {
         value={derived?.tipChordMm ?? null}
         unit="mm"
         decimals={1}
+        title="Calculated wing width at the tip, based on root chord and taper ratio."
       />
       <DerivedField
         label="Wing Area"
         value={derived?.wingAreaCm2 ?? null}
         unit="cm&#178;"
         decimals={1}
+        title="Total planform area of both wings combined."
       />
       <DerivedField
         label="Aspect Ratio"
         value={derived?.aspectRatio ?? null}
         decimals={2}
+        title="How long and narrow the wing is. Higher = more efficient glide, lower = more agile. Wingspan divided by average chord."
       />
       <DerivedField
-        label="Mean Aero Chord"
+        label="Avg. Wing Width (MAC)"
         value={derived?.meanAeroChordMm ?? null}
         unit="mm"
         decimals={1}
+        title="Mean Aerodynamic Chord — the average width of the wing, used to calculate CG position."
       />
       <DerivedField
         label="Taper Ratio"
         value={derived?.taperRatio ?? null}
         decimals={3}
+        title="Tip chord divided by root chord. Same as the Taper (Tip/Root) setting above."
       />
       <DerivedField
         label="Estimated CG"
@@ -622,6 +634,7 @@ export function WingPanel(): React.JSX.Element {
         unit="mm"
         decimals={1}
         suffix="from wing LE"
+        title="Estimated balance point (center of gravity) measured from the wing leading edge."
       />
 
       {/* ── Per-Component Print Settings (#128) ────────────────────── */}

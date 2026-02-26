@@ -1,6 +1,7 @@
 // ============================================================================
 // CHENG — Global Panel: Core aircraft parameters
 // Issue #25 | #289 (preset section moved to Presets menu in Toolbar)
+// Issue #154 — Parameter renaming for beginners (tooltips added)
 // ============================================================================
 
 import React, { useCallback, useMemo, useState } from 'react';
@@ -158,10 +159,11 @@ export function GlobalPanel(): React.JSX.Element {
         options={FUSELAGE_PRESET_OPTIONS}
         onChange={setFuselagePreset}
         hasWarning={fieldHasWarning(warnings, 'fuselagePreset')}
+        title="Overall body shape. Pod = simple tube, Conventional = tapered body, Blended-Wing-Body = flying wing."
       />
 
       {/* G02 — Motor (toggle: engineCount 0 = no motor, 1 = single motor) */}
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between" title="Enable or disable the motor mount. Turn off for gliders.">
         <label
           htmlFor="motor-toggle"
           className="text-xs font-medium text-zinc-300 cursor-pointer"
@@ -202,6 +204,7 @@ export function GlobalPanel(): React.JSX.Element {
         options={MOTOR_CONFIG_OPTIONS}
         onChange={setMotorConfig}
         hasWarning={fieldHasWarning(warnings, 'motorConfig')}
+        title="Tractor = motor at the front pulling the plane. Pusher = motor at the back pushing the plane."
       />
 
       {/* G03 — Wing Span */}
@@ -216,6 +219,7 @@ export function GlobalPanel(): React.JSX.Element {
         onInputChange={setWingSpanInput}
         hasWarning={fieldHasWarning(warnings, 'wingSpan')}
         warningText={warnText('wingSpan')}
+        title="Total tip-to-tip wingspan. Most RC trainers are 900–1500 mm."
       />
 
       {/* G05 — Wing Chord / Aspect Ratio (bidirectional) */}
@@ -243,13 +247,14 @@ export function GlobalPanel(): React.JSX.Element {
         decimalsB={2}
       />
 
-      {/* F13 — Wing Mount Type */}
+      {/* F13 — Wing Placement */}
       <ParamSelect
-        label="Wing Mount"
+        label="Wing Placement"
         value={design.wingMountType}
         options={WING_MOUNT_OPTIONS}
         onChange={setWingMountType}
         hasWarning={fieldHasWarning(warnings, 'wingMountType')}
+        title="Where the wing attaches to the fuselage. High-wing is easiest to build and most stable for beginners."
       />
 
       {/* F01 — Fuselage Length */}
@@ -264,6 +269,7 @@ export function GlobalPanel(): React.JSX.Element {
         onInputChange={setFuselageLengthInput}
         hasWarning={fieldHasWarning(warnings, 'fuselageLength')}
         warningText={warnText('fuselageLength')}
+        title="Length of the main body from nose to tail. Does not include spinner or tail overhang."
       />
 
       {/* G06 — Tail Type */}
@@ -273,6 +279,7 @@ export function GlobalPanel(): React.JSX.Element {
         options={TAIL_TYPE_OPTIONS}
         onChange={setTailType}
         hasWarning={fieldHasWarning(warnings, 'tailType')}
+        title="Tail configuration. Conventional = horizontal + vertical stabilizers. V-Tail = two angled surfaces instead of separate H and V stabilizers."
       />
     </div>
   );
