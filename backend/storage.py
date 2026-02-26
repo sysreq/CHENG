@@ -17,7 +17,63 @@ import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
+
+
+# ---------------------------------------------------------------------------
+# CHENG_MODE helpers
+# ---------------------------------------------------------------------------
+
+ChengMode = Literal["local", "cloud"]
+_VALID_MODES: frozenset[str] = frozenset({"local", "cloud"})
+
+
+def get_cheng_mode() -> ChengMode:
+    """Return the current CHENG_MODE value, defaulting to ``'local'``.
+
+    Reads the ``CHENG_MODE`` environment variable.  Unrecognised values fall
+    back to ``'local'`` with a warning so that a misconfigured deployment
+    never silently breaks.
+
+    Returns
+    -------
+    Literal["local", "cloud"]
+        The validated mode string.
+    """
+    import logging
+
+    raw = os.environ.get("CHENG_MODE", "local").strip().lower()
+    if raw not in _VALID_MODES:
+        logging.getLogger("cheng").warning(
+            "Unknown CHENG_MODE=%r — falling back to 'local'. "
+            "Valid values are: %s",
+            raw,
+            ", ".join(sorted(_VALID_MODES)),
+        )
+        return "local"
+    return raw  # type: ignore[return-value]
+
+
+def create_storage_backend() -> "LocalStorage | MemoryStorage":
+    """Factory: return the appropriate StorageBackend for the current CHENG_MODE.
+
+    - ``local``  → :class:`LocalStorage` (file-based, persists across restarts)
+    - ``cloud``  → :class:`MemoryStorage` (in-memory, stateless, no file I/O)
+
+    The storage path for ``LocalStorage`` is read from the ``CHENG_DATA_DIR``
+    environment variable (default ``/data/designs``).
+    """
+    mode = get_cheng_mode()
+    if mode == "cloud":
+        return MemoryStorage()
+    return LocalStorage(
+        base_path=os.environ.get("CHENG_DATA_DIR", "/data/designs")
+    )
+
+
+# ---------------------------------------------------------------------------
+# Protocol
+# ---------------------------------------------------------------------------
 
 
 class StorageBackend(Protocol):
@@ -27,6 +83,11 @@ class StorageBackend(Protocol):
     def load_design(self, design_id: str) -> dict: ...
     def list_designs(self) -> list[dict]: ...
     def delete_design(self, design_id: str) -> None: ...
+
+
+# ---------------------------------------------------------------------------
+# LocalStorage — file-based, for local Docker mode
+# ---------------------------------------------------------------------------
 
 
 class LocalStorage:

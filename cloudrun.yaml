@@ -1,0 +1,86 @@
+# Cloud Run service configuration for CHENG — Parametric RC Plane Generator
+#
+# Deploy with:
+#   IMAGE=us-central1-docker.pkg.dev/PROJECT_ID/cheng-images/cheng:latest
+#   sed "s|IMAGE_URL|${IMAGE}|g" cloudrun.yaml | \
+#     gcloud run services replace - --region=us-central1
+#
+# IMPORTANT: run.googleapis.com/ingress: all controls network ingress
+# (whether the service is reachable from the public internet) but does NOT
+# grant unauthenticated access by itself. You must also grant IAM invoker
+# binding to allow unauthenticated requests:
+#
+#   gcloud run services add-iam-policy-binding cheng \
+#     --region=us-central1 \
+#     --member="allUsers" \
+#     --role="roles/run.invoker"
+#
+# Alternatively, use deploy.sh or cloudbuild.yaml which pass --allow-unauthenticated
+# to gcloud run deploy (this sets both ingress and IAM in one step).
+#
+# Note: Replace IMAGE_URL placeholder with the actual image reference before applying.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: cheng
+  labels:
+    app: cheng
+    cloud.googleapis.com/location: us-central1
+  annotations:
+    # Controls network-level ingress (internet-reachable vs internal-only).
+    # Does NOT grant unauthenticated access — see IAM note above.
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        # Scaling: keep 1 warm instance to eliminate cold starts (~$15/month)
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "10"
+        # Max concurrent requests per instance (4 = CadQuery thread pool limit)
+        autoscaling.knative.dev/target: "4"
+        # CPU is always allocated (not throttled between requests) — needed
+        # for the periodic cleanup background task
+        run.googleapis.com/cpu-throttling: "false"
+        # Startup CPU boost reduces cold start latency for the OCC kernel load
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      # Request timeout: 3600s covers large STL/STEP exports
+      timeoutSeconds: 3600
+      containerConcurrency: 4
+      containers:
+        - image: IMAGE_URL
+          ports:
+            - containerPort: 8080
+          env:
+            - name: CHENG_MODE
+              value: cloud
+            - name: CHENG_LOG_LEVEL
+              value: info
+            # PORT is injected automatically by Cloud Run (8080)
+          resources:
+            limits:
+              # CadQuery + OpenCascade baseline: ~800MB. 2Gi headroom for geometry ops.
+              memory: 2Gi
+              cpu: "2"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            # Allow up to 60s for OpenCascade kernel to preload on cold start
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 0
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
+  traffic:
+    - percent: 100
+      latestRevision: true

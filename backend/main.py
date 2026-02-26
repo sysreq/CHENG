@@ -3,9 +3,11 @@
 Lifespan preloads CadQuery, registers route modules, serves health endpoint,
 and mounts static files for the SPA frontend.
 
-CHENG_MODE environment variable controls storage behaviour:
-  local (default) — LocalStorage writes JSON files to /data/designs/
-  cloud           — MemoryStorage keeps designs in-memory (stateless backend)
+Deployment modes (CHENG_MODE env var):
+  local (default) — Docker with volume mount; backend disk storage saves designs.
+  cloud           — Cloud Run; stateless. Design persistence is handled by the
+                    browser (IndexedDB). CORS is opened to all origins so the
+                    Cloud Run URL can be reached from any browser.
 """
 
 from __future__ import annotations
@@ -22,60 +24,35 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.cleanup import cleanup_tmp_files, periodic_cleanup
 from backend.export.package import EXPORT_TMP_DIR
-from backend.routes.designs import router as designs_router, set_storage as set_design_storage
+from backend.routes.designs import router as designs_router
 from backend.routes.generate import router as generate_router
 from backend.routes.export import router as export_router
-from backend.routes.presets import router as presets_router, set_storage as set_preset_storage
+from backend.routes.info import router as info_router
+from backend.routes.presets import router as presets_router
 from backend.routes.websocket import router as websocket_router
-from backend.storage import LocalStorage, MemoryStorage
+from backend.storage import get_cheng_mode
 
 logger = logging.getLogger("cheng")
 
 # ---------------------------------------------------------------------------
-# CHENG_MODE — choose storage backend at startup
+# Deployment mode
 # ---------------------------------------------------------------------------
 
-CHENG_MODE = os.environ.get("CHENG_MODE", "local").lower()
-
-
-def _create_design_storage():
-    """Instantiate the appropriate design storage backend based on CHENG_MODE."""
-    if CHENG_MODE == "cloud":
-        logger.info("CHENG_MODE=cloud — using MemoryStorage for designs (stateless backend)")
-        return MemoryStorage()
-    else:
-        data_dir = os.environ.get("CHENG_DATA_DIR", "/data/designs")
-        logger.info("CHENG_MODE=%s — using LocalStorage for designs at %s", CHENG_MODE, data_dir)
-        return LocalStorage(base_path=data_dir)
-
-
-def _create_preset_storage():
-    """Instantiate the appropriate preset storage backend based on CHENG_MODE."""
-    if CHENG_MODE == "cloud":
-        logger.info("CHENG_MODE=cloud — using MemoryStorage for presets (session-scoped)")
-        return MemoryStorage()
-    else:
-        data_dir = os.environ.get("CHENG_DATA_DIR", "/data/designs")
-        parent = str(Path(data_dir).parent)
-        presets_dir = str(Path(parent) / "presets")
-        logger.info("CHENG_MODE=%s — using LocalStorage for presets at %s", CHENG_MODE, presets_dir)
-        return LocalStorage(base_path=presets_dir)
+CHENG_MODE: str = os.environ.get("CHENG_MODE", "local").lower()
+"""'local' (default) or 'cloud'.  Controls storage behavior and CORS policy."""
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup tasks:
-    1. Configure storage backend based on CHENG_MODE
-    2. Pre-warm CadQuery/OpenCascade kernel (first import takes ~2-4 s)
-    3. Ensure /data/tmp directory exists for export temp files
+    1. Pre-warm CadQuery/OpenCascade kernel (first import takes ~2-4 s)
+    2. Ensure /data/tmp directory exists for export temp files
     """
-    # 1. Configure storage backends (designs and presets are separate namespaces)
-    design_storage = _create_design_storage()
-    preset_storage = _create_preset_storage()
-    set_design_storage(design_storage)
-    set_preset_storage(preset_storage)
+    # Log active mode so operators can confirm deployment configuration
+    mode = get_cheng_mode()
+    logger.info("CHENG_MODE=%s", mode)
 
-    # 2. CadQuery warm-up with graceful degradation
+    # 1. CadQuery warm-up with graceful degradation
     try:
         import cadquery as cq
 
@@ -89,7 +66,7 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("CadQuery warm-up failed: %s — geometry may be slow on first request", exc)
 
-    # 3. Ensure export tmp directory exists (needed outside Docker).
+    # 2. Ensure export tmp directory exists (needed outside Docker).
     # Use the authoritative EXPORT_TMP_DIR constant from the export module so
     # this path is always in sync with where exports actually write (#262, #276).
     tmp_dir = EXPORT_TMP_DIR
@@ -101,28 +78,25 @@ async def lifespan(app: FastAPI):
         # Fall back to system temp — the export module handles this via EXPORT_TMP_DIR.
         logger.info("Cannot create %s — export will use module default", tmp_dir)
 
-    # 4. Ensure designs storage directory exists (local mode only)
-    if CHENG_MODE != "cloud":
+    # 3. Ensure designs storage directory exists (local mode only; cloud is stateless)
+    if mode == "local":
         designs_dir = Path(os.environ.get("CHENG_DATA_DIR", "/data/designs"))
         try:
             designs_dir.mkdir(parents=True, exist_ok=True)
         except OSError:
             logger.info("Cannot create %s — using default storage path", designs_dir)
 
-    # 5. Ensure presets storage directory exists (local mode only — cloud is
-    #    a stateless ephemeral environment; presets stored in /data/ would not
-    #    persist across container instances)
-    if CHENG_MODE != "cloud":
-        presets_dir = Path("/data/presets")
+        # 4. Ensure presets storage directory exists (local mode only)
+        presets_dir = designs_dir.parent / "presets"
         try:
             presets_dir.mkdir(parents=True, exist_ok=True)
             logger.info("Presets directory ready: %s", presets_dir)
         except OSError:
-            logger.info("Cannot create /data/presets — presets will use module default")
+            logger.info("Cannot create %s — presets will use module default", presets_dir)
+    else:
+        logger.info("Cloud mode: skipping persistent storage directory creation")
 
-    # 6. Clean up orphaned temp files from previous runs (#181)
-    # In cloud mode the export tmp dir uses the system temp directory, which
-    # Cloud Run's container filesystem allows, so cleanup still runs.
+    # 5. Clean up orphaned temp files from previous runs (#181)
     try:
         deleted = cleanup_tmp_files(tmp_dir)
         if deleted:
@@ -130,7 +104,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.warning("Startup temp cleanup failed", exc_info=True)
 
-    # 7. Start periodic cleanup task (runs every 30 min)
+    # 6. Start periodic cleanup task (runs every 30 min)
     async with anyio.create_task_group() as tg:
         tg.start_soon(periodic_cleanup, tmp_dir)
         yield
@@ -140,15 +114,35 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="CHENG", version="0.1.0", lifespan=lifespan)
 
 # ---------------------------------------------------------------------------
-# CORS middleware for development (Vite dev server at localhost:5173)
+# CORS middleware
 # ---------------------------------------------------------------------------
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+# local mode: allow only the Vite dev server (same host, different port)
+# cloud mode: allow all origins — Cloud Run URL changes per project/region and
+#             the browser frontend is served from the same container anyway.
+# CHENG_CORS_ORIGINS env var lets operators override the default for either mode.
+# It supports a comma-separated list, e.g. "https://a.example.com,https://b.example.com"
+# or "*" to allow all origins explicitly.
+_cors_origins_env: str = os.environ.get("CHENG_CORS_ORIGINS", "")
+if _cors_origins_env:
+    _allow_origins: list[str] = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+    # Wildcard in the explicit override list also disables credentials.
+    _allow_all = "*" in _allow_origins
+elif CHENG_MODE == "cloud":
+    _allow_origins = ["*"]
+    _allow_all = True
+else:
+    _allow_origins = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-    ],
-    allow_credentials=True,
+    ]
+    _allow_all = False
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allow_origins,
+    # allow_credentials must be False when allow_origins=["*"] (browser CORS spec).
+    # Starred wildcard and credentials=True together cause a FastAPI RuntimeError.
+    allow_credentials=not _allow_all,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -159,6 +153,7 @@ app.add_middleware(
 app.include_router(designs_router)
 app.include_router(generate_router)
 app.include_router(export_router)
+app.include_router(info_router)
 app.include_router(presets_router)
 app.include_router(websocket_router)
 
@@ -170,23 +165,8 @@ app.include_router(websocket_router)
 
 @app.get("/health")
 async def health() -> dict:
-    """Health check endpoint."""
+    """Health check endpoint used by Cloud Run and Docker HEALTHCHECK."""
     return {"status": "ok", "version": "0.1.0", "mode": CHENG_MODE}
-
-
-# ---------------------------------------------------------------------------
-# Mode endpoint — lets the frontend discover cloud vs local mode
-# ---------------------------------------------------------------------------
-
-
-@app.get("/api/mode")
-async def get_mode() -> dict:
-    """Return the current CHENG_MODE so the frontend can adjust behaviour.
-
-    In cloud mode the frontend uses IndexedDB for local persistence instead
-    of the server-side design API.
-    """
-    return {"mode": CHENG_MODE}
 
 
 # ---------------------------------------------------------------------------
