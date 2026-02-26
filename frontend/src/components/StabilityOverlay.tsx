@@ -5,13 +5,13 @@
 // Issue #317
 // ============================================================================
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { StabilityPanel } from './panels/StabilityPanel';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
 interface StabilityOverlayProps {
-  /** Called when the user closes the overlay via the × button. */
+  /** Called when the user closes the overlay via the × button or Escape key. */
   onClose: () => void;
   /** Ref to the toolbar's Toggle Plots button, so focus can be restored on close. */
   toggleButtonRef?: React.RefObject<HTMLButtonElement | null>;
@@ -23,7 +23,7 @@ interface StabilityOverlayProps {
  * Floating panel overlay for the Stability Plots feature.
  *
  * Positioning: `fixed top-14 right-4` — just below the 40px toolbar with a
- * small gap. `z-40` sits above the 3D canvas but below modal dialogs (`z-50`).
+ * visible gap. `z-40` sits above the 3D canvas but below modal dialogs (`z-50`).
  *
  * Width: `w-72` (288px) — readable gauges without obscuring the left sidebar.
  *
@@ -31,6 +31,8 @@ interface StabilityOverlayProps {
  *
  * Non-modal: `aria-modal="false"` allows the user to interact with the rest
  * of the app while this overlay is open (no focus trap).
+ *
+ * Keyboard: Escape key closes the overlay (standard dialog behaviour).
  */
 export function StabilityOverlay({
   onClose,
@@ -38,21 +40,32 @@ export function StabilityOverlay({
 }: StabilityOverlayProps): React.JSX.Element {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
+  // Close handler: dismiss overlay and restore focus to the toolbar toggle button.
+  const handleClose = useCallback(() => {
+    onClose();
+    // Restore focus to the toolbar toggle button so keyboard users don't lose
+    // their place after dismissing the overlay.
+    toggleButtonRef?.current?.focus();
+  }, [onClose, toggleButtonRef]);
+
   // When the overlay mounts, put focus on the close button so keyboard users
   // can immediately dismiss it without needing to tab through all content.
   useEffect(() => {
     closeButtonRef.current?.focus();
   }, []);
 
-  const handleClose = () => {
-    onClose();
-    // Restore focus to the toolbar toggle button so keyboard users don't lose
-    // their place after dismissing the overlay.
-    toggleButtonRef?.current?.focus();
-  };
+  // Dismiss the overlay when the user presses Escape (standard dialog behaviour).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleClose]);
 
   return (
     <div
+      id="stability-overlay"
       role="dialog"
       aria-label="Stability plots"
       aria-modal="false"

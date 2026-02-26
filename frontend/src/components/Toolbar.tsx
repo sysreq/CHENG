@@ -796,6 +796,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
           ref={togglePlotsButtonRef}
           onClick={() => setPlotsOpen((v) => !v)}
           aria-pressed={plotsOpen}
+          aria-controls="stability-overlay"
           aria-label={plotsOpen ? 'Hide stability plots' : 'Show stability plots'}
           className={`px-3 py-1 text-xs rounded focus:outline-none focus:ring-1 focus:ring-zinc-600
             ${plotsOpen
