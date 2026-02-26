@@ -577,6 +577,11 @@ export const useDesignStore = create<DesignStore>()(
           if (cloudMode) {
             // Cloud mode: load design directly into the store (no backend persist).
             // The design is stateless on the backend — IndexedDB handles persistence.
+            // Validate that the object has at least the basic expected fields.
+            const obj = data as Record<string, unknown>;
+            if (typeof obj['version'] !== 'string' && typeof obj['wingSpan'] === 'undefined') {
+              throw new Error('Invalid design file: missing required fields');
+            }
             const design = data as AircraftDesign;
             set({
               design,
