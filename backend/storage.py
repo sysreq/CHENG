@@ -168,23 +168,32 @@ class MemoryStorage:
             return copy.deepcopy(self._store[design_id])
 
     def list_designs(self) -> list[dict]:
-        """Return summaries of all stored designs, newest first."""
+        """Return summaries of all stored designs, newest first.
+
+        The "id" field in each summary is always the STORAGE KEY (design_id),
+        not the id embedded in the stored data.  This ensures that callers
+        can use the returned id directly with load_design() / delete_design()
+        without risk of a key mismatch if the payload id differs from the key.
+        """
         with self._lock:
             entries = []
             for design_id, data in self._store.items():
                 ts = self._timestamps.get(design_id, datetime.now(tz=timezone.utc))
                 entries.append(
                     {
-                        "id": data.get("id", design_id),
+                        # Use the storage key as the canonical id so that
+                        # subsequent load/delete calls succeed reliably.
+                        "id": design_id,
                         "name": data.get("name", "Untitled"),
                         "modified_at": ts.isoformat(),
+                        "_ts": ts,  # hidden key for sort; stripped below
                     }
                 )
-            # Sort newest first by timestamp
-            entries.sort(
-                key=lambda e: self._timestamps.get(e["id"], datetime.min.replace(tzinfo=timezone.utc)),
-                reverse=True,
-            )
+            # Sort newest first by timestamp using the cached value
+            entries.sort(key=lambda e: e["_ts"], reverse=True)
+            # Remove the hidden sort key before returning
+            for e in entries:
+                del e["_ts"]
             return entries
 
     def delete_design(self, design_id: str) -> None:
