@@ -230,3 +230,38 @@ def test_concurrent_mixed_operations(mem: MemoryStorage) -> None:
         t.join()
 
     assert errors == [], f"Thread errors: {errors}"
+
+# ---------------------------------------------------------------------------
+# Capacity limits
+# ---------------------------------------------------------------------------
+
+
+def test_capacity_limit_raises_memory_error() -> None:
+    """Saving beyond max_designs must raise MemoryError."""
+    mem = MemoryStorage(max_designs=3)
+    mem.save_design("a", {"id": "a"})
+    mem.save_design("b", {"id": "b"})
+    mem.save_design("c", {"id": "c"})
+    with pytest.raises(MemoryError, match="capacity exceeded"):
+        mem.save_design("d", {"id": "d"})
+
+
+def test_capacity_limit_allows_overwrite() -> None:
+    """Overwriting an existing id must not trigger the capacity check."""
+    mem = MemoryStorage(max_designs=2)
+    mem.save_design("a", {"id": "a", "name": "First"})
+    mem.save_design("b", {"id": "b", "name": "Second"})
+    # Overwriting 'a' (not a new id) should succeed even at capacity
+    mem.save_design("a", {"id": "a", "name": "Updated"})
+    assert mem.load_design("a")["name"] == "Updated"
+
+
+def test_capacity_limit_allows_new_after_delete() -> None:
+    """Deleting a design below capacity must allow subsequent saves."""
+    mem = MemoryStorage(max_designs=2)
+    mem.save_design("a", {"id": "a"})
+    mem.save_design("b", {"id": "b"})
+    mem.delete_design("a")
+    # Should succeed after freeing a slot
+    mem.save_design("c", {"id": "c"})
+    assert mem.design_count() == 2

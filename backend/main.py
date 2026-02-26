@@ -22,10 +22,10 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.cleanup import cleanup_tmp_files, periodic_cleanup
 from backend.export.package import EXPORT_TMP_DIR
-from backend.routes.designs import router as designs_router, set_storage
+from backend.routes.designs import router as designs_router, set_storage as set_design_storage
 from backend.routes.generate import router as generate_router
 from backend.routes.export import router as export_router
-from backend.routes.presets import router as presets_router
+from backend.routes.presets import router as presets_router, set_storage as set_preset_storage
 from backend.routes.websocket import router as websocket_router
 from backend.storage import LocalStorage, MemoryStorage
 
@@ -38,15 +38,28 @@ logger = logging.getLogger("cheng")
 CHENG_MODE = os.environ.get("CHENG_MODE", "local").lower()
 
 
-def _create_storage():
-    """Instantiate the appropriate storage backend based on CHENG_MODE."""
+def _create_design_storage():
+    """Instantiate the appropriate design storage backend based on CHENG_MODE."""
     if CHENG_MODE == "cloud":
-        logger.info("CHENG_MODE=cloud — using MemoryStorage (stateless backend)")
+        logger.info("CHENG_MODE=cloud — using MemoryStorage for designs (stateless backend)")
         return MemoryStorage()
     else:
         data_dir = os.environ.get("CHENG_DATA_DIR", "/data/designs")
-        logger.info("CHENG_MODE=%s — using LocalStorage at %s", CHENG_MODE, data_dir)
+        logger.info("CHENG_MODE=%s — using LocalStorage for designs at %s", CHENG_MODE, data_dir)
         return LocalStorage(base_path=data_dir)
+
+
+def _create_preset_storage():
+    """Instantiate the appropriate preset storage backend based on CHENG_MODE."""
+    if CHENG_MODE == "cloud":
+        logger.info("CHENG_MODE=cloud — using MemoryStorage for presets (session-scoped)")
+        return MemoryStorage()
+    else:
+        data_dir = os.environ.get("CHENG_DATA_DIR", "/data/designs")
+        parent = str(Path(data_dir).parent)
+        presets_dir = str(Path(parent) / "presets")
+        logger.info("CHENG_MODE=%s — using LocalStorage for presets at %s", CHENG_MODE, presets_dir)
+        return LocalStorage(base_path=presets_dir)
 
 
 @asynccontextmanager
@@ -56,9 +69,11 @@ async def lifespan(app: FastAPI):
     2. Pre-warm CadQuery/OpenCascade kernel (first import takes ~2-4 s)
     3. Ensure /data/tmp directory exists for export temp files
     """
-    # 1. Configure storage backend
-    storage = _create_storage()
-    set_storage(storage)
+    # 1. Configure storage backends (designs and presets are separate namespaces)
+    design_storage = _create_design_storage()
+    preset_storage = _create_preset_storage()
+    set_design_storage(design_storage)
+    set_preset_storage(preset_storage)
 
     # 2. CadQuery warm-up with graceful degradation
     try:

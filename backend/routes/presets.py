@@ -1,8 +1,8 @@
 """Custom presets CRUD routes — GET/POST/DELETE /api/presets.
 
 Uses a StorageBackend instance for storing custom presets.
-In local mode: LocalStorage at /data/presets/.
-In cloud mode: MemoryStorage (in-memory; presets are session-scoped).
+In local mode: LocalStorage at /data/presets/ (injected by main.py).
+In cloud mode: MemoryStorage — presets are session-scoped (injected by main.py).
 
 Follows same dependency injection pattern as designs.py.
 """
@@ -28,30 +28,28 @@ router = APIRouter(prefix="/api/presets", tags=["presets"])
 _default_storage: StorageBackend | None = None
 
 
-def _get_preset_dir() -> str:
-    """Derive presets directory from CHENG_DATA_DIR env var.
-
-    If CHENG_DATA_DIR is /data/designs (default), presets go to /data/presets.
-    """
-    data_dir = os.environ.get("CHENG_DATA_DIR", "/data/designs")
-    parent = str(Path(data_dir).parent)
-    return str(Path(parent) / "presets")
-
-
 def _get_storage() -> StorageBackend:
-    """FastAPI dependency returning the preset storage backend."""
+    """FastAPI dependency returning the preset storage backend.
+
+    The backend is normally injected at startup by main.py via set_storage().
+    Falls back to auto-detecting from CHENG_MODE when not injected (e.g. in
+    tests that only configure the design storage).
+    """
     global _default_storage  # noqa: PLW0603
     if _default_storage is None:
         cheng_mode = os.environ.get("CHENG_MODE", "local").lower()
         if cheng_mode == "cloud":
             _default_storage = MemoryStorage()
         else:
-            _default_storage = LocalStorage(base_path=_get_preset_dir())
+            data_dir = os.environ.get("CHENG_DATA_DIR", "/data/designs")
+            parent = str(Path(data_dir).parent)
+            presets_dir = str(Path(parent) / "presets")
+            _default_storage = LocalStorage(base_path=presets_dir)
     return _default_storage
 
 
 def set_storage(storage: StorageBackend | None) -> None:
-    """Override the default preset storage (used by tests and main.py)."""
+    """Override the default preset storage (called by main.py and tests)."""
     global _default_storage  # noqa: PLW0603
     _default_storage = storage
 

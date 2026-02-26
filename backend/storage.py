@@ -125,23 +125,38 @@ class MemoryStorage:
     This is intentional: in cloud mode the browser (IndexedDB) is the
     canonical persistence layer; the backend is a pure stateless function.
 
-    Capacity: practically unlimited (RAM-bound) per Cloud Run instance.
+    Capacity: bounded by *max_designs* (default 500) to prevent OOM in
+    public cloud environments where multiple users may share a container.
     Thread safety: all mutations are protected by a reentrant lock so that
     concurrent FastAPI handler threads cannot corrupt the dict.
     """
 
-    def __init__(self) -> None:
+    # Default maximum number of designs kept in memory.
+    # At ~50 KB per design (typical) 500 designs ≈ 25 MB RAM — well within
+    # Cloud Run's minimum 128 MB instance memory.
+    DEFAULT_MAX_DESIGNS = 500
+
+    def __init__(self, max_designs: int = DEFAULT_MAX_DESIGNS) -> None:
         self._store: dict[str, dict] = {}
         self._timestamps: dict[str, datetime] = {}
         self._lock = threading.RLock()
+        self._max_designs = max_designs
 
     def save_design(self, design_id: str, data: dict) -> None:
         """Store a deep copy of *data* under *design_id*.
 
         Deep-copying prevents accidental mutation of stored data via the
         original dict reference.
+
+        Raises MemoryError if adding this design would exceed max_designs and
+        the id is not already present (i.e., this is not an overwrite).
         """
         with self._lock:
+            if design_id not in self._store and len(self._store) >= self._max_designs:
+                raise MemoryError(
+                    f"MemoryStorage capacity exceeded ({self._max_designs} designs). "
+                    "Delete older designs before saving new ones."
+                )
             self._store[design_id] = copy.deepcopy(data)
             self._timestamps[design_id] = datetime.now(tz=timezone.utc)
 
