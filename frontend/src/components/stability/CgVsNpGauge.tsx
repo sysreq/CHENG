@@ -80,23 +80,23 @@ export function CgVsNpGauge({
           aria-hidden="true"
         />
 
-        {/* CG indicator — filled pill */}
+        {/* CG indicator — filled pill, centered via Tailwind transform */}
         <div
-          className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full ${cgColor} border-2 border-zinc-900`}
-          style={{ left: `${cgBarPct}%`, transform: 'translate(-50%, -50%)' }}
+          className={`absolute top-1/2 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-full ${cgColor} border-2 border-zinc-900`}
+          style={{ left: `${cgBarPct}%` }}
           aria-hidden="true"
         />
 
         {/* NP indicator — open circle with blue stroke */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-blue-400 bg-transparent"
-          style={{ left: `${npBarPct}%`, transform: 'translate(-50%, -50%)' }}
+          className="absolute top-1/2 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-blue-400 bg-transparent"
+          style={{ left: `${npBarPct}%` }}
           aria-hidden="true"
         />
       </div>
 
-      {/* Tick labels */}
-      <div className="flex justify-between text-xs text-zinc-500 mt-0.5 px-0">
+      {/* Tick labels — aria-hidden since bar has descriptive aria-label */}
+      <div className="flex justify-between text-xs text-zinc-500 mt-0.5 px-0" aria-hidden="true">
         <span>0%</span>
         <span>10%</span>
         <span>20%</span>
