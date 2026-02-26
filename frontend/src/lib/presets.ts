@@ -1,4 +1,4 @@
-import type { AircraftDesign, PresetName, WingAirfoil } from '../types/design';
+import type { AircraftDesign, PresetName, TailAirfoil, WingAirfoil } from '../types/design';
 
 // ---------------------------------------------------------------------------
 // Preset Descriptions
@@ -38,6 +38,10 @@ const VTAIL_DEFAULTS = {
   vTailIncidence: 0,
   vTailSweep: 0,
 };
+
+// T23: Tail surface airfoil default.
+// NACA-0012 is the historical default — all presets use it unless explicitly overridden.
+const TAIL_AIRFOIL_DEFAULT: TailAirfoil = 'NACA-0012';
 
 // Shared control surface defaults — all disabled by default (Issue #144)
 const CONTROL_SURFACE_DEFAULTS = {
@@ -121,6 +125,7 @@ function createTrainerPreset(): AircraftDesign {
     hStabIncidence: -1,
     vStabHeight: 120,
     vStabRootChord: 130,
+    tailAirfoil: TAIL_AIRFOIL_DEFAULT,
     tailArm: 220,
 
     // V-tail defaults
@@ -182,6 +187,7 @@ function createSportPreset(): AircraftDesign {
     hStabIncidence: -1,
     vStabHeight: 100,
     vStabRootChord: 110,
+    tailAirfoil: TAIL_AIRFOIL_DEFAULT,
     tailArm: 180,
 
     // V-tail defaults
@@ -243,6 +249,7 @@ function createAerobaticPreset(): AircraftDesign {
     hStabIncidence: 0,
     vStabHeight: 120,
     vStabRootChord: 120,
+    tailAirfoil: TAIL_AIRFOIL_DEFAULT,
     tailArm: 170,
 
     // V-tail defaults
@@ -304,6 +311,7 @@ function createGliderPreset(): AircraftDesign {
     hStabIncidence: -1,
     vStabHeight: 120,
     vStabRootChord: 100,
+    tailAirfoil: TAIL_AIRFOIL_DEFAULT,
     tailArm: 650,
 
     // V-tail — sized for adequate volume coefficients (Vh~0.38, Vv~0.025)
@@ -378,6 +386,7 @@ function createFlyingWingPreset(): AircraftDesign {
     hStabIncidence: 0,
     vStabHeight: 35,
     vStabRootChord: 30,
+    tailAirfoil: TAIL_AIRFOIL_DEFAULT,
     tailArm: 130,
 
     // V-tail defaults
@@ -439,6 +448,7 @@ function createScalePreset(): AircraftDesign {
     hStabIncidence: -1.5,
     vStabHeight: 160,
     vStabRootChord: 130,
+    tailAirfoil: TAIL_AIRFOIL_DEFAULT,
     tailArm: 650,
 
     // V-tail defaults

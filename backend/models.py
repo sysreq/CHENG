@@ -28,9 +28,13 @@ WingMountType = Literal["High-Wing", "Mid-Wing", "Low-Wing", "Shoulder-Wing"]
 TailType = Literal["Conventional", "T-Tail", "V-Tail", "Cruciform"]
 LandingGearType = Literal["None", "Tricycle", "Taildragger"]
 WingAirfoil = Literal[
-    "Flat-Plate", "NACA-0012", "NACA-2412", "NACA-4412", "NACA-6412",
+    "Flat-Plate", "NACA-0006", "NACA-0009", "NACA-0012", "NACA-2412", "NACA-4412", "NACA-6412",
     "Clark-Y", "Eppler-193", "Eppler-387", "Selig-1223", "AG-25",
 ]
+
+# T23: Tail airfoil — symmetric profiles only (suitable for tail surfaces).
+# NACA-0012 is the default for backward compatibility.
+TailAirfoil = Literal["Flat-Plate", "NACA-0006", "NACA-0009", "NACA-0012"]
 JointType = Literal["Tongue-and-Groove", "Dowel-Pin", "Flat-with-Alignment-Pins"]
 SupportStrategy = Literal["none", "minimal", "full"]
 
@@ -138,6 +142,9 @@ class AircraftDesign(CamelModel):
     v_tail_sweep: float = Field(default=0, ge=-10, le=45)
 
     # ── Shared Tail ───────────────────────────────────────────────────
+    # T23: Tail surface airfoil — symmetric profiles only. Default NACA-0012
+    # preserves existing behaviour for designs that predate this field.
+    tail_airfoil: TailAirfoil = "NACA-0012"
     tail_arm: float = Field(default=180, ge=80, le=1500)
 
     # ── Fuselage Section Transition Points (F11/F12) ──────────────────

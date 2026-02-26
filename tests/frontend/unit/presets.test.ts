@@ -15,6 +15,8 @@ const ALL_PARAM_KEYS: (keyof AircraftDesign)[] = [
   // Multi-section wing params (#143, #245)
   'wingSections', 'panelBreakPositions', 'panelDihedrals', 'panelSweeps', 'panelAirfoils',
   'hStabSpan', 'hStabChord', 'hStabIncidence', 'vStabHeight', 'vStabRootChord',
+  // T23: tail airfoil selection (#217)
+  'tailAirfoil',
   'vTailDihedral', 'vTailSpan', 'vTailChord', 'vTailIncidence', 'vTailSweep',
   'tailArm',
   'noseCabinBreakPct', 'cabinTailBreakPct',
@@ -203,6 +205,15 @@ describe('presets', () => {
       expect(Array.isArray(d.panelBreakPositions), `${name} panelBreakPositions should be array`).toBe(true);
       expect(Array.isArray(d.panelDihedrals), `${name} panelDihedrals should be array`).toBe(true);
       expect(Array.isArray(d.panelSweeps), `${name} panelSweeps should be array`).toBe(true);
+    }
+  });
+
+  // ── Tail airfoil (T23, #217) ─────────────────────────────────────────
+
+  it('all presets have tailAirfoil=NACA-0012 (default)', () => {
+    for (const name of ALL_PRESET_NAMES) {
+      const d = createDesignFromPreset(name);
+      expect(d.tailAirfoil, `${name} should have tailAirfoil='NACA-0012'`).toBe('NACA-0012');
     }
   });
 

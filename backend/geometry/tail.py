@@ -16,12 +16,7 @@ if TYPE_CHECKING:
     import cadquery as cq
 
 from backend.models import AircraftDesign
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-_TAIL_AIRFOIL: str = "NACA-0012"  # Symmetric airfoil for all tail surfaces
+from backend.geometry.airfoil import load_airfoil
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +39,8 @@ def build_tail(design: AircraftDesign) -> dict[str, cq.Workplane]:
 
     All tail surfaces:
     - Positioned at X = tail_arm aft of wing aerodynamic center
-    - Use flat-plate or symmetric airfoil profiles
+    - Use the airfoil profile selected via design.tail_airfoil (T23)
+    - NACA-0012 is the default for backward compatibility
     - Shelled to wing_skin_thickness if hollow_parts is True
     - Trailing edge min thickness enforced per te_min_thickness
 
@@ -169,6 +165,41 @@ def _build_cruciform_tail(
 
 
 # ---------------------------------------------------------------------------
+# Airfoil helpers
+# ---------------------------------------------------------------------------
+
+
+def _scale_airfoil_2d(
+    profile: list[tuple[float, float]],
+    chord: float,
+    incidence_deg: float,
+) -> list[tuple[float, float]]:
+    """Scale unit-chord airfoil profile to the given chord length and rotate by incidence.
+
+    Args:
+        profile: Unit-chord airfoil coordinates from load_airfoil() (Selig order).
+        chord:   Target chord length in mm.
+        incidence_deg: Rotation angle in degrees (positive = nose up).
+
+    Returns:
+        Scaled and rotated list of (x, y) tuples.
+    """
+    sin_r = math.sin(math.radians(incidence_deg))
+    cos_r = math.cos(math.radians(incidence_deg))
+    # Centre of rotation at quarter-chord
+    xc = 0.25
+    scaled: list[tuple[float, float]] = []
+    for xu, yu in profile:
+        # Shift so quarter-chord is at origin, scale, rotate, shift back
+        dx = (xu - xc) * chord
+        dy = yu * chord
+        x_rot = dx * cos_r - dy * sin_r + xc * chord
+        y_rot = dx * sin_r + dy * cos_r
+        scaled.append((x_rot, y_rot))
+    return scaled
+
+
+# ---------------------------------------------------------------------------
 # Component builders
 # ---------------------------------------------------------------------------
 
@@ -181,7 +212,7 @@ def _build_h_stab_half(
 ) -> cq.Workplane:
     """Build one half of the horizontal stabiliser.
 
-    Uses a symmetric airfoil (NACA 0012) or flat plate.
+    Uses the tail airfoil selected via design.tail_airfoil (T23).
     Lofts from root to tip with incidence applied.
 
     The h-stab is positioned at the tail_arm distance along X.
@@ -195,19 +226,19 @@ def _build_h_stab_half(
 
     y_sign = -1.0 if side == "left" else 1.0
 
-    # Use a simple NACA-like symmetric profile for the stab
-    # Build as a rectangular planform with constant chord
-    # (no taper on tail surfaces for MVP)
-    thickness_ratio = 0.12  # 12% thickness (NACA 0012 equivalent)
-    half_thickness = chord * thickness_ratio / 2.0
+    # Load airfoil profile and scale to chord length with incidence
+    profile = load_airfoil(design.tail_airfoil)
+    pts = _scale_airfoil_2d(profile, chord, incidence)
 
-    # Loft from root to tip using chained workplane offsets
+    # Loft from root to tip using chained workplane offsets.
+    # XZ workplane: local X = chord axis, local Y = Z (vertical, used for z_offset),
+    # local Z = -Y (spanwise, used for half_span offset).
     result = (
         cq.Workplane("XZ")
-        .transformed(offset=(0, z_offset, 0), rotate=(0, 0, -incidence))
-        .ellipse(chord / 2, half_thickness)
+        .transformed(offset=(0, z_offset, 0))
+        .spline(pts, periodic=False).close()
         .workplane(offset=y_sign * half_span)
-        .ellipse(chord / 2, half_thickness)
+        .spline(pts, periodic=False).close()
         .loft(ruled=False)
     )
 
@@ -230,26 +261,28 @@ def _build_v_stab(
 
     Extends upward in +Z from mount_z.
     Root chord at bottom, with slight taper to tip.
-    Uses symmetric airfoil profile.
+    Uses the tail airfoil selected via design.tail_airfoil (T23).
     """
     cq = cq_mod
 
     root_chord = design.v_stab_root_chord
     height = design.v_stab_height
-    tip_chord = root_chord * 0.6  # 60% taper at tip for v-stab
+    taper_ratio = 0.6  # 60% taper at tip for v-stab
 
-    thickness_ratio = 0.12
-    root_half_t = root_chord * thickness_ratio / 2.0
-    tip_half_t = tip_chord * thickness_ratio / 2.0
+    # Load and scale airfoil for root and tip cross-sections
+    profile = load_airfoil(design.tail_airfoil)
+    root_pts = _scale_airfoil_2d(profile, root_chord, 0.0)
+    tip_pts = _scale_airfoil_2d(profile, root_chord * taper_ratio, 0.0)
 
-    # Loft from root to tip using chained workplane offsets
-    # V-stab extends along Z, so we use XY plane and offset along Z
+    # Loft from root to tip.
+    # XY workplane: local X = chord axis, local Y = spanwise (horizontal).
+    # V-stab extends upward (Z), so we offset along Z using workplane(offset=height).
     result = (
         cq.Workplane("XY")
         .transformed(offset=(0, 0, mount_z))
-        .ellipse(root_chord / 2, root_half_t)
+        .spline(root_pts, periodic=False).close()
         .workplane(offset=height)
-        .ellipse(tip_chord / 2, tip_half_t)
+        .spline(tip_pts, periodic=False).close()
         .loft(ruled=False)
     )
 
@@ -272,6 +305,7 @@ def _build_v_tail_half(
 
     The V-tail surface is a single panel canted at v_tail_dihedral from
     horizontal.  "left" cants in -Y + upward, "right" in +Y + upward.
+    Uses the tail airfoil selected via design.tail_airfoil (T23).
     """
     cq = cq_mod
 
@@ -282,9 +316,6 @@ def _build_v_tail_half(
     sweep_deg = design.v_tail_sweep  # T15: user-editable V-tail sweep
 
     y_sign = -1.0 if side == "left" else 1.0
-
-    thickness_ratio = 0.09  # thinner for V-tail
-    half_thickness = chord * thickness_ratio / 2.0
 
     dihedral_rad = math.radians(dihedral)
     sweep_rad = math.radians(sweep_deg)
@@ -300,18 +331,18 @@ def _build_v_tail_half(
     # workplane(offset=tip_y) places the tip correctly in world space.
     sweep_offset_x = half_span * math.tan(sweep_rad)
 
+    # Load and scale airfoil profile with incidence applied
+    profile = load_airfoil(design.tail_airfoil)
+    pts = _scale_airfoil_2d(profile, chord, incidence)
+
     # Loft from root to tip using chained workplane offsets.
-    # Incidence is applied via transformed(rotate=(0, 0, -incidence)) at the
-    # root workplane.  In the XZ plane, local Z = world -Y (spanwise axis),
-    # so rotating around local Z pitches the chord — this is the correct axis
-    # for incidence (commit 1856acb: fix yaw→pitch).
+    # Incidence is already baked into pts via _scale_airfoil_2d.
     result = (
         cq.Workplane("XZ")
-        .transformed(rotate=(0, 0, -incidence))
-        .ellipse(chord / 2, half_thickness)
+        .spline(pts, periodic=False).close()
         .workplane(offset=tip_y)
         .transformed(offset=(sweep_offset_x, tip_z, 0))
-        .ellipse(chord / 2, half_thickness)
+        .spline(pts, periodic=False).close()
         .loft(ruled=False)
     )
 
