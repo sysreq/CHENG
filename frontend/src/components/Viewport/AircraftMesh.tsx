@@ -13,6 +13,7 @@ import { useDesignStore } from '@/store/designStore';
 import { createBufferGeometry } from '@/lib/meshParser';
 import type { MeshFrame } from '@/lib/meshParser';
 import type { ComponentSelection, ComponentRanges } from '@/types/design';
+import { DEFAULT_DERIVED_VALUES } from '@/types/design';
 
 const SELECTED_COLOR = '#FFD60A';
 const SUB_SELECTED_COLOR = '#FF6B35';
@@ -145,15 +146,7 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
       vertices: new Float32Array(meshData.vertices),
       normals: new Float32Array(meshData.normals),
       faces: new Uint32Array(meshData.faces),
-      derived: {
-        tipChordMm: 0, wingAreaCm2: 0, aspectRatio: 0,
-        meanAeroChordMm: 0, taperRatio: 0, estimatedCgMm: 0,
-        minFeatureThicknessMm: 0, wallThicknessMm: 0,
-        // Static stability defaults (v1.1)
-        neutralPointMm: 0, neutralPointPctMac: 25,
-        cgPctMac: 0, staticMarginPct: 0,
-        tailVolumeH: 0, tailVolumeV: 0, wingLoadingGDm2: 0,
-      },
+      derived: { ...DEFAULT_DERIVED_VALUES },
       validation: [],
       componentRanges: null,
     };
