@@ -636,7 +636,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
 
   return (
     <>
-      <div className="flex items-center h-10 px-2 bg-zinc-900 border-b border-zinc-800 gap-1">
+      <div className="flex items-center h-10 px-2 bg-zinc-900 border-b border-zinc-800 gap-1 overflow-hidden">
         {/* ════════════════════════════════════════════════════════════
             LEFT SECTION: File / Edit / Presets dropdown menus
             ════════════════════════════════════════════════════════════ */}
@@ -787,11 +787,11 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
             RIGHT SECTION: Design name, warnings, export
             ════════════════════════════════════════════════════════════ */}
 
-        {/* Design Name (click to edit) */}
+        {/* Design Name (click to edit) — hidden below 1400px to save horizontal space (#157) */}
         {isEditingName ? (
           <input
             ref={nameInputRef}
-            className="text-xs text-zinc-200 bg-zinc-800 border border-zinc-600 rounded px-1.5 py-0.5 mr-2 max-w-[200px] focus:outline-none focus:border-blue-500"
+            className="toolbar-design-name text-xs text-zinc-200 bg-zinc-800 border border-zinc-600 rounded px-1.5 py-0.5 mr-2 max-w-[160px] focus:outline-none focus:border-blue-500"
             value={editNameValue}
             onChange={(e) => setEditNameValue(e.target.value)}
             onBlur={() => {
@@ -813,7 +813,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
           />
         ) : (
           <button
-            className="text-xs text-zinc-500 mr-2 truncate max-w-[200px] hover:text-zinc-300 cursor-text bg-transparent border-none p-0"
+            className="toolbar-design-name text-xs text-zinc-500 mr-2 truncate max-w-[160px] hover:text-zinc-300 cursor-text bg-transparent border-none p-0"
             onClick={() => {
               setEditNameValue(designName);
               setIsEditingName(true);
@@ -825,13 +825,13 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
           </button>
         )}
 
-        {/* Save Feedback */}
+        {/* Save Feedback — hidden below 1400px (#157) */}
         {saveFlash && (
-          <span className="text-[10px] text-green-400 mr-2 animate-pulse">Saved!</span>
+          <span className="toolbar-design-name text-[10px] text-green-400 mr-2 animate-pulse">Saved!</span>
         )}
         {fileError && (
           <span
-            className="text-[10px] text-red-400 mr-2 cursor-pointer truncate max-w-[160px]"
+            className="toolbar-design-name text-[10px] text-red-400 mr-2 cursor-pointer truncate max-w-[120px]"
             title={fileError}
             onClick={clearFileError}
           >

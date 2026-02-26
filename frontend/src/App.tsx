@@ -34,6 +34,12 @@ import StorageUsageIndicator from '@/components/StorageUsageIndicator';
  *
  * In cloud mode (#150) IndexedDB persistence is active and a storage-usage
  * indicator is shown in the status bar.
+ *
+ * Responsive layout (#157): minimum supported size is 1280x720.
+ * - min-width: 1280px enforced on the root container
+ * - Component panel height is capped at 40vh (≈288px at 720px) so the
+ *   viewport retains at least ~350px of usable vertical space
+ * - Toolbar right section collapses verbose items below ~1440px via CSS
  */
 export default function App() {
   const { send } = useWebSocket();
@@ -62,6 +68,9 @@ export default function App() {
         gridTemplateColumns: '1fr',
         gridTemplateRows: '1fr auto var(--statusbar-height)',
         height: '100vh',
+        // Use CSS custom properties so the breakpoints stay in one place (index.css)
+        minHeight: 'var(--min-app-height)',
+        minWidth: 'var(--min-app-width)',
         overflow: 'hidden',
       }}
     >
@@ -73,6 +82,9 @@ export default function App() {
           position: 'relative',
           overflow: 'hidden',
           backgroundColor: 'var(--color-bg-secondary)',
+          // Ensure the viewport retains a reasonable minimum height at 720px.
+          // 720 - 40(toolbar) - 40vh(panel@720=288) - 32(statusbar) ≈ 360px
+          minHeight: '200px',
         }}
       >
         <Toolbar onOpenExport={() => setExportOpen(true)} />
@@ -86,13 +98,16 @@ export default function App() {
 
       {/* Bottom — Component Panel (Global / Wing / Tail / Fuselage / Landing Gear) */}
       <section
+        className="component-panel-section"
         style={{
           gridColumn: '1',
           gridRow: '2',
           backgroundColor: 'var(--color-bg-tertiary)',
           borderTop: '1px solid var(--color-border)',
           overflowY: 'auto',
-          maxHeight: '320px',
+          // Responsive panel height: cap at 40vh so the 3D viewport retains
+          // at least ~350px of vertical space at 720px screen height.
+          maxHeight: 'min(320px, 40vh)',
           position: 'relative',
           ...panelStyle,
         }}
