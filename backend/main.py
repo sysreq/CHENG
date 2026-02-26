@@ -2,6 +2,12 @@
 
 Lifespan preloads CadQuery, registers route modules, serves health endpoint,
 and mounts static files for the SPA frontend.
+
+Deployment modes (CHENG_MODE env var):
+  local (default) — Docker with volume mount; backend disk storage saves designs.
+  cloud           — Cloud Run; stateless. Design persistence is handled by the
+                    browser (IndexedDB). CORS is opened to all origins so the
+                    Cloud Run URL can be reached from any browser.
 """
 
 from __future__ import annotations
@@ -27,6 +33,13 @@ from backend.routes.websocket import router as websocket_router
 from backend.storage import get_cheng_mode
 
 logger = logging.getLogger("cheng")
+
+# ---------------------------------------------------------------------------
+# Deployment mode
+# ---------------------------------------------------------------------------
+
+CHENG_MODE: str = os.environ.get("CHENG_MODE", "local").lower()
+"""'local' (default) or 'cloud'.  Controls storage behavior and CORS policy."""
 
 
 @asynccontextmanager
@@ -65,22 +78,23 @@ async def lifespan(app: FastAPI):
         # Fall back to system temp — the export module handles this via EXPORT_TMP_DIR.
         logger.info("Cannot create %s — export will use module default", tmp_dir)
 
-    # 3. Ensure designs storage directory exists (local mode only)
+    # 3. Ensure designs storage directory exists (local mode only; cloud is stateless)
     if mode == "local":
         designs_dir = Path(os.environ.get("CHENG_DATA_DIR", "/data/designs"))
         try:
             designs_dir.mkdir(parents=True, exist_ok=True)
         except OSError:
-            logger.info("Cannot create /data/designs — using default storage path")
+            logger.info("Cannot create %s — using default storage path", designs_dir)
 
-    # 4. Ensure presets storage directory exists (local mode only — cloud mode is stateless)
-    if mode == "local":
-        presets_dir = Path("/data/presets")
+        # 4. Ensure presets storage directory exists (local mode only)
+        presets_dir = designs_dir.parent / "presets"
         try:
             presets_dir.mkdir(parents=True, exist_ok=True)
             logger.info("Presets directory ready: %s", presets_dir)
         except OSError:
-            logger.info("Cannot create /data/presets — presets will use module default")
+            logger.info("Cannot create %s — presets will use module default", presets_dir)
+    else:
+        logger.info("Cloud mode: skipping persistent storage directory creation")
 
     # 5. Clean up orphaned temp files from previous runs (#181)
     try:
@@ -100,15 +114,35 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="CHENG", version="0.1.0", lifespan=lifespan)
 
 # ---------------------------------------------------------------------------
-# CORS middleware for development (Vite dev server at localhost:5173)
+# CORS middleware
 # ---------------------------------------------------------------------------
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+# local mode: allow only the Vite dev server (same host, different port)
+# cloud mode: allow all origins — Cloud Run URL changes per project/region and
+#             the browser frontend is served from the same container anyway.
+# CHENG_CORS_ORIGINS env var lets operators override the default for either mode.
+# It supports a comma-separated list, e.g. "https://a.example.com,https://b.example.com"
+# or "*" to allow all origins explicitly.
+_cors_origins_env: str = os.environ.get("CHENG_CORS_ORIGINS", "")
+if _cors_origins_env:
+    _allow_origins: list[str] = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+    # Wildcard in the explicit override list also disables credentials.
+    _allow_all = "*" in _allow_origins
+elif CHENG_MODE == "cloud":
+    _allow_origins = ["*"]
+    _allow_all = True
+else:
+    _allow_origins = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-    ],
-    allow_credentials=True,
+    ]
+    _allow_all = False
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allow_origins,
+    # allow_credentials must be False when allow_origins=["*"] (browser CORS spec).
+    # Starred wildcard and credentials=True together cause a FastAPI RuntimeError.
+    allow_credentials=not _allow_all,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -131,8 +165,8 @@ app.include_router(websocket_router)
 
 @app.get("/health")
 async def health() -> dict:
-    """Health check endpoint."""
-    return {"status": "ok", "version": "0.1.0"}
+    """Health check endpoint used by Cloud Run and Docker HEALTHCHECK."""
+    return {"status": "ok", "version": "0.1.0", "mode": CHENG_MODE}
 
 
 # ---------------------------------------------------------------------------
