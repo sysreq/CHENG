@@ -3,7 +3,7 @@
 Verifies:
 - Health endpoint returns mode field
 - CHENG_MODE env var correctly configures CORS policy
-- PORT env var is respected by the startup command
+- CHENG_CORS_ORIGINS env var overrides defaults (including wildcard case)
 """
 
 from __future__ import annotations
@@ -124,6 +124,8 @@ class TestCorsOriginsOverride:
         assert "https://app.example.com" in main_mod._allow_origins
         assert "https://dev.example.com" in main_mod._allow_origins
         assert "*" not in main_mod._allow_origins
+        # Specific origins list: credentials are allowed
+        assert main_mod._allow_all is False
 
     def test_custom_origins_override_local_defaults(self, monkeypatch):
         monkeypatch.setenv("CHENG_MODE", "local")
@@ -133,3 +135,28 @@ class TestCorsOriginsOverride:
         importlib.reload(main_mod)
         assert "https://staging.example.com" in main_mod._allow_origins
         assert not any("5173" in o for o in main_mod._allow_origins)
+
+    def test_wildcard_in_cors_origins_disables_credentials(self, monkeypatch):
+        """If CHENG_CORS_ORIGINS='*', allow_all must be True to avoid CORS RuntimeError.
+
+        CORSMiddleware raises RuntimeError if allow_origins=['*'] and
+        allow_credentials=True simultaneously (browser CORS spec prohibits it).
+        """
+        monkeypatch.setenv("CHENG_MODE", "local")
+        monkeypatch.setenv("CHENG_CORS_ORIGINS", "*")
+        import importlib
+        import backend.main as main_mod
+        importlib.reload(main_mod)
+        assert main_mod._allow_origins == ["*"]
+        # allow_all=True means allow_credentials=False — no RuntimeError on startup
+        assert main_mod._allow_all is True
+
+    def test_wildcard_cors_app_starts_without_error(self, monkeypatch):
+        """App must not raise RuntimeError when CHENG_CORS_ORIGINS='*'."""
+        monkeypatch.setenv("CHENG_CORS_ORIGINS", "*")
+        import importlib
+        import backend.main as main_mod
+        # Reloading must not raise — previously this would cause FastAPI RuntimeError
+        importlib.reload(main_mod)
+        # App object must exist and be usable
+        assert main_mod.app is not None

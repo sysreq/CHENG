@@ -4,7 +4,7 @@ Lifespan preloads CadQuery, registers route modules, serves health endpoint,
 and mounts static files for the SPA frontend.
 
 Deployment modes (CHENG_MODE env var):
-  local (default) — Docker with volume mount; LocalStorage saves designs to disk.
+  local (default) — Docker with volume mount; backend disk storage saves designs.
   cloud           — Cloud Run; stateless. Design persistence is handled by the
                     browser (IndexedDB). CORS is opened to all origins so the
                     Cloud Run URL can be reached from any browser.
@@ -116,10 +116,13 @@ app = FastAPI(title="CHENG", version="0.1.0", lifespan=lifespan)
 # cloud mode: allow all origins — Cloud Run URL changes per project/region and
 #             the browser frontend is served from the same container anyway.
 # CHENG_CORS_ORIGINS env var lets operators override the default for either mode.
+# It supports a comma-separated list, e.g. "https://a.example.com,https://b.example.com"
+# or "*" to allow all origins explicitly.
 _cors_origins_env: str = os.environ.get("CHENG_CORS_ORIGINS", "")
 if _cors_origins_env:
     _allow_origins: list[str] = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
-    _allow_all = False
+    # Wildcard in the explicit override list also disables credentials.
+    _allow_all = "*" in _allow_origins
 elif CHENG_MODE == "cloud":
     _allow_origins = ["*"]
     _allow_all = True
@@ -133,7 +136,8 @@ else:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allow_origins,
-    # allow_credentials must be False when allow_origins=["*"] (browser CORS spec)
+    # allow_credentials must be False when allow_origins=["*"] (browser CORS spec).
+    # Starred wildcard and credentials=True together cause a FastAPI RuntimeError.
     allow_credentials=not _allow_all,
     allow_methods=["*"],
     allow_headers=["*"],
