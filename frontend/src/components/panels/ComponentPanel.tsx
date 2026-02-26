@@ -27,7 +27,7 @@ const COMPONENT_TABS: readonly { key: Exclude<ComponentSelection, null>; label: 
 ] as const;
 
 interface ComponentTabsProps {
-  selected: ComponentSelection;
+  selected: Exclude<ComponentSelection, null>;
   onSelect: (component: ComponentSelection) => void;
 }
 
@@ -162,7 +162,7 @@ export function ComponentPanel(): React.JSX.Element {
 
   return (
     <div className="flex flex-col h-full">
-      <ComponentTabs selected={selectedComponent} onSelect={handleTabSelect} />
+      <ComponentTabs selected={activeKey} onSelect={handleTabSelect} />
       <div
         role="tabpanel"
         id={`tabpanel-${activeKey}`}
