@@ -213,6 +213,7 @@ export default function Scene() {
       style={{ width: '100%', height: '100%', position: 'relative' }}
       role="region"
       aria-label="3D aircraft viewport — use mouse to orbit, scroll to zoom, right-click to pan. Keyboard shortcuts: 1=Front, 2=Side, 3=Top, 4=Perspective."
+      tabIndex={0}
     >
       <ViewportErrorBoundary>
         <Canvas

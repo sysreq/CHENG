@@ -86,12 +86,12 @@ export default function ConnectionStatus() {
         }}
       />
 
-      {/* Label */}
-      <span aria-hidden="true">{config.label}</span>
+      {/* Label — not hidden; aria-label on container provides the full description */}
+      <span>{config.label}</span>
 
       {/* Show attempt count when reconnecting */}
       {state === 'reconnecting' && (
-        <span aria-hidden="true" style={{ color: 'var(--color-text-muted)' }}>
+        <span style={{ color: 'var(--color-text-muted)' }}>
           ({reconnectAttempts}/{maxReconnectAttempts})
         </span>
       )}

@@ -136,11 +136,10 @@ function LoadDesignDialog({
             {!loading && !error && designs.length > 0 && (
               <ul
                 className="space-y-1"
-                role="listbox"
                 aria-label={`${designs.length} saved design${designs.length === 1 ? '' : 's'}`}
               >
                 {designs.map((d) => (
-                  <li key={d.id} role="option" aria-selected={false}>
+                  <li key={d.id}>
                     <button
                       onClick={() => handleSelect(d.id)}
                       aria-label={`Load design: ${d.name}, last modified ${formatDate(d.modifiedAt)}`}
