@@ -46,8 +46,6 @@ function SelectedComponentBadge() {
 }
 
 export default function Annotations({ onResetCamera }: AnnotationsProps) {
-  const selectedComponent = useDesignStore((state) => state.selectedComponent);
-
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 10 }}>
       <div style={{ position: 'absolute', top: 8, right: 8, pointerEvents: 'auto' }}>
@@ -59,9 +57,7 @@ export default function Annotations({ onResetCamera }: AnnotationsProps) {
         </button>
       </div>
 
-      {selectedComponent && (
-        <SelectedComponentBadge />
-      )}
+      <SelectedComponentBadge />
     </div>
   );
 }
