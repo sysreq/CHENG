@@ -1,24 +1,23 @@
 # Cloud Run service configuration for CHENG — Parametric RC Plane Generator
 #
-# Deploy with:
+# This file configures Cloud Run resource settings (scaling, memory, probes).
+# Use it to update an ALREADY DEPLOYED service.
+#
+# For initial deployment (or to grant public access), use deploy.sh or
+# cloudbuild.yaml — they pass --allow-unauthenticated which sets BOTH
+# network ingress AND the IAM invoker binding for allUsers in one step.
+#
+# To apply this config to an existing service:
 #   IMAGE=us-central1-docker.pkg.dev/PROJECT_ID/cheng-images/cheng:latest
 #   sed "s|IMAGE_URL|${IMAGE}|g" cloudrun.yaml | \
 #     gcloud run services replace - --region=us-central1
 #
-# IMPORTANT: run.googleapis.com/ingress: all controls network ingress
-# (whether the service is reachable from the public internet) but does NOT
-# grant unauthenticated access by itself. You must also grant IAM invoker
-# binding to allow unauthenticated requests:
-#
+# NOTE: gcloud run services replace does NOT automatically grant
+# unauthenticated access. If you need to (re)grant it separately:
 #   gcloud run services add-iam-policy-binding cheng \
 #     --region=us-central1 \
 #     --member="allUsers" \
 #     --role="roles/run.invoker"
-#
-# Alternatively, use deploy.sh or cloudbuild.yaml which pass --allow-unauthenticated
-# to gcloud run deploy (this sets both ingress and IAM in one step).
-#
-# Note: Replace IMAGE_URL placeholder with the actual image reference before applying.
 
 apiVersion: serving.knative.dev/v1
 kind: Service
@@ -28,8 +27,10 @@ metadata:
     app: cheng
     cloud.googleapis.com/location: us-central1
   annotations:
-    # Controls network-level ingress (internet-reachable vs internal-only).
-    # Does NOT grant unauthenticated access — see IAM note above.
+    # Network ingress: allow public internet traffic to reach this service.
+    # NOTE: This controls ingress routing only. Unauthenticated access also
+    # requires the IAM invoker binding shown above. Use deploy.sh or
+    # cloudbuild.yaml --allow-unauthenticated for first-time deploys.
     run.googleapis.com/ingress: all
 spec:
   template:
