@@ -1,6 +1,6 @@
 // ============================================================================
-// CHENG — Toolbar: File/Edit/View/Presets menus + Export button
-// Issue #25, #93 (Load dialog), #94 (Camera presets), #152 (Mode badge), #289 (Presets menu)
+// CHENG — Toolbar: File/Edit/Presets menus + Export button
+// Issue #25, #93 (Load dialog), #94 (Camera presets), #152 (Mode badge), #221 (Remove View menu), #289 (Presets menu)
 // ============================================================================
 
 import React, { useCallback, useEffect, useState, useRef } from 'react';
@@ -538,7 +538,9 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
     useDesignStore.temporal.getState().redo();
   }, []);
 
-  // ── View — Camera Presets (#94) ────────────────────────────────────
+  // ── Camera View Presets (#94) ──────────────────────────────────────
+  // Note: View dropdown removed in #221 — F/S/T/3D toolbar buttons are the
+  // sole camera-view controls. Keyboard shortcuts 1/2/3/4 also apply.
 
   const handleViewFront = useCallback(() => {
     setCameraPreset('front');
@@ -636,7 +638,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
     <>
       <div className="flex items-center h-10 px-2 bg-zinc-900 border-b border-zinc-800 gap-1">
         {/* ════════════════════════════════════════════════════════════
-            LEFT SECTION: File / Edit / View dropdown menus
+            LEFT SECTION: File / Edit / Presets dropdown menus
             ════════════════════════════════════════════════════════════ */}
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
@@ -703,45 +705,14 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
 
         <PresetsMenu />
 
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <button
-              className="px-3 py-1 text-xs text-zinc-300 rounded hover:bg-zinc-800
-                focus:outline-none focus:ring-1 focus:ring-zinc-600"
-            >
-              View
-            </button>
-          </DropdownMenu.Trigger>
-
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content className={MENU_CONTENT_CLASS} sideOffset={4}>
-              <DropdownMenu.Item className={MENU_ITEM_CLASS} onSelect={handleViewFront}>
-                Front
-              </DropdownMenu.Item>
-
-              <DropdownMenu.Item className={MENU_ITEM_CLASS} onSelect={handleViewSide}>
-                Side
-              </DropdownMenu.Item>
-
-              <DropdownMenu.Item className={MENU_ITEM_CLASS} onSelect={handleViewTop}>
-                Top
-              </DropdownMenu.Item>
-
-              <DropdownMenu.Separator className={MENU_SEPARATOR_CLASS} />
-
-              <DropdownMenu.Item className={MENU_ITEM_CLASS} onSelect={handleViewPerspective}>
-                Perspective (default)
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
-
         {/* ════════════════════════════════════════════════════════════
-            CENTER SECTION: View presets + Undo/Redo icon buttons
+            CENTER SECTION: Camera view buttons + Undo/Redo icon buttons
+            F/S/T/3D buttons are the canonical camera-view controls (#221).
+            Keyboard shortcuts 1/2/3/4 mirror each button.
             ════════════════════════════════════════════════════════════ */}
         <div className="h-5 w-px bg-zinc-700 mx-1" aria-hidden="true" />
 
-        {/* Camera view presets (#133) */}
+        {/* Camera view presets (#133, #221) */}
         <div className="flex items-center gap-0.5" role="group" aria-label="Camera view presets">
           <button
             onClick={handleViewFront}
