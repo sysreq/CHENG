@@ -1015,10 +1015,12 @@ def _check_v31(design: AircraftDesign, out: list[ValidationWarning]) -> None:
 def _compute_static_margin_for_validation(design: AircraftDesign) -> float:
     """Compute a lightweight static margin estimate for V34/V35 warnings.
 
-    Uses helpers from backend/stability.py to share the canonical math.
-    Passes design.tail_arm directly (not the engine-clamped effective arm)
-    since validation.py doesn't invoke the engine. This is acceptable for
-    warning purposes — the full clamped value is used in compute_derived_values().
+    Uses helpers from backend/stability.py and backend/geometry/engine.py to
+    share the canonical math without code duplication.
+
+    Uses the engine-clamped effective tail arm (from _compute_tail_x) for
+    consistency with the 3D model — raw design.tail_arm may exceed fuselage
+    length and is clamped by the engine.
 
     Returns:
         static_margin_pct: (NP% - CG%) in % MAC. Positive = pitch-stable.
@@ -1028,6 +1030,8 @@ def _compute_static_margin_for_validation(design: AircraftDesign) -> float:
         _compute_mac_cranked,
         _compute_wing_mount,
         _compute_weight_estimates,
+        _compute_cg,
+        _compute_tail_x,
     )
 
     mac, y_mac = _compute_mac_cranked(design)
@@ -1039,55 +1043,24 @@ def _compute_static_margin_for_validation(design: AircraftDesign) -> float:
     if wing_area_mm2 <= 0:
         return 0.0
 
-    # V_h for stability (geometric projection per stability.py spec)
-    v_h = _tail_volume_h(design, wing_area_mm2, mac, design.tail_arm)
+    # Use engine-clamped effective tail arm — matches 3D assembly and CG calc
+    wing_x, _ = _compute_wing_mount(design)
+    tail_x = _compute_tail_x(design)
+    effective_tail_arm = tail_x - wing_x
+
+    # V_h for stability (geometric projection per stability.py spec §5.1)
+    v_h = _tail_volume_h(design, wing_area_mm2, mac, effective_tail_arm)
     np_pct = _neutral_point_pct_mac(v_h)
 
-    # Sweep-corrected MAC LE offset (mirrors stability.py logic)
-    import math as _math
-    sweep_rad = _math.radians(design.wing_sweep)
-    mac_le_offset = 0.25 * (design.wing_chord - mac) + y_mac * _math.tan(sweep_rad)
+    # Sweep-corrected MAC LE offset (same formula as stability.py)
+    sweep_rad = math.radians(design.wing_sweep)
+    mac_le_offset = 0.25 * (design.wing_chord - mac) + y_mac * math.tan(sweep_rad)
 
-    # CG from engine (relative to wing root LE)
-    wing_x, _ = _compute_wing_mount(design)
+    # CG from canonical engine function (relative to wing root LE)
     weights = _compute_weight_estimates(design)
-    # Replicate _compute_cg() without calling it directly to avoid re-importing
-    # complex engine internals — compute CG inline using the same formula.
-    w_wing = weights["weight_wing_g"]
-    w_tail = weights["weight_tail_g"]
-    w_fuse = weights["weight_fuselage_g"]
-    w_motor = design.motor_weight_g
-    w_battery = design.battery_weight_g
-    total_weight = w_wing + w_tail + w_fuse + w_motor + w_battery
+    cg_from_root_le = _compute_cg(design, weights, mac, y_mac, sweep_rad)
 
-    from backend.geometry.engine import _compute_tail_x
-    tail_x = _compute_tail_x(design)
-    if design.tail_type == "V-Tail":
-        tail_chord = design.v_tail_chord
-    else:
-        h_w = design.h_stab_span
-        v_w = design.v_stab_height
-        total = h_w + v_w
-        tail_chord = (
-            (design.h_stab_chord * h_w + design.v_stab_root_chord * v_w) / max(total, 1.0)
-        )
-    wing_le_offset = y_mac * _math.tan(sweep_rad)
-    wing_cg_x = wing_x + wing_le_offset + 0.25 * mac
-    tail_cg_x = tail_x + 0.5 * tail_chord
-    fuse_cg_x = 0.45 * design.fuselage_length
-    motor_cg_x = 0.0 if design.motor_config == "Tractor" else design.fuselage_length
-    battery_cg_x = design.battery_position_frac * design.fuselage_length
-
-    if total_weight <= 0:
-        cg_from_root_le = 0.25 * mac + wing_le_offset
-    else:
-        abs_cg = (
-            wing_cg_x * w_wing + tail_cg_x * w_tail + fuse_cg_x * w_fuse
-            + motor_cg_x * w_motor + battery_cg_x * w_battery
-        ) / total_weight
-        cg_from_root_le = abs_cg - wing_x
-
-    # CG% from MAC LE
+    # CG as % of MAC from MAC LE (consistent with stability.py convention)
     cg_pct = ((cg_from_root_le - mac_le_offset) / mac) * 100.0
 
     return _static_margin_pct(cg_pct, np_pct)
