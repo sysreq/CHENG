@@ -25,14 +25,19 @@ interface PitchStabilityIndicatorProps {
  * Displays the pitch stability classification (UNSTABLE / MARGINAL / STABLE /
  * OVER-STABLE) with the corresponding icon, color, and a one-sentence description.
  *
- * Announces threshold crossings to screen readers via useLiveRegionStore:
- * - Crossing below 0% (becoming unstable) → assertive announcement
- * - Entering 2–15% optimal zone (becoming stable) → polite announcement
+ * Screen reader behaviour:
+ * - `role="status"` implicitly includes aria-live="polite" + aria-atomic="true",
+ *   so status text changes are announced automatically by assistive technology.
+ * - Crossing below 0% (becoming unstable) triggers an additional `announceAssertive`
+ *   call because an unstable state warrants an interrupting warning that cannot
+ *   be achieved with role="status" alone.
+ *
+ * Live region store is NOT used for the stable state — role="status" handles it.
  */
 export function PitchStabilityIndicator({
   staticMarginPct,
 }: PitchStabilityIndicatorProps): React.JSX.Element {
-  const { announce, announceAssertive } = useLiveRegionStore();
+  const { announceAssertive } = useLiveRegionStore();
 
   const status = getStabilityStatus(staticMarginPct);
   const meta = getStatusMeta(status);
@@ -45,26 +50,25 @@ export function PitchStabilityIndicator({
     const prevStatus = prevStatusRef.current;
 
     if (prevStatus !== null && prevStatus !== status) {
-      // Detect crossing into unstable (assertive — interrupts screen reader)
+      // Detect crossing into unstable (assertive — interrupts screen reader).
+      // role="status" cannot produce assertive announcements, so we use the store.
       if (status === 'unstable') {
         announceAssertive(
           'Warning: aircraft is now pitch-unstable. CG must move forward.'
         );
       }
-      // Detect crossing into stable optimal range (polite — non-interrupting)
-      else if (status === 'stable') {
-        announce('Pitch stability: aircraft is now in the stable range.');
-      }
+      // Note: other transitions (entering stable, over-stable, marginal) are
+      // handled automatically by role="status" reading the updated DOM text.
     }
 
     prevStatusRef.current = status;
-  }, [status, announce, announceAssertive]);
+  }, [status, announceAssertive]);
 
   return (
     <div
       role="status"
-      aria-live="polite"
-      aria-label={`Pitch stability: ${meta.label}. ${meta.description}`}
+      // aria-live="polite" omitted — implicit from role="status"
+      // aria-label omitted — screen reader will read the child text naturally
       className="mb-4 p-3 rounded bg-zinc-800/30 border border-zinc-700/50"
     >
       {/* Status row: icon + label */}
