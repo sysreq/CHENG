@@ -213,6 +213,25 @@ export interface DesignStore {
   newDesign: () => void;
   loadDesign: (id: string) => Promise<void>;
   saveDesign: () => Promise<string>;
+
+  // ── Design Portability (Issue #156) ─────────────────────────────
+  /**
+   * Export the current design as a JSON file download.
+   * Pure client-side: serializes the current in-memory design and triggers a
+   * browser file-save dialog.  Works in both local and cloud modes.
+   */
+  exportDesignAsJson: () => void;
+  /**
+   * Import a design from a user-selected .cheng JSON file.
+   * In local mode: uploads the file to the backend via POST /api/designs/import
+   * so it is persisted to the Docker volume, then loads it into the store.
+   * In cloud mode: parses the JSON client-side and loads it directly into the
+   * store (no network round-trip — backend is stateless in cloud mode).
+   *
+   * @param file - A File object from an <input type="file"> element.
+   * @param cloudMode - When true, skips the backend upload and loads locally.
+   */
+  importDesignFromJson: (file: File, cloudMode?: boolean) => Promise<void>;
 }
 
 /** Subset of state tracked by Zundo for undo/redo. */
@@ -513,6 +532,121 @@ export const useDesignStore = create<DesignStore>()(
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Failed to save design';
           set({ isSaving: false, fileError: msg });
+          throw err;
+        }
+      },
+
+      // ── Design Portability (Issue #156) ──────────────────────────
+
+      exportDesignAsJson: () => {
+        const { design, designName } = get();
+        const json = JSON.stringify(design, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        // Derive a safe filename from the design name
+        const safeName = (designName || 'design')
+          .replace(/[^\w\-]/g, '_')
+          .replace(/^_+|_+$/g, '') || 'design';
+        const filename = `${safeName}.cheng`;
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      },
+
+      importDesignFromJson: async (file: File, cloudMode = false) => {
+        set({ isLoading: true, fileError: null });
+        try {
+          const text = await file.text();
+          let data: unknown;
+          try {
+            data = JSON.parse(text) as unknown;
+          } catch {
+            throw new Error('File is not valid JSON');
+          }
+
+          if (typeof data !== 'object' || data === null) {
+            throw new Error('Invalid design file: not a JSON object');
+          }
+
+          if (cloudMode) {
+            // Cloud mode: load design directly into the store (no backend persist).
+            // The design is stateless on the backend — IndexedDB handles persistence.
+            const design = data as AircraftDesign;
+            set({
+              design,
+              designId: design.id || null,
+              designName: (design as { name?: string }).name ?? 'Imported Design',
+              activePreset: detectPreset(design),
+              lastChangeSource: 'immediate' as ChangeSource,
+              lastAction: `Imported design ${(design as { name?: string }).name ?? 'Imported Design'}`,
+              isDirty: true,
+              isLoading: false,
+              fileError: null,
+              derived: null,
+              warnings: [],
+              meshData: null,
+              isGenerating: false,
+              selectedComponent: 'global' as ComponentSelection,
+              selectedSubElement: null,
+              selectedPanel: null,
+              componentPrintSettings: {},
+              meshOffset: [0, 0, 0],
+            });
+          } else {
+            // Local mode: upload to the backend so the design is persisted to
+            // the Docker volume; then load the returned id into the store.
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const res = await fetch('/api/designs/import', {
+              method: 'POST',
+              body: formData,
+            });
+
+            if (!res.ok) {
+              const errBody = (await res.json().catch(() => ({ detail: res.statusText }))) as {
+                detail?: string;
+              };
+              throw new Error(errBody.detail ?? `Import failed: ${res.status}`);
+            }
+
+            const { id } = (await res.json()) as { id: string };
+
+            // Load the just-imported design from the backend (normalized by Pydantic)
+            const loadRes = await fetch(`/api/designs/${id}`);
+            if (!loadRes.ok) throw new Error(`Failed to load imported design: ${loadRes.status}`);
+            const loadedData = (await loadRes.json()) as AircraftDesign;
+
+            set({
+              design: loadedData,
+              designId: id,
+              designName: loadedData.name,
+              activePreset: detectPreset(loadedData),
+              lastChangeSource: 'immediate' as ChangeSource,
+              lastAction: `Imported design ${loadedData.name}`,
+              isDirty: false,
+              isLoading: false,
+              fileError: null,
+              derived: null,
+              warnings: [],
+              meshData: null,
+              isGenerating: false,
+              selectedComponent: 'global' as ComponentSelection,
+              selectedSubElement: null,
+              selectedPanel: null,
+              componentPrintSettings: {},
+              meshOffset: [0, 0, 0],
+            });
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Failed to import design';
+          set({ isLoading: false, fileError: msg });
           throw err;
         }
       },

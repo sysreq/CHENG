@@ -1,9 +1,10 @@
 // ============================================================================
 // CHENG — Toolbar: File/Edit/Presets menus + Export button
-// Issue #25, #93 (Load dialog), #94 (Camera presets), #152 (Mode badge), #221 (Remove View menu), #289 (Presets menu)
+// Issue #25, #93 (Load dialog), #94 (Camera presets), #152 (Mode badge),
+//        #156 (Design import/export), #221 (Remove View menu), #289 (Presets menu)
 // ============================================================================
 
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
@@ -13,6 +14,7 @@ import { getWarningCountBadge } from '../lib/validation';
 import { useConnectionStore } from '../store/connectionStore';
 import { HistoryPanel } from './HistoryPanel';
 import { ModeBadge } from './ModeBadge';
+import { useModeInfo } from '../hooks/useModeInfo';
 import { PRESET_DESCRIPTIONS } from '../lib/presets';
 import {
   listCustomPresets,
@@ -486,17 +488,25 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
   const setDesignName = useDesignStore((s) => s.setDesignName);
   const newDesign = useDesignStore((s) => s.newDesign);
   const saveDesign = useDesignStore((s) => s.saveDesign);
+  const exportDesignAsJson = useDesignStore((s) => s.exportDesignAsJson);
+  const importDesignFromJson = useDesignStore((s) => s.importDesignFromJson);
   const isSaving = useDesignStore((s) => s.isSaving);
   const fileError = useDesignStore((s) => s.fileError);
   const clearFileError = useDesignStore((s) => s.clearFileError);
   const setCameraPreset = useDesignStore((s) => s.setCameraPreset);
   const isConnected = useConnectionStore((s) => s.state === 'connected');
 
+  // Detect deployment mode for import behaviour (Issue #156)
+  const modeInfo = useModeInfo();
+  const isCloudMode = modeInfo?.mode === 'cloud';
+
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState(designName);
   const [saveFlash, setSaveFlash] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const warningBadge = getWarningCountBadge(warnings);
@@ -527,6 +537,29 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
   const handleLoad = useCallback(() => {
     setLoadDialogOpen(true);
   }, []);
+
+  const handleExportJson = useCallback(() => {
+    exportDesignAsJson();
+  }, [exportDesignAsJson]);
+
+  const handleImportJsonClick = useCallback(() => {
+    setImportError(null);
+    importInputRef.current?.click();
+  }, []);
+
+  const handleImportJsonFile = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      // Reset the input so the same file can be re-selected if needed
+      e.target.value = '';
+      setImportError(null);
+      importDesignFromJson(file, isCloudMode).catch((err: unknown) => {
+        setImportError(err instanceof Error ? err.message : 'Import failed');
+      });
+    },
+    [importDesignFromJson, isCloudMode],
+  );
 
   // ── Undo/Redo ──────────────────────────────────────────────────────
 
@@ -664,6 +697,16 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
 
               <DropdownMenu.Item className={MENU_ITEM_CLASS} onSelect={handleLoad}>
                 Load...
+              </DropdownMenu.Item>
+
+              <DropdownMenu.Separator className={MENU_SEPARATOR_CLASS} />
+
+              <DropdownMenu.Item className={MENU_ITEM_CLASS} onSelect={handleExportJson}>
+                Export Design as JSON...
+              </DropdownMenu.Item>
+
+              <DropdownMenu.Item className={MENU_ITEM_CLASS} onSelect={handleImportJsonClick}>
+                Import Design from JSON...
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
@@ -838,6 +881,15 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
             Save failed
           </span>
         )}
+        {importError && (
+          <span
+            className="text-[10px] text-red-400 mr-2 cursor-pointer truncate max-w-[160px]"
+            title={importError}
+            onClick={() => setImportError(null)}
+          >
+            Import failed
+          </span>
+        )}
 
         {/* Warning Badge */}
         {warningBadge && (
@@ -874,6 +926,16 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
 
       {/* Load Design Dialog (#93) */}
       <LoadDesignDialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen} />
+
+      {/* Hidden file input for JSON import (#156) */}
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".cheng,application/json"
+        className="hidden"
+        aria-hidden="true"
+        onChange={handleImportJsonFile}
+      />
     </>
   );
 }
