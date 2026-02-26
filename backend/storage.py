@@ -220,8 +220,11 @@ class MemoryStorage:
 
     def list_designs(self) -> list[dict]:
         """Return summaries of all stored designs, newest first."""
+        # Snapshot items to avoid RuntimeError if a concurrent request
+        # modifies _store while we iterate (dict changed size during iteration).
+        items = list(self._store.items())
         designs = []
-        for design_id, data in self._store.items():
+        for design_id, data in items:
             ts = self._timestamps.get(design_id, datetime.now(tz=timezone.utc))
             designs.append(
                 {

@@ -72,13 +72,14 @@ async def lifespan(app: FastAPI):
         except OSError:
             logger.info("Cannot create /data/designs — using default storage path")
 
-    # 4. Ensure presets storage directory exists
-    presets_dir = Path("/data/presets")
-    try:
-        presets_dir.mkdir(parents=True, exist_ok=True)
-        logger.info("Presets directory ready: %s", presets_dir)
-    except OSError:
-        logger.info("Cannot create /data/presets — presets will use module default")
+    # 4. Ensure presets storage directory exists (local mode only — cloud mode is stateless)
+    if mode == "local":
+        presets_dir = Path("/data/presets")
+        try:
+            presets_dir.mkdir(parents=True, exist_ok=True)
+            logger.info("Presets directory ready: %s", presets_dir)
+        except OSError:
+            logger.info("Cannot create /data/presets — presets will use module default")
 
     # 5. Clean up orphaned temp files from previous runs (#181)
     try:
