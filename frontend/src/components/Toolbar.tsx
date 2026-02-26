@@ -1,6 +1,6 @@
 // ============================================================================
 // CHENG — Toolbar: File/Edit/View/Presets menus + Export button
-// Issue #25, #93 (Load dialog), #94 (Camera presets), #289 (Presets menu)
+// Issue #25, #93 (Load dialog), #94 (Camera presets), #152 (Mode badge), #289 (Presets menu)
 // ============================================================================
 
 import React, { useCallback, useEffect, useState, useRef } from 'react';
@@ -12,6 +12,7 @@ import { useDesignStore } from '../store/designStore';
 import { getWarningCountBadge } from '../lib/validation';
 import { useConnectionStore } from '../store/connectionStore';
 import { HistoryPanel } from './HistoryPanel';
+import { ModeBadge } from './ModeBadge';
 import { PRESET_DESCRIPTIONS } from '../lib/presets';
 import {
   listCustomPresets,
@@ -876,6 +877,9 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
             {warningBadge}
           </span>
         )}
+
+        {/* Mode Badge (#152) */}
+        <ModeBadge />
 
         {/* Export Button */}
         <button
