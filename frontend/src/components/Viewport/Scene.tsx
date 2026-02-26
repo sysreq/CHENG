@@ -9,7 +9,6 @@ import { Bounds, useBounds, Html } from '@react-three/drei';
 import AircraftMesh from './AircraftMesh';
 import Controls from './Controls';
 import Annotations from './Annotations';
-import DimensionLines from './DimensionLines';
 import { useDesignStore } from '@/store/designStore';
 
 // ---------------------------------------------------------------------------
@@ -225,7 +224,6 @@ export default function Scene() {
 
           <Bounds fit observe margin={1.5}>
             <AircraftMesh onLoaded={handleMeshLoaded} />
-            <DimensionLines />
             {readyTick > 0 && <BoundsWatcher readyTick={readyTick} />}
           </Bounds>
           <Controls />
