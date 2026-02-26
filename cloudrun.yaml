@@ -1,24 +1,23 @@
 # Cloud Run service configuration for CHENG — Parametric RC Plane Generator
 #
-# Deploy with:
+# Use this file to update an ALREADY DEPLOYED service:
 #   IMAGE=us-central1-docker.pkg.dev/PROJECT_ID/cheng-images/cheng:latest
 #   sed "s|IMAGE_URL|${IMAGE}|g" cloudrun.yaml | \
 #     gcloud run services replace - --region=us-central1
 #
 # IMPORTANT: run.googleapis.com/ingress: all controls network ingress
 # (whether the service is reachable from the public internet) but does NOT
-# grant unauthenticated access by itself. You must also grant IAM invoker
-# binding to allow unauthenticated requests:
+# grant unauthenticated access by itself. You must also grant the IAM
+# invoker binding to allow unauthenticated requests:
 #
 #   gcloud run services add-iam-policy-binding cheng \
 #     --region=us-central1 \
 #     --member="allUsers" \
 #     --role="roles/run.invoker"
 #
-# Alternatively, use deploy.sh or cloudbuild.yaml which pass --allow-unauthenticated
-# to gcloud run deploy (this sets both ingress and IAM in one step).
-#
-# Note: Replace IMAGE_URL placeholder with the actual image reference before applying.
+# For initial deployment (or to re-grant public access in one step), use
+# deploy.sh or cloudbuild.yaml — they pass --allow-unauthenticated which
+# sets both network ingress AND the IAM invoker binding simultaneously.
 
 apiVersion: serving.knative.dev/v1
 kind: Service
