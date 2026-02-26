@@ -245,6 +245,18 @@ class DerivedValues(CamelModel):
     weight_fuselage_g: float = 0.0
     weight_total_g: float = 0.0
 
+    # Static stability fields (v1.1) — computed by backend/stability.py,
+    # serialized to frontend as camelCase via alias_generator=to_camel.
+    # All default to 0.0 for backward compatibility; neutral_point_pct_mac
+    # defaults to 25.0 (wing AC) to avoid a misleading zero NP in edge cases.
+    neutral_point_mm: float = 0.0
+    neutral_point_pct_mac: float = 25.0
+    cg_pct_mac: float = 0.0
+    static_margin_pct: float = 0.0
+    tail_volume_h: float = 0.0
+    tail_volume_v: float = 0.0
+    wing_loading_g_dm2: float = 0.0
+
 
 # ---------------------------------------------------------------------------
 # Validation Warning
