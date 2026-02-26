@@ -69,7 +69,7 @@ export function StabilityPanel(): React.JSX.Element {
               />
               <DerivedField
                 label="Static Margin"
-                value={derived.neutralPointMm - derived.estimatedCgMm}
+                value={(derived.neutralPointMm ?? 0) - (derived.estimatedCgMm ?? 0)}
                 unit="mm"
                 title="Distance between CG and neutral point (positive = stable). Equivalent to static margin in mm."
               />
