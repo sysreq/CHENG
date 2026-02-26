@@ -213,6 +213,33 @@ export interface DesignStore {
   newDesign: () => void;
   loadDesign: (id: string) => Promise<void>;
   saveDesign: () => Promise<string>;
+
+  // ── Design Portability (Issue #156) ─────────────────────────────
+  /**
+   * Export the current design as a JSON file download.
+   * Pure client-side: serializes the current in-memory design and triggers a
+   * browser file-save dialog.  Works in both local and cloud modes.
+   */
+  exportDesignAsJson: () => void;
+  /**
+   * Import a design from a user-selected .cheng JSON file.
+   *
+   * Both modes upload the file to POST /api/designs/import so that Pydantic
+   * validates and normalises the payload (handles camelCase from frontend
+   * exports and snake_case from backend-exported files).  In local mode the
+   * design is persisted to the Docker volume; in cloud mode it lands in
+   * MemoryStorage and the frontend (IndexedDB) becomes the canonical store.
+   *
+   * On error: rejects with a descriptive Error and resets isLoading to false.
+   * Does NOT set or clear fileError (which is reserved for save operation
+   * failures shown as "Save failed" in the Toolbar).  The caller must surface
+   * import errors through its own UI state.
+   *
+   * @param file - A File object from an <input type="file"> element.
+   * @param cloudMode - When true, marks the loaded design dirty so IndexedDB
+   *   persistence picks it up on the next save cycle.
+   */
+  importDesignFromJson: (file: File, cloudMode?: boolean) => Promise<void>;
 }
 
 /** Subset of state tracked by Zundo for undo/redo. */
@@ -513,6 +540,108 @@ export const useDesignStore = create<DesignStore>()(
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Failed to save design';
           set({ isSaving: false, fileError: msg });
+          throw err;
+        }
+      },
+
+      // ── Design Portability (Issue #156) ──────────────────────────
+
+      exportDesignAsJson: () => {
+        const { design, designName } = get();
+        const json = JSON.stringify(design, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        // Derive a safe filename from the design name
+        const safeName = (designName || 'design')
+          .replace(/[^\w\-]/g, '_')
+          .replace(/^_+|_+$/g, '') || 'design';
+        const filename = `${safeName}.cheng`;
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      },
+
+      importDesignFromJson: async (file: File, cloudMode = false) => {
+        // Note: do NOT clear fileError here — fileError is reserved for save
+        // operation failures.  Import errors are surfaced via the caller's
+        // own error state (e.g. Toolbar's local importError state).
+        set({ isLoading: true });
+        try {
+          const text = await file.text();
+          let data: unknown;
+          try {
+            data = JSON.parse(text) as unknown;
+          } catch {
+            throw new Error('File is not valid JSON');
+          }
+
+          if (typeof data !== 'object' || data === null) {
+            throw new Error('Invalid design file: not a JSON object');
+          }
+
+          // Upload to the backend for Pydantic validation and normalisation
+          // (handles both camelCase from frontend exports and snake_case from
+          // backend-exported .cheng files).  In cloud mode the design is saved
+          // to MemoryStorage and the frontend (IndexedDB) becomes the canonical
+          // persistence layer; in local mode it is saved to the Docker volume.
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const res = await fetch('/api/designs/import', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!res.ok) {
+            const errBody = (await res.json().catch(() => ({ detail: res.statusText }))) as {
+              detail?: string;
+            };
+            throw new Error(errBody.detail ?? `Import failed: ${res.status}`);
+          }
+
+          const { id } = (await res.json()) as { id: string };
+
+          // Load the just-imported design from the backend (normalised by Pydantic,
+          // camelCase keys via CamelModel alias_generator).
+          const loadRes = await fetch(`/api/designs/${id}`);
+          if (!loadRes.ok) throw new Error(`Failed to load imported design: ${loadRes.status}`);
+          const loadedData = (await loadRes.json()) as AircraftDesign;
+
+          set({
+            design: loadedData,
+            designId: id,
+            designName: loadedData.name,
+            activePreset: detectPreset(loadedData),
+            lastChangeSource: 'immediate' as ChangeSource,
+            lastAction: `Imported design ${loadedData.name}`,
+            // In cloud mode the design was just written to MemoryStorage but has
+            // not yet been persisted to IndexedDB.  Mark dirty so that the
+            // IndexedDB persistence hook picks it up on the next save cycle.
+            isDirty: cloudMode,
+            isLoading: false,
+            fileError: null,
+            derived: null,
+            warnings: [],
+            meshData: null,
+            isGenerating: false,
+            selectedComponent: 'global' as ComponentSelection,
+            selectedSubElement: null,
+            selectedPanel: null,
+            componentPrintSettings: {},
+            meshOffset: [0, 0, 0],
+          });
+        } catch (err) {
+          // Reset loading state only — do NOT set fileError here.
+          // fileError is reserved for save operations and would display as
+          // "Save failed" in the Toolbar, which is misleading for import errors.
+          // The Toolbar's handleImportJsonFile catch block owns import error UI.
+          set({ isLoading: false });
           throw err;
         }
       },
