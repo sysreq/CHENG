@@ -1,6 +1,7 @@
 // ============================================================================
 // CHENG — Fuselage Panel: Fuselage geometry params + computed section lengths
 // Issue #120
+// Issue #154 — Parameter renaming for beginners (tooltips + label updates)
 // ============================================================================
 
 import React, { useCallback } from 'react';
@@ -126,6 +127,7 @@ export function FuselagePanel(): React.JSX.Element {
         options={FUSELAGE_PRESET_OPTIONS}
         onChange={setFuselagePreset}
         hasWarning={fieldHasWarning(warnings, 'fuselagePreset')}
+        title="Overall body shape. Pod = simple tube, Conventional = tapered body, Blended-Wing-Body = flying wing."
       />
 
       {/* F01 — Fuselage Length */}
@@ -140,6 +142,7 @@ export function FuselagePanel(): React.JSX.Element {
         onInputChange={setLengthInput}
         hasWarning={fieldHasWarning(warnings, 'fuselageLength')}
         warningText={warnText('fuselageLength')}
+        title="Length of the main body from nose to tail. Does not include spinner or tail overhang."
       />
 
       {/* P02 — Motor Config */}
@@ -149,15 +152,17 @@ export function FuselagePanel(): React.JSX.Element {
         options={MOTOR_CONFIG_OPTIONS}
         onChange={setMotorConfig}
         hasWarning={fieldHasWarning(warnings, 'motorConfig')}
+        title="Tractor = motor at the front pulling the plane. Pusher = motor at the back pushing the plane."
       />
 
-      {/* F13 — Wing Mount Type */}
+      {/* F13 — Wing Placement */}
       <ParamSelect
-        label="Wing Mount"
+        label="Wing Placement"
         value={design.wingMountType}
         options={WING_MOUNT_OPTIONS}
         onChange={setWingMountType}
         hasWarning={fieldHasWarning(warnings, 'wingMountType')}
+        title="Where the wing attaches to the fuselage. High-wing is easiest to build and most stable for beginners."
       />
 
       {/* ── Section Transition Points (F11/F12) ─────────────────────── */}
@@ -177,6 +182,7 @@ export function FuselagePanel(): React.JSX.Element {
         onInputChange={setNoseCabinBreakInput}
         hasWarning={fieldHasWarning(warnings, 'noseCabinBreakPct')}
         warningText={warnText('noseCabinBreakPct')}
+        title="Where the nose section ends and the main body begins, as % of total fuselage length."
       />
       <ParamSlider
         label="Cabin/Tail Break"
@@ -189,6 +195,7 @@ export function FuselagePanel(): React.JSX.Element {
         onInputChange={setCabinTailBreakInput}
         hasWarning={fieldHasWarning(warnings, 'cabinTailBreakPct')}
         warningText={warnText('cabinTailBreakPct')}
+        title="Where the main body ends and the tail section begins, as % of total fuselage length."
       />
 
       {/* Computed section length summary */}
@@ -216,6 +223,7 @@ export function FuselagePanel(): React.JSX.Element {
         onInputChange={setWallThicknessInput}
         hasWarning={fieldHasWarning(warnings, 'wallThickness')}
         warningText={warnText('wallThickness')}
+        title="Thickness of the printed fuselage shell. Thicker = stronger but heavier."
       />
 
       {/* ── Per-Component Print Settings (#128) ────────────────────── */}

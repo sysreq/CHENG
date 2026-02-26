@@ -2,6 +2,7 @@
 // CHENG — Tail V-Tail Panel: V-tail specific parameters
 // Shown when tailType === 'V-Tail'
 // Issue #27, #144 (control surfaces — ruddervators)
+// Issue #154 — Parameter renaming for beginners
 // ============================================================================
 
 import React, { useCallback } from 'react';
@@ -86,7 +87,7 @@ export function TailVTailPanel(): React.JSX.Element {
     [setParam],
   );
 
-  // ── Tail Arm handler ──────────────────────────────────────────────
+  // ── Tail Distance handler ─────────────────────────────────────────
 
   const setTailArmSlider = useCallback(
     (v: number) => setParam('tailArm', v, 'slider'),
@@ -106,9 +107,9 @@ export function TailVTailPanel(): React.JSX.Element {
         Tail &mdash; V-Tail
       </h3>
 
-      {/* T14 — V-Tail Dihedral */}
+      {/* T14 — V-Tail Tilt (formerly "V-Tail Dihedral") */}
       <ParamSlider
-        label="V-Tail Dihedral"
+        label="V-Tail Tilt"
         unit="deg"
         value={design.vTailDihedral}
         min={20}
@@ -117,6 +118,7 @@ export function TailVTailPanel(): React.JSX.Element {
         onSliderChange={setVTailDihedralSlider}
         onInputChange={setVTailDihedralInput}
         hasWarning={fieldHasWarning(warnings, 'vTailDihedral')}
+        title="How far the V-tail surfaces are tilted from horizontal. Higher values = more V-shaped."
       />
 
       {/* T16 — V-Tail Span */}
@@ -130,6 +132,7 @@ export function TailVTailPanel(): React.JSX.Element {
         onSliderChange={setVTailSpanSlider}
         onInputChange={setVTailSpanInput}
         hasWarning={fieldHasWarning(warnings, 'vTailSpan')}
+        title="Total tip-to-tip span of the V-tail surfaces."
       />
 
       {/* T17 — V-Tail Chord */}
@@ -143,11 +146,12 @@ export function TailVTailPanel(): React.JSX.Element {
         onSliderChange={setVTailChordSlider}
         onInputChange={setVTailChordInput}
         hasWarning={fieldHasWarning(warnings, 'vTailChord')}
+        title="Width of each V-tail surface from leading edge to trailing edge."
       />
 
-      {/* T18 — V-Tail Incidence */}
+      {/* T18 — V-Tail Angle (formerly "V-Tail Incidence") */}
       <ParamSlider
-        label="V-Tail Incidence"
+        label="V-Tail Angle"
         unit="deg"
         value={design.vTailIncidence}
         min={-3}
@@ -156,6 +160,7 @@ export function TailVTailPanel(): React.JSX.Element {
         onSliderChange={setVTailIncidenceSlider}
         onInputChange={setVTailIncidenceInput}
         hasWarning={fieldHasWarning(warnings, 'vTailIncidence')}
+        title="Pitch angle of the V-tail surfaces relative to the fuselage. Usually left at 0."
       />
 
       {/* T15 — V-Tail Sweep */}
@@ -169,6 +174,7 @@ export function TailVTailPanel(): React.JSX.Element {
         onSliderChange={setVTailSweepSlider}
         onInputChange={setVTailSweepInput}
         hasWarning={fieldHasWarning(warnings, 'vTailSweep')}
+        title="How far the leading edge of the V-tail is swept back."
       />
 
       {/* ── Ruddervators (C18-C20) ─────────────────────────────────── */}
@@ -217,9 +223,9 @@ export function TailVTailPanel(): React.JSX.Element {
       {/* ── Shared ─────────────────────────────────────────────────── */}
       <div className="border-t border-zinc-700/50 mt-3 mb-2" />
 
-      {/* T22 — Tail Arm */}
+      {/* T22 — Tail Distance (formerly "Tail Arm") */}
       <ParamSlider
-        label="Tail Arm"
+        label="Tail Distance"
         unit="mm"
         value={design.tailArm}
         min={80}
@@ -229,6 +235,7 @@ export function TailVTailPanel(): React.JSX.Element {
         onInputChange={setTailArmInput}
         hasWarning={fieldHasWarning(warnings, 'tailArm')}
         warningText={warnText('tailArm')}
+        title="Distance from the wing to the tail. Longer = more stable but heavier."
       />
 
       {/* ── Per-Component Print Settings (#128) ────────────────────── */}

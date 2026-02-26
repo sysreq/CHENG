@@ -1,5 +1,6 @@
 // ============================================================================
 // CHENG — Read-Only Derived Value Display
+// Issue #154 — Added title prop for hover tooltips
 // ============================================================================
 
 import React from 'react';
@@ -15,6 +16,8 @@ export interface DerivedFieldProps {
   decimals?: number;
   /** Optional suffix text after unit (e.g. "from wing LE") */
   suffix?: string;
+  /** Optional hover tooltip explaining what this value means */
+  title?: string;
 }
 
 /**
@@ -28,6 +31,7 @@ export function DerivedField({
   unit,
   decimals = 1,
   suffix,
+  title,
 }: DerivedFieldProps): React.JSX.Element {
   let formatted: string;
   if (value == null) {
@@ -38,7 +42,7 @@ export function DerivedField({
   }
 
   return (
-    <div className="mb-2">
+    <div className="mb-2" title={title}>
       <span className="block text-xs font-medium text-zinc-400 mb-0.5">{label}</span>
       <div
         className="w-full px-2 py-1 text-xs text-zinc-300 bg-zinc-800/50

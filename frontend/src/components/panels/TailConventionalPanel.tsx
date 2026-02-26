@@ -2,6 +2,7 @@
 // CHENG — Tail Conventional Panel: H-stab + V-stab params
 // Used for Conventional, T-Tail, and Cruciform tail types
 // Issue #27, #144 (control surfaces)
+// Issue #154 — Parameter renaming for beginners
 // ============================================================================
 
 import React, { useCallback } from 'react';
@@ -120,7 +121,7 @@ export function TailConventionalPanel(): React.JSX.Element {
     [setParam],
   );
 
-  // ── Tail Arm handler ──────────────────────────────────────────────
+  // ── Tail Distance handler ─────────────────────────────────────────
 
   const setTailArmSlider = useCallback(
     (v: number) => setParam('tailArm', v, 'slider'),
@@ -157,6 +158,7 @@ export function TailConventionalPanel(): React.JSX.Element {
         onInputChange={setHStabSpanInput}
         hasWarning={fieldHasWarning(warnings, 'hStabSpan')}
         warningText={warnText('hStabSpan')}
+        title="Total tip-to-tip span of the horizontal stabilizer."
       />
 
       {/* T03 — H-Stab Chord */}
@@ -171,11 +173,12 @@ export function TailConventionalPanel(): React.JSX.Element {
         onInputChange={setHStabChordInput}
         hasWarning={fieldHasWarning(warnings, 'hStabChord')}
         warningText={warnText('hStabChord')}
+        title="Width of the horizontal stabilizer from leading edge to trailing edge."
       />
 
-      {/* T06 — H-Stab Incidence */}
+      {/* T06 — H-Stab Tilt Angle (formerly "H-Stab Incidence") */}
       <ParamSlider
-        label="H-Stab Incidence"
+        label="H-Stab Tilt Angle"
         unit="deg"
         value={design.hStabIncidence}
         min={-5}
@@ -184,6 +187,7 @@ export function TailConventionalPanel(): React.JSX.Element {
         onSliderChange={setHStabIncidenceSlider}
         onInputChange={setHStabIncidenceInput}
         hasWarning={fieldHasWarning(warnings, 'hStabIncidence')}
+        title="Pitch angle of the horizontal stabilizer relative to the fuselage. Usually left at 0."
       />
 
       {/* ── Elevator (C11-C13) ─────────────────────────────────────── */}
@@ -243,6 +247,7 @@ export function TailConventionalPanel(): React.JSX.Element {
         onSliderChange={setVStabHeightSlider}
         onInputChange={setVStabHeightInput}
         hasWarning={fieldHasWarning(warnings, 'vStabHeight')}
+        title="Height of the vertical stabilizer (fin) from root to tip."
       />
 
       {/* T10 — V-Stab Root Chord */}
@@ -256,6 +261,7 @@ export function TailConventionalPanel(): React.JSX.Element {
         onSliderChange={setVStabRootChordSlider}
         onInputChange={setVStabRootChordInput}
         hasWarning={fieldHasWarning(warnings, 'vStabRootChord')}
+        title="Width of the vertical stabilizer at the base, from leading edge to trailing edge."
       />
 
       {/* ── Rudder (C15-C17) ───────────────────────────────────────── */}
@@ -301,9 +307,9 @@ export function TailConventionalPanel(): React.JSX.Element {
       {/* ── Shared ─────────────────────────────────────────────────── */}
       <div className="border-t border-zinc-700/50 mt-3 mb-2" />
 
-      {/* T22 — Tail Arm */}
+      {/* T22 — Tail Distance (formerly "Tail Arm") */}
       <ParamSlider
-        label="Tail Arm"
+        label="Tail Distance"
         unit="mm"
         value={design.tailArm}
         min={80}
@@ -313,6 +319,7 @@ export function TailConventionalPanel(): React.JSX.Element {
         onInputChange={setTailArmInput}
         hasWarning={fieldHasWarning(warnings, 'tailArm')}
         warningText={warnText('tailArm')}
+        title="Distance from the wing to the tail. Longer = more stable but heavier."
       />
 
       {/* ── Per-Component Print Settings (#128) ────────────────────── */}
