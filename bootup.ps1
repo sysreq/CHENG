@@ -6,6 +6,16 @@ param(
     [switch]$Build
 )
 
+# If not running inside Windows Terminal, relaunch in a new wt window
+if (-not $env:WT_SESSION) {
+    $relaunchArgs = @()
+    if ($Reload) { $relaunchArgs += '-r' }
+    if ($Build)  { $relaunchArgs += '-b' }
+    $argStr = $relaunchArgs -join ' '
+    wt -d "$PSScriptRoot" -- powershell.exe -ExecutionPolicy Bypass -File "$PSScriptRoot\bootup.ps1" $argStr
+    exit
+}
+
 # Kill existing servers if running
 $existing = netstat -ano | Select-String ":(8000|5173)\s.*LISTENING"
 if ($existing) {
