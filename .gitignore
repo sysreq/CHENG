@@ -27,3 +27,4 @@ Thumbs.db
 *.tmp
 *.log
 .claude/worktrees/
+/gcloud-bin

@@ -16,7 +16,7 @@ LABEL org.opencontainers.image.title="CHENG" \
 
 # System libs required by CadQuery/OpenCascade (OCP)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx libglib2.0-0 libx11-6 libxext6 libxrender1 \
+    libgl1 libglib2.0-0 libx11-6 libxext6 libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

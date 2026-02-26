@@ -92,6 +92,7 @@ echo "[3/3] Deploying to Cloud Run..."
 gcloud run deploy "${SERVICE}" \
   --image "${IMAGE}" \
   --region "${REGION}" \
+  --project "${PROJECT_ID}" \
   --platform managed \
   --memory 2Gi \
   --cpu 2 \
