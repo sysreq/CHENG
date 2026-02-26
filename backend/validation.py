@@ -1012,7 +1012,7 @@ def _check_v31(design: AircraftDesign, out: list[ValidationWarning]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _compute_static_margin_for_validation(design: AircraftDesign) -> float:
+def _compute_static_margin_for_validation(design: AircraftDesign) -> float | None:
     """Compute a lightweight static margin estimate for V34/V35 warnings.
 
     Uses helpers from backend/stability.py and backend/geometry/engine.py to
@@ -1024,6 +1024,8 @@ def _compute_static_margin_for_validation(design: AircraftDesign) -> float:
 
     Returns:
         static_margin_pct: (NP% - CG%) in % MAC. Positive = pitch-stable.
+        None if geometry is degenerate (zero MAC or zero area) — callers must
+        skip V34/V35 in this case to avoid false positives.
     """
     from backend.stability import _tail_volume_h, _neutral_point_pct_mac, _static_margin_pct
     from backend.geometry.engine import (
@@ -1036,12 +1038,12 @@ def _compute_static_margin_for_validation(design: AircraftDesign) -> float:
 
     mac, y_mac = _compute_mac_cranked(design)
     if mac <= 0:
-        return 0.0
+        return None  # degenerate geometry — skip stability checks
 
     tip_chord = design.wing_chord * design.wing_tip_root_ratio
     wing_area_mm2 = 0.5 * (design.wing_chord + tip_chord) * design.wing_span
     if wing_area_mm2 <= 0:
-        return 0.0
+        return None  # degenerate geometry — skip stability checks
 
     # Use engine-clamped effective tail arm — matches 3D assembly and CG calc
     wing_x, _ = _compute_wing_mount(design)
@@ -1177,8 +1179,10 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
     _check_v32(design, warnings)
 
     # Static stability warnings (V34, V35) [v1.1]
+    # Returns None for degenerate geometry (zero MAC/area) to avoid false positives.
     static_margin_pct = _compute_static_margin_for_validation(design)
-    _check_v34(design, warnings, static_margin_pct)
-    _check_v35(design, warnings, static_margin_pct)
+    if static_margin_pct is not None:
+        _check_v34(design, warnings, static_margin_pct)
+        _check_v35(design, warnings, static_margin_pct)
 
     return warnings
