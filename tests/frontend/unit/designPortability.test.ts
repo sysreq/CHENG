@@ -174,6 +174,36 @@ describe('designStore — design portability (Issue #156)', () => {
       expect(useDesignStore.getState().fileError).toBeNull();
     });
 
+    it('rejects when file lacks both version and wingSpan fields', async () => {
+      const file = new File(
+        [JSON.stringify({ someRandomField: 42 })],
+        'not_a_design.cheng',
+        { type: 'application/json' },
+      );
+
+      await expect(
+        useDesignStore.getState().importDesignFromJson(file, true),
+      ).rejects.toThrow(/missing required fields/);
+
+      expect(useDesignStore.getState().fileError).toBeNull();
+    });
+
+    it('fills missing fields from defaults when importing partial design', async () => {
+      // Only specify wingSpan — all other fields should default from Trainer preset
+      const partial = { version: '0.1.0', wingSpan: 750, name: 'Partial Import' };
+      const file = new File([JSON.stringify(partial)], 'partial.cheng', {
+        type: 'application/json',
+      });
+
+      await useDesignStore.getState().importDesignFromJson(file, true);
+
+      const state = useDesignStore.getState();
+      expect(state.design.wingSpan).toBe(750);
+      expect(state.design.name).toBe('Partial Import');
+      // fuselagePreset should default to a known value (not undefined)
+      expect(state.design.fuselagePreset).toBeTruthy();
+    });
+
     it('marks design as dirty after cloud import', async () => {
       const design = { version: '0.1.0', id: '', name: 'Test', wingSpan: 900 };
       const file = new File([JSON.stringify(design)], 'test.cheng', {

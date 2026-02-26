@@ -872,6 +872,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
         {saveFlash && (
           <span className="toolbar-design-name text-[10px] text-green-400 mr-2 animate-pulse">Saved!</span>
         )}
+        {/* Save error — only set by saveDesign(), never by importDesignFromJson() (#156) */}
         {fileError && (
           <span
             className="toolbar-design-name text-[10px] text-red-400 mr-2 cursor-pointer truncate max-w-[120px]"
@@ -881,6 +882,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
             Save failed
           </span>
         )}
+        {/* Import error — managed by local importError state, not fileError (#156) */}
         {importError && (
           <span
             className="text-[10px] text-red-400 mr-2 cursor-pointer truncate max-w-[160px]"

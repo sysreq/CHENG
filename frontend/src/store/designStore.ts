@@ -225,11 +225,16 @@ export interface DesignStore {
    * Import a design from a user-selected .cheng JSON file.
    * In local mode: uploads the file to the backend via POST /api/designs/import
    * so it is persisted to the Docker volume, then loads it into the store.
-   * In cloud mode: parses the JSON client-side and loads it directly into the
-   * store (no network round-trip — backend is stateless in cloud mode).
+   * In cloud mode: parses the JSON client-side, merges with known-good defaults
+   * to ensure schema completeness, and loads directly into the store.
+   *
+   * On error: rejects with a descriptive Error and resets isLoading to false.
+   * Does NOT set fileError (which is reserved for save operation failures and
+   * is displayed as "Save failed" in the Toolbar).  The caller is responsible
+   * for surfacing the error message in the UI.
    *
    * @param file - A File object from an <input type="file"> element.
-   * @param cloudMode - When true, skips the backend upload and loads locally.
+   * @param cloudMode - When true, skips the backend upload and merges locally.
    */
   importDesignFromJson: (file: File, cloudMode?: boolean) => Promise<void>;
 }
@@ -577,19 +582,29 @@ export const useDesignStore = create<DesignStore>()(
           if (cloudMode) {
             // Cloud mode: load design directly into the store (no backend persist).
             // The design is stateless on the backend — IndexedDB handles persistence.
-            // Validate basic structural fields to guard against non-design JSON.
+            // Validate that this is a recognisable AircraftDesign before loading.
             const obj = data as Record<string, unknown>;
             const hasVersion = typeof obj['version'] === 'string';
             const hasWingSpan =
               typeof obj['wingSpan'] === 'number' || typeof obj['wing_span'] === 'number';
             if (!hasVersion && !hasWingSpan) {
               throw new Error(
-                'Invalid design file: missing required fields (version or wingSpan)',
+                'Invalid design file: missing required fields (expected "version" and/or "wingSpan")',
               );
             }
-            // Normalise snake_case keys coming from a raw backend export
-            // (wingSpan may be stored as wing_span in the .cheng file)
-            const design = data as AircraftDesign;
+            // Build a safe design object: start from known-good defaults (the
+            // current Trainer preset), then spread the imported data on top.
+            // This ensures all required AircraftDesign fields are present even if
+            // the imported file is from an older format or is partially filled.
+            const defaultDesign = createDesignFromPreset('Trainer');
+            const design: AircraftDesign = {
+              ...defaultDesign,
+              ...obj,
+              // Force primitive fields to correct types where they may be missing
+              version: typeof obj['version'] === 'string' ? obj['version'] : defaultDesign.version,
+              id: typeof obj['id'] === 'string' ? obj['id'] : defaultDesign.id,
+              name: typeof obj['name'] === 'string' ? obj['name'] : defaultDesign.name,
+            } as AircraftDesign;
             set({
               design,
               designId: design.id || null,
