@@ -99,5 +99,24 @@ body {
 }
 
 /* ============================================================================
+   Cold Start Overlay -- skeleton shimmer and animation keyframes (#151)
+   ============================================================================ */
+
+:root {
+  --skeleton-base: rgba(128, 128, 128, 0.25);
+  --skeleton-track: rgba(128, 128, 128, 0.15);
+}
+
+@keyframes skeletonShimmer {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+@keyframes coldStartFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ============================================================================
    Responsive Layout — sidebar removed in #289 (Global params inlined as tab)
    ============================================================================ */

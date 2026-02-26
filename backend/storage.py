@@ -1,11 +1,11 @@
 """Storage backend — Protocol + LocalStorage + MemoryStorage implementations.
 
 LocalStorage reads/writes .cheng JSON files to a directory on the Docker volume.
-MemoryStorage keeps all designs in an in-memory dict (for Cloud Run / stateless mode).
+MemoryStorage is an in-memory backend for cloud mode (CHENG_MODE=cloud) where
+the backend is stateless — no file I/O occurs.
 
-The StorageBackend Protocol exists so that implementations can be swapped without
-modifying calling code.  Use ``create_storage_backend()`` to obtain the correct
-implementation for the current ``CHENG_MODE`` environment variable.
+The StorageBackend Protocol exists so that implementations can be swapped
+without modifying calling code.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import copy
 import json
 import os
 import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Protocol
@@ -177,75 +178,109 @@ class LocalStorage:
         path.unlink()
 
 
-# ---------------------------------------------------------------------------
-# MemoryStorage — in-memory, for Cloud Run / stateless mode
-# ---------------------------------------------------------------------------
-
-
 class MemoryStorage:
-    """Stores designs in an in-memory dict.
+    """In-memory storage backend for cloud mode (CHENG_MODE=cloud).
 
-    Intended for Cloud Run deployments where the backend is stateless and all
-    persistent design state lives in the browser (Zustand store + IndexedDB).
-    Data is NOT preserved across process restarts.
+    Stores designs in a thread-safe dict keyed by design_id.
+    No file I/O occurs — all data is lost on process restart.
+    This is intentional: in cloud mode the browser (IndexedDB) is the
+    canonical persistence layer; the backend is a pure stateless function.
 
-    Thread safety: operations are protected by a simple dict copy strategy;
-    for the expected single-process Cloud Run use-case this is sufficient.
-    Each ``save_design`` / ``load_design`` call deep-copies data so that
-    callers cannot mutate internal state via the returned reference.
+    Capacity: bounded by *max_designs* (default 500) to prevent OOM in
+    public cloud environments where multiple users may share a container.
+    Thread safety: all mutations are protected by a reentrant lock so that
+    concurrent FastAPI handler threads cannot corrupt the dict.
     """
 
-    def __init__(self) -> None:
+    # Default maximum number of designs kept in memory.
+    # At ~50 KB per design (typical) 500 designs ≈ 25 MB RAM — well within
+    # Cloud Run's minimum 128 MB instance memory.
+    DEFAULT_MAX_DESIGNS = 500
+
+    def __init__(self, max_designs: int = DEFAULT_MAX_DESIGNS) -> None:
         self._store: dict[str, dict] = {}
         self._timestamps: dict[str, datetime] = {}
+        self._lock = threading.RLock()
+        self._max_designs = max_designs
 
     def save_design(self, design_id: str, data: dict) -> None:
-        """Store a deep copy of *data* keyed by *design_id*."""
-        if not design_id:
-            raise ValueError(f"Invalid design id: {design_id!r}")
-        self._store[design_id] = copy.deepcopy(data)
-        self._timestamps[design_id] = datetime.now(tz=timezone.utc)
+        """Store a deep copy of *data* under *design_id*.
+
+        Deep-copying prevents accidental mutation of stored data via the
+        original dict reference.
+
+        Raises MemoryError if adding this design would exceed max_designs and
+        the id is not already present (i.e., this is not an overwrite).
+        """
+        with self._lock:
+            if design_id not in self._store and len(self._store) >= self._max_designs:
+                raise MemoryError(
+                    f"MemoryStorage capacity exceeded ({self._max_designs} designs). "
+                    "Delete older designs before saving new ones."
+                )
+            self._store[design_id] = copy.deepcopy(data)
+            self._timestamps[design_id] = datetime.now(tz=timezone.utc)
 
     def load_design(self, design_id: str) -> dict:
-        """Return a deep copy of the stored design.
-
-        Raises
-        ------
-        FileNotFoundError
-            If *design_id* has not been saved.
-        """
-        if design_id not in self._store:
-            raise FileNotFoundError(f"Design not found: {design_id}")
-        return copy.deepcopy(self._store[design_id])
+        """Return a deep copy of the stored design.  Raises FileNotFoundError if missing."""
+        with self._lock:
+            if design_id not in self._store:
+                raise FileNotFoundError(f"Design not found: {design_id}")
+            return copy.deepcopy(self._store[design_id])
 
     def list_designs(self) -> list[dict]:
-        """Return summaries of all stored designs, newest first."""
-        # Snapshot items to avoid RuntimeError if a concurrent request
-        # modifies _store while we iterate (dict changed size during iteration).
-        items = list(self._store.items())
-        designs = []
-        for design_id, data in items:
-            ts = self._timestamps.get(design_id, datetime.now(tz=timezone.utc))
-            designs.append(
-                {
-                    "id": data.get("id", design_id),
-                    "name": data.get("name", "Untitled"),
-                    "modified_at": ts.isoformat(),
-                }
-            )
-        # Sort newest first
-        designs.sort(key=lambda d: d["modified_at"], reverse=True)
-        return designs
+        """Return summaries of all stored designs, newest first.
+
+        The "id" field in each summary is always the STORAGE KEY (design_id),
+        not the id embedded in the stored data.  This ensures that callers
+        can use the returned id directly with load_design() / delete_design()
+        without risk of a key mismatch if the payload id differs from the key.
+        """
+        with self._lock:
+            entries = []
+            for design_id, data in self._store.items():
+                ts = self._timestamps.get(design_id, datetime.now(tz=timezone.utc))
+                entries.append(
+                    {
+                        # Use the storage key as the canonical id so that
+                        # subsequent load/delete calls succeed reliably.
+                        "id": design_id,
+                        "name": data.get("name", "Untitled"),
+                        "modified_at": ts.isoformat(),
+                        "_ts": ts,  # hidden key for sort; stripped below
+                    }
+                )
+            # Sort newest first by timestamp using the cached value
+            entries.sort(key=lambda e: e["_ts"], reverse=True)
+            # Remove the hidden sort key before returning
+            for e in entries:
+                del e["_ts"]
+            return entries
 
     def delete_design(self, design_id: str) -> None:
-        """Remove the stored design.
+        """Remove a design from memory.  Raises FileNotFoundError if missing."""
+        with self._lock:
+            if design_id not in self._store:
+                raise FileNotFoundError(f"Design not found: {design_id}")
+            del self._store[design_id]
+            self._timestamps.pop(design_id, None)
 
-        Raises
-        ------
-        FileNotFoundError
-            If *design_id* has not been saved.
-        """
-        if design_id not in self._store:
-            raise FileNotFoundError(f"Design not found: {design_id}")
-        del self._store[design_id]
-        self._timestamps.pop(design_id, None)
+    # ------------------------------------------------------------------
+    # Introspection helpers (not part of the StorageBackend Protocol)
+    # ------------------------------------------------------------------
+
+    def design_count(self) -> int:
+        """Return the number of designs currently in memory."""
+        with self._lock:
+            return len(self._store)
+
+    def approximate_size_bytes(self) -> int:
+        """Return approximate total byte size of all stored designs (JSON-serialised)."""
+        with self._lock:
+            total = 0
+            for data in self._store.values():
+                try:
+                    total += len(json.dumps(data).encode("utf-8"))
+                except (TypeError, ValueError):
+                    pass
+            return total

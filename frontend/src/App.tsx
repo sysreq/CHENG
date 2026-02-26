@@ -2,12 +2,16 @@ import { useState } from 'react';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useDesignSync } from '@/hooks/useDesignSync';
 import { useConnectionStore } from '@/store/connectionStore';
+import { useChengMode } from '@/hooks/useChengMode';
+import { useIndexedDbPersistence } from '@/hooks/useIndexedDbPersistence';
 import { Toolbar } from '@/components/Toolbar';
 import Scene from '@/components/Viewport/Scene';
 import { ComponentPanel } from '@/components/panels/ComponentPanel';
 import ConnectionStatus from '@/components/ConnectionStatus';
 import DisconnectedBanner from '@/components/DisconnectedBanner';
+import ColdStartOverlay from '@/components/ColdStartOverlay';
 import { ExportDialog } from '@/components/ExportDialog';
+import StorageUsageIndicator from '@/components/StorageUsageIndicator';
 
 /**
  * Root application layout (updated for #289):
@@ -27,10 +31,20 @@ import { ExportDialog } from '@/components/ExportDialog';
  *
  * The previous right-sidebar GlobalPanel has been inlined as the first tab
  * ("Global") in ComponentPanel. Presets are now in the top menu bar.
+ *
+ * In cloud mode (#150) IndexedDB persistence is active and a storage-usage
+ * indicator is shown in the status bar.
  */
 export default function App() {
   const { send } = useWebSocket();
   useDesignSync(send);
+
+  // Discover CHENG_MODE from the backend (/api/mode)
+  const { mode: chengMode } = useChengMode();
+  const isCloudMode = chengMode === 'cloud';
+
+  // Enable IndexedDB auto-save + restore in cloud mode
+  useIndexedDbPersistence(isCloudMode);
 
   const [exportOpen, setExportOpen] = useState(false);
   const isConnected = useConnectionStore((s) => s.state === 'connected');
@@ -66,6 +80,8 @@ export default function App() {
         <div style={{ position: 'absolute', inset: 0, top: 'var(--toolbar-height)' }}>
           <Scene />
         </div>
+        {/* Cold start overlay -- shown on slow initial connection (e.g. Cloud Run) */}
+        <ColdStartOverlay />
       </main>
 
       {/* Bottom — Component Panel (Global / Wing / Tail / Fuselage / Landing Gear) */}
@@ -100,6 +116,8 @@ export default function App() {
           fontSize: '12px',
         }}
       >
+        {/* Storage usage shown only in cloud mode (#150) */}
+        <StorageUsageIndicator visible={isCloudMode} />
         <ConnectionStatus />
       </footer>
 
