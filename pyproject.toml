@@ -10,6 +10,7 @@ dependencies = [
     "pydantic>=2.10.0",
     "numpy>=1.26.0",
     "anyio>=4.7.0",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
