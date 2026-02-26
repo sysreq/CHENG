@@ -6,13 +6,12 @@ swap in a temporary directory.
 
 from __future__ import annotations
 
-import os
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from backend.models import AircraftDesign, DesignSummary
-from backend.storage import LocalStorage, StorageBackend
+from backend.storage import StorageBackend, create_storage_backend
 
 router = APIRouter(prefix="/api/designs", tags=["designs"])
 
@@ -24,12 +23,15 @@ _default_storage: StorageBackend | None = None
 
 
 def _get_storage() -> StorageBackend:
-    """FastAPI dependency returning the active StorageBackend."""
+    """FastAPI dependency returning the active StorageBackend.
+
+    On first call the backend is created by ``create_storage_backend()``, which
+    reads ``CHENG_MODE`` (and ``CHENG_DATA_DIR`` for local mode) from the
+    environment.  Tests may call ``set_storage()`` to inject a different backend.
+    """
     global _default_storage  # noqa: PLW0603
     if _default_storage is None:
-        _default_storage = LocalStorage(
-            base_path=os.environ.get("CHENG_DATA_DIR", "/data/designs")
-        )
+        _default_storage = create_storage_backend()
     return _default_storage
 
 
