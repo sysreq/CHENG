@@ -1,11 +1,12 @@
 // ============================================================================
 // CHENG — Component Panel Router
 // Routes to the appropriate detail panel based on selectedComponent + tailType
-// Issue #27 | Landing Gear UI access #230
+// Issue #27 | Landing Gear UI access #230 | Global inline #289
 // ============================================================================
 
 import React, { useCallback } from 'react';
 import { useDesignStore } from '../../store/designStore';
+import { GlobalPanel } from './GlobalPanel';
 import { WingPanel } from './WingPanel';
 import { TailConventionalPanel } from './TailConventionalPanel';
 import { TailVTailPanel } from './TailVTailPanel';
@@ -18,6 +19,7 @@ import type { ComponentSelection } from '../../types/design';
 // ---------------------------------------------------------------------------
 
 const COMPONENT_TABS: readonly { key: Exclude<ComponentSelection, null>; label: string }[] = [
+  { key: 'global', label: 'Global' },
   { key: 'wing', label: 'Wing' },
   { key: 'tail', label: 'Tail' },
   { key: 'fuselage', label: 'Fuselage' },
@@ -34,11 +36,13 @@ function ComponentTabs({ selected, onSelect }: ComponentTabsProps): React.JSX.El
     <div className="flex border-b border-zinc-700/50 bg-zinc-900/60">
       {COMPONENT_TABS.map(({ key, label }) => {
         const isActive = selected === key;
+        // 'global' tab cannot be toggled off. Other tabs toggle off to 'global' (not null).
+        const handleClick = () => onSelect(isActive && key !== 'global' ? 'global' : key);
         return (
           <button
             key={key}
             type="button"
-            onClick={() => onSelect(isActive ? null : key)}
+            onClick={handleClick}
             className={`flex-1 px-2 py-1.5 text-[10px] font-medium truncate transition-colors
               focus:outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500
               ${isActive
@@ -62,10 +66,11 @@ function ComponentTabs({ selected, onSelect }: ComponentTabsProps): React.JSX.El
 
 /**
  * Routes to the correct detail panel based on:
- * - selectedComponent: 'wing' | 'tail' | 'fuselage' | 'landing_gear' | null
+ * - selectedComponent: 'global' | 'wing' | 'tail' | 'fuselage' | 'landing_gear' | null
  * - design.tailType: determines which tail panel to show
  *
- * Includes a tab strip for direct navigation to each component panel (#230).
+ * Includes a tab strip for direct navigation (#230). 'Global' is always the first tab
+ * and shows the core aircraft parameters that were previously in the right sidebar (#289).
  */
 export function ComponentPanel(): React.JSX.Element {
   const selectedComponent = useDesignStore((s) => s.selectedComponent);
@@ -90,6 +95,10 @@ export function ComponentPanel(): React.JSX.Element {
           </p>
         </div>
       );
+    }
+
+    if (selectedComponent === 'global') {
+      return <GlobalPanel />;
     }
 
     if (selectedComponent === 'wing') {

@@ -24,9 +24,9 @@ describe('designStore — wing panel selection (#241, #242)', () => {
     expect(selectedPanel).toBeNull();
   });
 
-  it('starts with selectedComponent = null', () => {
+  it('starts with selectedComponent = global (#289)', () => {
     const { selectedComponent } = useDesignStore.getState();
-    expect(selectedComponent).toBeNull();
+    expect(selectedComponent).toBe('global');
   });
 
   // ── setSelectedPanel ───────────────────────────────────────────────

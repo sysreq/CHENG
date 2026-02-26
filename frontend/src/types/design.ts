@@ -36,8 +36,8 @@ export type SupportStrategy = 'none' | 'minimal' | 'full';
 /** Landing gear configuration. */
 export type LandingGearType = 'None' | 'Tricycle' | 'Taildragger';
 
-/** Selectable component in the 3D viewport. */
-export type ComponentSelection = 'wing' | 'tail' | 'fuselage' | 'landing_gear' | null;
+/** Selectable component in the 3D viewport. 'global' is the inlined global params tab. */
+export type ComponentSelection = 'global' | 'wing' | 'tail' | 'fuselage' | 'landing_gear' | null;
 
 /** Sub-element within a wing component. */
 export type WingSubElement = 'left-panel' | 'right-panel';
@@ -52,6 +52,7 @@ export type SubElementSelection = WingSubElement | TailSubElement | FuselageSubE
  *  Wing includes multi-section panel labels for #143 (extra entries are harmless
  *  when only single-section is active — cycler only traverses those that exist). */
 export const COMPONENT_SUB_ELEMENTS: Record<Exclude<ComponentSelection, null>, readonly string[]> = {
+  global: [] as const,
   wing: ['left-panel', 'right-panel', 'inner-panel', 'mid-panel', 'outer-panel'] as const,
   tail: ['h-stab', 'v-stab'] as const,
   fuselage: ['nose', 'cabin', 'tail-cone'] as const,

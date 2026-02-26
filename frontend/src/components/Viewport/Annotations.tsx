@@ -25,7 +25,8 @@ function SelectedComponentBadge() {
   const selectedComponent = useDesignStore((state) => state.selectedComponent);
   const selectedSubElement = useDesignStore((state) => state.selectedSubElement);
 
-  if (!selectedComponent) return null;
+  // 'global' is the default tab state — no component-specific badge needed (#289)
+  if (!selectedComponent || selectedComponent === 'global') return null;
 
   const subLabel = selectedSubElement ? SUB_ELEMENT_LABELS[selectedSubElement] ?? selectedSubElement : null;
 

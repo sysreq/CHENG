@@ -383,7 +383,7 @@ export const useDesignStore = create<DesignStore>()(
         ),
 
       // ── Viewport ──────────────────────────────────────────────────
-      selectedComponent: null,
+      selectedComponent: 'global' as ComponentSelection,
       selectedSubElement: null,
       selectedPanel: null,
       setSelectedComponent: (component) =>
@@ -450,7 +450,7 @@ export const useDesignStore = create<DesignStore>()(
           warnings: [],
           meshData: null,
           isGenerating: false,
-          selectedComponent: null,
+          selectedComponent: 'global' as ComponentSelection,
           selectedSubElement: null,
           selectedPanel: null,
           componentPrintSettings: {},
@@ -478,7 +478,7 @@ export const useDesignStore = create<DesignStore>()(
             warnings: [],
             meshData: null,
             isGenerating: false,
-            selectedComponent: null,
+            selectedComponent: 'global' as ComponentSelection,
             selectedSubElement: null,
             selectedPanel: null,
             componentPrintSettings: {},

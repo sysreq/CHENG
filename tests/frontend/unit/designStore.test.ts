@@ -272,12 +272,12 @@ describe('designStore', () => {
     expect(useDesignStore.getState().isGenerating).toBe(false);
   });
 
-  it('newDesign resets selectedComponent to null', () => {
+  it('newDesign resets selectedComponent to global (#289)', () => {
     useDesignStore.getState().setSelectedComponent('wing');
     expect(useDesignStore.getState().selectedComponent).toBe('wing');
 
     useDesignStore.getState().newDesign();
-    expect(useDesignStore.getState().selectedComponent).toBeNull();
+    expect(useDesignStore.getState().selectedComponent).toBe('global');
   });
 
   it('newDesign resets selectedPanel to null', () => {
@@ -347,7 +347,7 @@ describe('designStore', () => {
     expect(useDesignStore.getState().isGenerating).toBe(false);
   });
 
-  it('loadDesign resets selectedComponent to null', async () => {
+  it('loadDesign resets selectedComponent to global (#289)', async () => {
     useDesignStore.getState().setSelectedComponent('fuselage');
     expect(useDesignStore.getState().selectedComponent).toBe('fuselage');
 
@@ -360,7 +360,7 @@ describe('designStore', () => {
       ({ ok: true, json: async () => fakeDesign }) as Response;
 
     await useDesignStore.getState().loadDesign('loaded-id');
-    expect(useDesignStore.getState().selectedComponent).toBeNull();
+    expect(useDesignStore.getState().selectedComponent).toBe('global');
   });
 
   it('loadDesign resets componentPrintSettings to empty object', async () => {
