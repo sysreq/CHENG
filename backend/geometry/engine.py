@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     import cadquery as cq
 
 from backend.models import AircraftDesign, DerivedValues, GenerationResult
+from backend.stability import compute_static_stability
 
 # Lazy import of anyio -- only needed when running async code.
 # This allows the module to be imported in environments without anyio.
@@ -405,7 +406,7 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
         design, weights, mean_aero_chord_mm, y_mac, sweep_rad,
     )
 
-    return {
+    result: dict[str, float] = {
         "tip_chord_mm": tip_chord_mm,
         "wing_area_cm2": wing_area_cm2,
         "aspect_ratio": aspect_ratio,
@@ -416,6 +417,36 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
         "wall_thickness_mm": wall_thickness_mm,
         **weights,
     }
+
+    # Static stability metrics (v1.1) — pass already-computed values to avoid
+    # re-calculation. All required inputs are already in scope from the
+    # computation above.
+    try:
+        wing_le_ref_mm, _ = _compute_wing_mount(design)
+        tail_x = _compute_tail_x(design)
+        effective_tail_arm_mm = tail_x - wing_le_ref_mm
+        weight_total_g = (
+            weights["weight_total_g"]
+            + design.motor_weight_g
+            + design.battery_weight_g
+        )
+        stability = compute_static_stability(
+            design=design,
+            wing_le_ref_mm=wing_le_ref_mm,
+            estimated_cg_mm=estimated_cg_mm,
+            mac_mm=mean_aero_chord_mm,
+            wing_area_mm2=wing_area_mm2,
+            y_mac_mm=y_mac,
+            effective_tail_arm_mm=effective_tail_arm_mm,
+            weight_total_g=weight_total_g,
+        )
+        result.update(stability)
+    except Exception:
+        # Stability computation failure is non-fatal — return basic derived values
+        # without stability fields. DerivedValues defaults (0.0) will be used.
+        pass
+
+    return result
 
 
 def _compute_mac_cranked(design: AircraftDesign) -> tuple[float, float]:
