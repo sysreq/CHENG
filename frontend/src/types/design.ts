@@ -312,6 +312,22 @@ export interface DerivedValues {
   minFeatureThicknessMm: number;
   /** Fuselage wall thickness (preset-controlled). @unit mm */
   wallThicknessMm: number;
+
+  // Static stability (v1.1)
+  /** Neutral point absolute position from nose. @unit mm */
+  neutralPointMm: number;
+  /** Neutral point as % of MAC from wing leading edge. @unit % */
+  neutralPointPctMac: number;
+  /** CG position as % of MAC from wing leading edge. @unit % */
+  cgPctMac: number;
+  /** Static margin = (NP - CG) / MAC * 100. Positive = stable. @unit % */
+  staticMarginPct: number;
+  /** Horizontal tail volume coefficient V_h. Dimensionless. */
+  tailVolumeH: number;
+  /** Vertical tail volume coefficient V_v. Dimensionless. */
+  tailVolumeV: number;
+  /** Wing loading = total weight / wing area. @unit g/dm2 */
+  wingLoadingGDm2: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -151,6 +151,14 @@ function parseMeshUpdate(data: ArrayBuffer, view: DataView): MeshFrame {
       estimatedCgMm: 0,
       minFeatureThicknessMm: 0,
       wallThicknessMm: 0,
+      // Static stability defaults (v1.1)
+      neutralPointMm: 0,
+      neutralPointPctMac: 25,
+      cgPctMac: 0,
+      staticMarginPct: 0,
+      tailVolumeH: 0,
+      tailVolumeV: 0,
+      wingLoadingGDm2: 0,
     };
     validation = [];
   }

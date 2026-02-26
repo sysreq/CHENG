@@ -149,6 +149,10 @@ export default function AircraftMesh({ onLoaded }: AircraftMeshProps) {
         tipChordMm: 0, wingAreaCm2: 0, aspectRatio: 0,
         meanAeroChordMm: 0, taperRatio: 0, estimatedCgMm: 0,
         minFeatureThicknessMm: 0, wallThicknessMm: 0,
+        // Static stability defaults (v1.1)
+        neutralPointMm: 0, neutralPointPctMac: 25,
+        cgPctMac: 0, staticMarginPct: 0,
+        tailVolumeH: 0, tailVolumeV: 0, wingLoadingGDm2: 0,
       },
       validation: [],
       componentRanges: null,
