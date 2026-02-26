@@ -36,8 +36,8 @@ function ComponentTabs({ selected, onSelect }: ComponentTabsProps): React.JSX.El
     <div className="flex border-b border-zinc-700/50 bg-zinc-900/60">
       {COMPONENT_TABS.map(({ key, label }) => {
         const isActive = selected === key;
-        // 'global' tab cannot be toggled off (clicking it while active keeps it selected)
-        const handleClick = () => onSelect(isActive && key !== 'global' ? null : key);
+        // 'global' tab cannot be toggled off. Other tabs toggle off to 'global' (not null).
+        const handleClick = () => onSelect(isActive && key !== 'global' ? 'global' : key);
         return (
           <button
             key={key}

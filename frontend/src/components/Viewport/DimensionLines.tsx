@@ -213,7 +213,7 @@ export default function DimensionLines() {
 
   return (
     <group rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[ox, oy, oz]}>
-      {selectedComponent === null && <GlobalDimensions />}
+      {(selectedComponent === null || selectedComponent === 'global') && <GlobalDimensions />}
       {selectedComponent === 'wing' && <WingDimensions />}
       {selectedComponent === 'tail' && <TailDimensions />}
       {selectedComponent === 'fuselage' && <FuselageDimensions />}

@@ -328,27 +328,24 @@ function PresetsMenu(): React.JSX.Element {
                   Saved Presets
                 </div>
                 {customPresets.map((p) => (
-                  <DropdownMenu.Item
-                    key={p.id}
-                    className={MENU_ITEM_CLASS}
-                    onSelect={(e) => {
-                      // Do not load if the event originated from the delete button
-                      if ((e.target as HTMLElement).closest('[data-delete-btn]')) return;
-                      handleLoadCustomPreset(p.id);
-                    }}
-                    disabled={isLoadingPreset}
-                  >
-                    <span className="truncate max-w-[120px]" title={p.name}>{p.name}</span>
-                    <button
-                      data-delete-btn="true"
-                      className="ml-2 text-[10px] text-zinc-500 hover:text-red-400 px-1"
-                      onPointerDown={(e) => { e.stopPropagation(); }}
-                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); setPendingDeletePreset(p); }}
-                      title="Delete preset"
+                  // Two sibling items per preset: Load + Delete
+                  // Avoids nested interactive elements inside DropdownMenu.Item (ARIA violation)
+                  <div key={p.id} className="flex items-center">
+                    <DropdownMenu.Item
+                      className={`${MENU_ITEM_CLASS} flex-1 min-w-0`}
+                      onSelect={() => handleLoadCustomPreset(p.id)}
+                      disabled={isLoadingPreset}
+                    >
+                      <span className="truncate" title={p.name}>{p.name}</span>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      className="flex-shrink-0 px-2 py-1.5 text-[10px] text-zinc-500 rounded cursor-pointer outline-none data-[highlighted]:text-red-400 data-[highlighted]:bg-zinc-700"
+                      onSelect={() => setPendingDeletePreset(p)}
+                      title={`Delete "${p.name}"`}
                     >
                       Del
-                    </button>
-                  </DropdownMenu.Item>
+                    </DropdownMenu.Item>
+                  </div>
                 ))}
               </>
             )}
