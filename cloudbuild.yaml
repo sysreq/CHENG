@@ -87,6 +87,7 @@ steps:
       - "4"
       - --timeout
       - "3600"
+      - --cpu-boost
       - --set-env-vars
       - CHENG_MODE=cloud
       - --allow-unauthenticated
