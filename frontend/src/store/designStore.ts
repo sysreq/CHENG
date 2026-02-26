@@ -577,11 +577,18 @@ export const useDesignStore = create<DesignStore>()(
           if (cloudMode) {
             // Cloud mode: load design directly into the store (no backend persist).
             // The design is stateless on the backend — IndexedDB handles persistence.
-            // Validate that the object has at least the basic expected fields.
+            // Validate basic structural fields to guard against non-design JSON.
             const obj = data as Record<string, unknown>;
-            if (typeof obj['version'] !== 'string' && typeof obj['wingSpan'] === 'undefined') {
-              throw new Error('Invalid design file: missing required fields');
+            const hasVersion = typeof obj['version'] === 'string';
+            const hasWingSpan =
+              typeof obj['wingSpan'] === 'number' || typeof obj['wing_span'] === 'number';
+            if (!hasVersion && !hasWingSpan) {
+              throw new Error(
+                'Invalid design file: missing required fields (version or wingSpan)',
+              );
             }
+            // Normalise snake_case keys coming from a raw backend export
+            // (wingSpan may be stored as wing_span in the .cheng file)
             const design = data as AircraftDesign;
             set({
               design,
@@ -650,8 +657,11 @@ export const useDesignStore = create<DesignStore>()(
             });
           }
         } catch (err) {
-          const msg = err instanceof Error ? err.message : 'Failed to import design';
-          set({ isLoading: false, fileError: msg });
+          // Reset loading state only — do NOT set fileError here.
+          // fileError is reserved for save operations and would display as
+          // "Save failed" in the Toolbar, which is misleading for import errors.
+          // The Toolbar's handleImportJsonFile catch block owns import error UI.
+          set({ isLoading: false });
           throw err;
         }
       },

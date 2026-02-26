@@ -146,31 +146,32 @@ describe('designStore — design portability (Issue #156)', () => {
       expect(state.isLoading).toBe(false);
     });
 
-    it('sets fileError for non-JSON file content', async () => {
+    it('rejects and clears isLoading for non-JSON file content', async () => {
       const file = new File(['not valid json!'], 'bad.cheng', {
         type: 'application/json',
       });
 
       await expect(
         useDesignStore.getState().importDesignFromJson(file, true),
-      ).rejects.toThrow();
+      ).rejects.toThrow('File is not valid JSON');
 
       const state = useDesignStore.getState();
-      expect(state.fileError).toBeTruthy();
+      // fileError is NOT set by importDesignFromJson — it is reserved for save
+      // errors. The Toolbar handles import error display via local importError state.
+      expect(state.fileError).toBeNull();
       expect(state.isLoading).toBe(false);
     });
 
-    it('sets fileError for non-object JSON', async () => {
+    it('rejects with descriptive error for non-object JSON', async () => {
       const file = new File(['"just a string"'], 'bad.cheng', {
         type: 'application/json',
       });
 
       await expect(
         useDesignStore.getState().importDesignFromJson(file, true),
-      ).rejects.toThrow();
+      ).rejects.toThrow('not a JSON object');
 
-      const state = useDesignStore.getState();
-      expect(state.fileError).toBeTruthy();
+      expect(useDesignStore.getState().fileError).toBeNull();
     });
 
     it('marks design as dirty after cloud import', async () => {
@@ -225,7 +226,7 @@ describe('designStore — design portability (Issue #156)', () => {
       expect(state.isDirty).toBe(false);
     });
 
-    it('sets fileError when backend returns an error', async () => {
+    it('rejects with backend error detail when backend returns 400', async () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
         new Response(JSON.stringify({ detail: 'Invalid design file: bad schema' }), { status: 400 }),
       );
@@ -239,7 +240,9 @@ describe('designStore — design portability (Issue #156)', () => {
       ).rejects.toThrow('Invalid design file: bad schema');
 
       const state = useDesignStore.getState();
-      expect(state.fileError).toBe('Invalid design file: bad schema');
+      // fileError is NOT set on import errors — only on save errors.
+      // The Toolbar handles import error display via local importError state.
+      expect(state.fileError).toBeNull();
       expect(state.isLoading).toBe(false);
     });
   });
