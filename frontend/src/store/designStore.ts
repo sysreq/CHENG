@@ -16,6 +16,7 @@ import type {
 } from '../types/design';
 import { COMPONENT_SUB_ELEMENTS } from '../types/design';
 import { createDesignFromPreset, DEFAULT_PRESET, PRESET_FACTORIES } from '../lib/presets';
+import { loadPrintBedPrefs, isDefaultPrintBedPrefs } from '../lib/printBedPrefs';
 
 enableMapSet();
 
@@ -147,6 +148,12 @@ export interface DesignStore {
    */
   commitSliderChange: () => void;
   loadPreset: (name: Exclude<PresetName, 'Custom'>) => void;
+  /**
+   * Apply saved print bed preferences (from localStorage) to the current
+   * design. Called on mount and after preset/new-design loads.
+   * Issue #155.
+   */
+  applyBedPreferences: () => void;
 
   // ── Multi-Section Wing Panel Array Actions (#143, #245) ──────────
   /** Set a specific panel break position by index (0-based). */
@@ -366,8 +373,34 @@ export const useDesignStore = create<DesignStore>()(
             state.lastChangeSource = 'immediate';
             state.lastAction = `Loaded ${name} preset`;
             state.isDirty = true;
+
+            // Issue #155: apply user's saved bed preferences over preset defaults.
+            // If prefs are non-default they override the preset's bed dimensions,
+            // so the user's printer size is always preserved across preset loads.
+            const prefs = loadPrintBedPrefs();
+            if (!isDefaultPrintBedPrefs(prefs)) {
+              state.design.printBedX = prefs.printBedX;
+              state.design.printBedY = prefs.printBedY;
+              state.design.printBedZ = prefs.printBedZ;
+            }
           }),
         ),
+
+      applyBedPreferences: () => {
+        const prefs = loadPrintBedPrefs();
+        if (!isDefaultPrintBedPrefs(prefs)) {
+          // Apply without marking isDirty — this is a preference restore, not a
+          // user edit. Use Immer produce to mutate design fields only.
+          set(
+            produce((state: DesignStore) => {
+              state.design.printBedX = prefs.printBedX;
+              state.design.printBedY = prefs.printBedY;
+              state.design.printBedZ = prefs.printBedZ;
+              // Do NOT set isDirty here — preferences are not user design edits.
+            }),
+          );
+        }
+      },
 
       // ── Derived / Warnings / Mesh ─────────────────────────────────
       derived: null,
@@ -464,6 +497,16 @@ export const useDesignStore = create<DesignStore>()(
 
       newDesign: () => {
         const fresh = createDesignFromPreset(DEFAULT_PRESET);
+
+        // Issue #155: apply user's saved bed preferences to new designs so
+        // users don't have to re-enter their printer bed size every time.
+        const prefs = loadPrintBedPrefs();
+        if (!isDefaultPrintBedPrefs(prefs)) {
+          fresh.printBedX = prefs.printBedX;
+          fresh.printBedY = prefs.printBedY;
+          fresh.printBedZ = prefs.printBedZ;
+        }
+
         set({
           design: fresh,
           activePreset: DEFAULT_PRESET,
