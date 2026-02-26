@@ -705,8 +705,12 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
                 Export Design as JSON...
               </DropdownMenu.Item>
 
-              <DropdownMenu.Item className={MENU_ITEM_CLASS} onSelect={handleImportJsonClick}>
-                Import Design from JSON...
+              <DropdownMenu.Item
+                className={MENU_ITEM_CLASS}
+                onSelect={handleImportJsonClick}
+                disabled={modeInfo === null}
+              >
+                Import Design from JSON...{modeInfo === null ? ' (loading…)' : ''}
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
