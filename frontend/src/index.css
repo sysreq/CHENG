@@ -96,6 +96,29 @@ body {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+/* ============================================================================
+   Cold Start Overlay -- skeleton shimmer and animation keyframes (#151)
+   ============================================================================ */
+
+:root {
+  --skeleton-base: rgba(128, 128, 128, 0.25);
+  --skeleton-track: rgba(128, 128, 128, 0.15);
+}
+
+@keyframes skeletonShimmer {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+@keyframes spinnerRotate {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes coldStartFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 }
 
 /* ============================================================================

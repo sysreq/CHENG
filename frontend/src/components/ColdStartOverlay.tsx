@@ -20,12 +20,6 @@ const PHASE_PROGRESS: Partial<Record<ColdStartPhase, number>> = {
   ready: 100,
 };
 
-const COLD_START_STYLES = `
-  :root { --skeleton-base: rgba(128, 128, 128, 0.25); --skeleton-track: rgba(128, 128, 128, 0.15); }
-  @keyframes skeletonShimmer { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
-  @keyframes spinnerRotate { to { transform: rotate(360deg); } }
-  @keyframes coldStartFadeIn { from { opacity: 0; } to { opacity: 1; } }
-`;
 
 function SkeletonPlane() {
   return <div aria-hidden='true' style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, width: 260 }}>
@@ -69,7 +63,6 @@ export default function ColdStartOverlay() {
   const isReady = phase === 'ready';
   return (
     <>
-      <style>{COLD_START_STYLES}</style>
       <div
         role='status'
         aria-live='polite'

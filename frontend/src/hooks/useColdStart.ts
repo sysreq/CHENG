@@ -36,6 +36,10 @@ const PHASE_STARTING_MS = 3_500;
 const PHASE_LOADING_MS = 4_000;
 
 /** Fail-safe timeout (ms): dismiss overlay in 'ready' phase even if no mesh arrives. */
+/** Duration (ms) before dismissing overlay after first mesh arrives. */
+const DISMISS_DELAY_MS = 600;
+
+/** Fail-safe: dismiss overlay after this many ms in 'ready' phase even if no mesh arrives. */
 const READY_FAILSAFE_MS = 8_000;
 
 /**
@@ -137,10 +141,11 @@ export function useColdStart(): ColdStartState {
       // If we've already detected a reconnect (not first connect), permanently
       // deactivate this hook so the overlay never shows for reconnects.
       if (connectionState === 'reconnecting') {
-        isInitialLoadRef.current = false;
+        // Do NOT permanently deactivate on reconnect -- the initial cold-start
+        // may still be in progress (backend still booting after a 503/504).
+        // Just hide the overlay if it was showing during this transition.
         setPhase((prev) => {
           if (prev !== 'idle' && prev !== 'dismissed') {
-            // Overlay was showing during initial connect — dismiss it.
             return 'dismissed';
           }
           return prev;
@@ -174,7 +179,7 @@ export function useColdStart(): ColdStartState {
       clearTimeout(failSafeTimer);
       const dismissTimer = setTimeout(() => {
         setPhase('dismissed');
-      }, 600);
+      }, DISMISS_DELAY_MS);
       return () => {
         clearTimeout(dismissTimer);
         clearTimeout(failSafeTimer);
