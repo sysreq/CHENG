@@ -128,12 +128,13 @@ body {
 
 /*
  * Toolbar responsive behaviour:
- * - Design name field: hidden below 1400px to save horizontal space
- * - Save-flash / error indicators: hidden below 1400px
- * The toolbar menu buttons (File / Edit / Presets / View) and camera shortcuts
- * always remain visible at 1280px.
+ * At 1280px the toolbar must show: File | Edit | Presets | View | [sep] |
+ * F S T 3D | [sep] | ↩ ↪ | [spacer] | [warn badge] | [mode badge] | [export].
+ * The design name and save-flash are secondary — hide them only at the bare
+ * minimum width (below 1300px) to free up ~160px of horizontal space.
+ * Most users on 1366x768 (common laptop resolution) will still see the name.
  */
-@media (max-width: 1399px) {
+@media (max-width: 1299px) {
   .toolbar-design-name {
     display: none !important;
   }

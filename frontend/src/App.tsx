@@ -68,8 +68,9 @@ export default function App() {
         gridTemplateColumns: '1fr',
         gridTemplateRows: '1fr auto var(--statusbar-height)',
         height: '100vh',
-        minHeight: '720px',
-        minWidth: '1280px',
+        // Use CSS custom properties so the breakpoints stay in one place (index.css)
+        minHeight: 'var(--min-app-height)',
+        minWidth: 'var(--min-app-width)',
         overflow: 'hidden',
       }}
     >
