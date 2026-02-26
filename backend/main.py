@@ -7,6 +7,7 @@ and mounts static files for the SPA frontend.
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -66,7 +67,7 @@ async def lifespan(app: FastAPI):
 
     # 3. Ensure designs storage directory exists (local mode only)
     if mode == "local":
-        designs_dir = Path("/data/designs")
+        designs_dir = Path(os.environ.get("CHENG_DATA_DIR", "/data/designs"))
         try:
             designs_dir.mkdir(parents=True, exist_ok=True)
         except OSError:
