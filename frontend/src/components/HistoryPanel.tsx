@@ -118,12 +118,18 @@ export function HistoryPanel({ open, onClose }: HistoryPanelProps): React.JSX.El
   if (!open) return null;
 
   return (
-    <div className="fixed top-[calc(var(--toolbar-height,40px)+44px)] left-2 z-50 w-72 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl shadow-black/50 flex flex-col overflow-hidden" style={{ maxHeight: 'calc(100vh - var(--toolbar-height, 40px) - 60px)' }}>
+    <div
+      role="dialog"
+      aria-label="Edit history"
+      aria-modal="false"
+      className="fixed top-[calc(var(--toolbar-height,40px)+44px)] left-2 z-50 w-72 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl shadow-black/50 flex flex-col overflow-hidden"
+      style={{ maxHeight: 'calc(100vh - var(--toolbar-height, 40px) - 60px)' }}
+    >
       <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
-        <span className="text-xs font-semibold text-zinc-300">History</span>
+        <span className="text-xs font-semibold text-zinc-300" id="history-panel-title">History</span>
         <button
           onClick={onClose}
-          className="text-xs text-zinc-500 hover:text-zinc-300 px-1"
+          className="text-xs text-zinc-500 hover:text-zinc-300 px-1 focus:outline-none focus:ring-1 focus:ring-zinc-500 rounded"
           aria-label="Close history panel"
         >
           {'\u2715'}

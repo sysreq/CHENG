@@ -13,6 +13,7 @@ import DisconnectedBanner from '@/components/DisconnectedBanner';
 import ColdStartOverlay from '@/components/ColdStartOverlay';
 import { ExportDialog } from '@/components/ExportDialog';
 import StorageUsageIndicator from '@/components/StorageUsageIndicator';
+import { LiveRegion } from '@/components/LiveRegion';
 
 /**
  * Root application layout (updated for #221, #289):
@@ -81,8 +82,17 @@ export default function App() {
         overflow: 'hidden',
       }}
     >
+      {/* Skip navigation link — first focusable element for keyboard users */}
+      <a
+        href="#parameter-panel"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-3 focus:py-1.5 focus:text-xs focus:font-medium focus:text-zinc-100 focus:bg-blue-600 focus:rounded focus:shadow-lg"
+      >
+        Skip to parameter controls
+      </a>
+
       {/* Center — 3D Viewport */}
       <main
+        aria-label="CHENG RC Plane Designer"
         style={{
           gridColumn: '1',
           gridRow: '1',
@@ -106,6 +116,8 @@ export default function App() {
       {/* Bottom — Component Panel (Global / Wing / Tail / Fuselage / Landing Gear) */}
       <section
         className="component-panel-section"
+        id="parameter-panel"
+        aria-label="Aircraft parameter controls"
         style={{
           gridColumn: '1',
           gridRow: '2',
@@ -126,6 +138,7 @@ export default function App() {
 
       {/* Bottom Bar — status */}
       <footer
+        aria-label="Application status"
         style={{
           gridColumn: '1',
           gridRow: '3',
@@ -150,6 +163,9 @@ export default function App() {
         onSaveBedAsDefault={saveBedAsDefault}
         onResetBedToDefaults={resetBedToDefaults}
       />
+
+      {/* Global live region for screen reader announcements */}
+      <LiveRegion />
     </div>
   );
 }

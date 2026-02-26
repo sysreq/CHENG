@@ -52,6 +52,8 @@ export default function Annotations({ onResetCamera }: AnnotationsProps) {
       <div style={{ position: 'absolute', top: 8, right: 8, pointerEvents: 'auto' }}>
         <button
           onClick={onResetCamera}
+          aria-label="Reset camera to fit aircraft in view"
+          title="Reset camera to fit aircraft in view"
           style={{ backgroundColor: '#444448', color: 'white', border: 'none', padding: '6px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
         >
           Center View
