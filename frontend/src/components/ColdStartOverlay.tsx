@@ -46,7 +46,7 @@ function SkeletonPlane() {
 function ProgressBar({ phase }: { phase: ColdStartPhase }) {
   const pct = PHASE_PROGRESS[phase] ?? 0;
   return <div role='progressbar' aria-label='Loading progress' aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} style={{ width: 260, height: 3, borderRadius: 2, background: 'var(--skeleton-track)', overflow: 'hidden' }}>
-    <div style={{ height: '100%', width: `%`, background: 'var(--color-accent, #3b82f6)', borderRadius: 2, transition: 'width 0.8s ease' }} />
+    <div style={{ height: '100%', width: `${pct}%`, background: 'var(--color-accent, #3b82f6)', borderRadius: 2, transition: 'width 0.8s ease' }} />
   </div>;
 }
 

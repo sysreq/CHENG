@@ -34,7 +34,7 @@ export default function App() {
   useDesignSync(send);
 
   const [exportOpen, setExportOpen] = useState(false);
-  const isConnected = useConnectionStore((s) => s.state === "connected");
+  const isConnected = useConnectionStore((s) => s.state === 'connected');
 
   // When disconnected, dim panels visually but keep them scrollable (#194).
   // Individual inputs are disabled via the disabled prop (#178).
@@ -45,62 +45,62 @@ export default function App() {
   return (
     <div
       style={{
-        display: "grid",
-        gridTemplateColumns: "1fr",
-        gridTemplateRows: "1fr auto var(--statusbar-height)",
-        height: "100vh",
-        overflow: "hidden",
+        display: 'grid',
+        gridTemplateColumns: '1fr',
+        gridTemplateRows: '1fr auto var(--statusbar-height)',
+        height: '100vh',
+        overflow: 'hidden',
       }}
     >
-      {/* Center -- 3D Viewport */}
+      {/* Center — 3D Viewport */}
       <main
         style={{
-          gridColumn: "1",
-          gridRow: "1",
-          position: "relative",
-          overflow: "hidden",
-          backgroundColor: "var(--color-bg-secondary)",
+          gridColumn: '1',
+          gridRow: '1',
+          position: 'relative',
+          overflow: 'hidden',
+          backgroundColor: 'var(--color-bg-secondary)',
         }}
       >
         <Toolbar onOpenExport={() => setExportOpen(true)} />
         <DisconnectedBanner />
-        <div style={{ position: "absolute", inset: 0, top: "var(--toolbar-height)" }}>
+        <div style={{ position: 'absolute', inset: 0, top: 'var(--toolbar-height)' }}>
           <Scene />
         </div>
         {/* Cold start overlay -- shown on slow initial connection (e.g. Cloud Run) */}
         <ColdStartOverlay />
       </main>
 
-      {/* Bottom -- Component Panel (Global / Wing / Tail / Fuselage / Landing Gear) */}
+      {/* Bottom — Component Panel (Global / Wing / Tail / Fuselage / Landing Gear) */}
       <section
         style={{
-          gridColumn: "1",
-          gridRow: "2",
-          backgroundColor: "var(--color-bg-tertiary)",
-          borderTop: "1px solid var(--color-border)",
-          overflowY: "auto",
-          maxHeight: "320px",
-          position: "relative",
+          gridColumn: '1',
+          gridRow: '2',
+          backgroundColor: 'var(--color-bg-tertiary)',
+          borderTop: '1px solid var(--color-border)',
+          overflowY: 'auto',
+          maxHeight: '320px',
+          position: 'relative',
           ...panelStyle,
         }}
       >
-        <fieldset disabled={!isConnected} style={{ border: "none", padding: 0, margin: 0 }}>
+        <fieldset disabled={!isConnected} style={{ border: 'none', padding: 0, margin: 0 }}>
           <ComponentPanel />
         </fieldset>
       </section>
 
-      {/* Bottom Bar -- status */}
+      {/* Bottom Bar — status */}
       <footer
         style={{
-          gridColumn: "1",
-          gridRow: "3",
-          backgroundColor: "var(--color-bg-tertiary)",
-          borderTop: "1px solid var(--color-border)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-end",
-          padding: "0 12px",
-          fontSize: "12px",
+          gridColumn: '1',
+          gridRow: '3',
+          backgroundColor: 'var(--color-bg-tertiary)',
+          borderTop: '1px solid var(--color-border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          padding: '0 12px',
+          fontSize: '12px',
         }}
       >
         <ConnectionStatus />

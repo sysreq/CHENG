@@ -288,4 +288,30 @@ describe('useColdStart', () => {
     expect(result.current.phase).toBe('starting');
     expect(result.current.visible).toBe(true);
   });
+
+  // ── Fail-safe timeout in ready phase ─────────────────────────────────────
+
+  it('dismisses via fail-safe timeout if no mesh arrives in ready phase', () => {
+    const { result } = renderHook(() => useColdStart());
+
+    act(() => {
+      useConnectionStore.getState().setState('connecting');
+    });
+    act(() => {
+      vi.advanceTimersByTime(1100);
+    });
+    act(() => {
+      useConnectionStore.getState().setState('connected');
+    });
+
+    expect(result.current.phase).toBe('ready');
+
+    // Advance past the fail-safe timeout (8000ms) without any mesh arriving
+    act(() => {
+      vi.advanceTimersByTime(8100);
+    });
+
+    expect(result.current.phase).toBe('dismissed');
+    expect(result.current.visible).toBe(false);
+  });
 });

@@ -29,6 +29,15 @@ export interface ColdStartState {
 /** Delay (ms) before showing the cold-start overlay on initial connect. */
 const COLD_START_THRESHOLD_MS = 1_000;
 
+/** Duration (ms) before advancing from 'starting' to 'loading' phase. */
+const PHASE_STARTING_MS = 3_500;
+
+/** Duration (ms) before advancing from 'loading' to 'initializing' phase. */
+const PHASE_LOADING_MS = 4_000;
+
+/** Fail-safe timeout (ms): dismiss overlay in 'ready' phase even if no mesh arrives. */
+const READY_FAILSAFE_MS = 8_000;
+
 /**
  * Detects a slow initial WebSocket connection (cold start) and manages
  * overlay visibility.
@@ -62,11 +71,11 @@ export function useColdStart(): ColdStartState {
     if (phase === 'starting') {
       phaseTimerRef.current = setTimeout(() => {
         setPhase('loading');
-      }, 3_500);
+      }, PHASE_STARTING_MS);
     } else if (phase === 'loading') {
       phaseTimerRef.current = setTimeout(() => {
         setPhase('initializing');
-      }, 4_000);
+      }, PHASE_LOADING_MS);
     }
 
     return () => {
@@ -147,20 +156,32 @@ export function useColdStart(): ColdStartState {
     };
   }, [connectionState]);
 
-  // ── Dismiss on first mesh received ────────────────────────────────────────
-  // Once connected AND first mesh data arrives, dismiss the overlay.
+  // ─  // Dismiss when first mesh arrives, or after fail-safe timeout.
+  // The fail-safe guards against the edge case where the WebSocket connects
+  // but the backend fails to send a mesh (e.g. error frame after handshake).
   useEffect(() => {
-    if (phase === 'ready' && meshData !== null) {
-      // First mesh received — mark the initial load as complete.
-      isInitialLoadRef.current = false;
+    if (phase !== 'ready') return;
 
-      // Small delay so users can read "Ready!" before the overlay fades out.
+    // Fail-safe: dismiss after READY_FAILSAFE_MS even if no mesh arrives.
+    const failSafeTimer = setTimeout(() => {
+      isInitialLoadRef.current = false;
+      setPhase('dismissed');
+    }, READY_FAILSAFE_MS);
+
+    if (meshData !== null) {
+      // First mesh received -- dismiss after brief delay.
+      isInitialLoadRef.current = false;
+      clearTimeout(failSafeTimer);
       const dismissTimer = setTimeout(() => {
         setPhase('dismissed');
       }, 600);
-
-      return () => clearTimeout(dismissTimer);
+      return () => {
+        clearTimeout(dismissTimer);
+        clearTimeout(failSafeTimer);
+      };
     }
+
+    return () => clearTimeout(failSafeTimer);
   }, [phase, meshData]);
 
   const visible =
