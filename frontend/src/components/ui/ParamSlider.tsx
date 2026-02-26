@@ -1,27 +1,30 @@
 // ============================================================================
 // CHENG — Reusable Slider + Number Input for Design Parameters
+// Issue #153 (Unit toggle: mm / inches)
 // ============================================================================
 
 import React, { useState, useCallback, useEffect, useId, useRef } from 'react';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { useDesignStore } from '../../store/designStore';
+import { useUnitStore } from '../../store/unitStore';
+import { toDisplayUnit, fromDisplayUnit, getDisplayUnit, convertSliderRange } from '../../lib/units';
 
 export interface ParamSliderProps {
   /** Display label */
   label: string;
-  /** Unit string (e.g. "mm", "deg") */
+  /** Unit string (e.g. "mm", "deg"). "mm" fields will be converted when in inches mode. */
   unit?: string;
-  /** Current value */
+  /** Current value (always in native units — mm for mm fields) */
   value: number;
-  /** Minimum allowed value */
+  /** Minimum allowed value (in native units) */
   min: number;
-  /** Maximum allowed value */
+  /** Maximum allowed value (in native units) */
   max: number;
-  /** Step increment */
+  /** Step increment (in native units) */
   step: number;
-  /** Called when value changes from slider */
+  /** Called when value changes from slider (value in native units) */
   onSliderChange: (value: number) => void;
-  /** Called when value changes from number input */
+  /** Called when value changes from number input (value in native units) */
   onInputChange: (value: number) => void;
   /** Whether the field has an associated warning */
   hasWarning?: boolean;
@@ -40,6 +43,10 @@ export interface ParamSliderProps {
  * The number input uses local state so users can type freely without
  * clamping on every keystroke. Clamping + send happens on blur or Enter.
  * Out-of-range values show a red border as visual feedback.
+ *
+ * When unit is "mm" and the global unit system is set to "in", values are
+ * automatically converted for display. The slider and input show inches;
+ * onSliderChange/onInputChange still receive the value in mm (native units).
  */
 export function ParamSlider({
   label,
@@ -58,46 +65,55 @@ export function ParamSlider({
   const id = useId();
   const temporalStore = useDesignStore.temporal;
   const commitSliderChange = useDesignStore((s) => s.commitSliderChange);
+  const unitSystem = useUnitStore((s) => s.unitSystem);
+
+  // Determine if this is an mm field that should be converted
+  const isMmField = unit === 'mm';
+  const displayUnit = unit ? getDisplayUnit(unit, unitSystem) : unit;
+
+  // Convert native mm value/range to display units
+  const displayValue = isMmField ? toDisplayUnit(value, unitSystem) : value;
+  const displayRange = convertSliderRange({ min, max, step }, unit ?? '', unitSystem);
 
   // Track whether the slider is currently being dragged (for Zundo pause/resume)
   const isDragging = useRef(false);
 
   // Local string state for the number input — allows free typing
-  const [localValue, setLocalValue] = useState<string>(String(value));
+  // Use display value (may be in inches) for local state
+  const [localValue, setLocalValue] = useState<string>(String(displayValue));
   const [isFocused, setIsFocused] = useState(false);
+
   // Sync local value from prop when not focused (e.g. slider or preset change)
+  // Use displayValue so the local state reflects current unit system
   useEffect(() => {
     if (!isFocused) {
-      setLocalValue(String(value));
+      setLocalValue(String(displayValue));
     }
-  }, [value, isFocused]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayValue, isFocused]);
 
   // Check if current local value is out of range (for red border)
+  // Compare against display range (converted min/max)
   const parsed = parseFloat(localValue);
   const isOutOfRange =
-    isFocused && !Number.isNaN(parsed) && (parsed < min || parsed > max);
+    isFocused &&
+    !Number.isNaN(parsed) &&
+    (parsed < displayRange.min || parsed > displayRange.max);
 
   // Commit helper: resume Zundo and force a history snapshot of the current state.
-  // Called when slider drag ends (either via slider element or global safety net).
   const commitDrag = useCallback(() => {
     if (isDragging.current) {
       isDragging.current = false;
-      // Resume Zundo tracking first, then commit the current state as a history entry.
-      // commitSliderChange() triggers a no-op setState that Zundo intercepts to
-      // record the current (post-drag) state as a history snapshot.
       temporalStore.getState().resume();
       commitSliderChange();
     }
   }, [temporalStore, commitSliderChange]);
 
   // Pause Zundo history recording at the start of a slider drag.
-  // This prevents intermediate drag values from flooding the history stack.
   const handleSliderPointerDown = useCallback(() => {
     if (!isDragging.current) {
       isDragging.current = true;
       temporalStore.getState().pause();
-      // Global safety net: if the pointer is released outside the slider element
-      // (e.g. mouse moves off slider), still resume Zundo and commit history.
       const cleanup = () => {
         commitDrag();
         document.removeEventListener('pointerup', cleanup);
@@ -115,9 +131,12 @@ export function ParamSlider({
 
   const handleSliderChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      onSliderChange(parseFloat(e.target.value));
+      const displayVal = parseFloat(e.target.value);
+      // Convert back to native mm before calling onSliderChange
+      const nativeVal = isMmField ? fromDisplayUnit(displayVal, unitSystem) : displayVal;
+      onSliderChange(nativeVal);
     },
-    [onSliderChange],
+    [onSliderChange, isMmField, unitSystem],
   );
 
   // On each keystroke: update local display only, no clamping or sending
@@ -128,19 +147,21 @@ export function ParamSlider({
     [],
   );
 
-  // On blur or Enter: clamp and send to backend
+  // On blur or Enter: clamp (in display units) and send to backend (in native units)
   const commitValue = useCallback(() => {
     const val = parseFloat(localValue);
     if (Number.isNaN(val)) {
-      // Revert to current prop value
-      setLocalValue(String(value));
+      // Revert to current display value
+      setLocalValue(String(displayValue));
     } else {
-      const clamped = Math.min(max, Math.max(min, val));
+      const clamped = Math.min(displayRange.max, Math.max(displayRange.min, val));
       setLocalValue(String(clamped));
-      onInputChange(clamped);
+      // Convert back to native mm before calling onInputChange
+      const nativeVal = isMmField ? fromDisplayUnit(clamped, unitSystem) : clamped;
+      onInputChange(nativeVal);
     }
     setIsFocused(false);
-  }, [localValue, value, min, max, onInputChange]);
+  }, [localValue, displayValue, displayRange.min, displayRange.max, onInputChange, isMmField, unitSystem]);
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
@@ -197,16 +218,16 @@ export function ParamSlider({
             </Tooltip.Provider>
           )}
         </label>
-        <span className="text-xs text-zinc-500">{unit}</span>
+        <span className="text-xs text-zinc-500">{displayUnit}</span>
       </div>
 
-      {/* Slider */}
+      {/* Slider — operates in display units */}
       <input
         type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
+        min={displayRange.min}
+        max={displayRange.max}
+        step={displayRange.step}
+        value={displayValue}
         onChange={handleSliderChange}
         onPointerDown={handleSliderPointerDown}
         onPointerUp={handleSliderPointerUp}
@@ -217,13 +238,13 @@ export function ParamSlider({
         aria-label={`${label} slider`}
       />
 
-      {/* Number input */}
+      {/* Number input — displays in current unit system */}
       <input
         id={id}
         type="number"
-        min={min}
-        max={max}
-        step={step}
+        min={displayRange.min}
+        max={displayRange.max}
+        step={displayRange.step}
         value={localValue}
         onChange={handleInputChange}
         onFocus={handleFocus}

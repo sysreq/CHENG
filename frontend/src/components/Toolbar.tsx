@@ -15,6 +15,7 @@ import { useConnectionStore } from '../store/connectionStore';
 import { HistoryPanel } from './HistoryPanel';
 import { ModeBadge } from './ModeBadge';
 import { useModeInfo } from '../hooks/useModeInfo';
+import { UnitToggle } from './UnitToggle';
 import { PRESET_DESCRIPTIONS } from '../lib/presets';
 import {
   listCustomPresets,
@@ -906,6 +907,9 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
             {warningBadge}
           </span>
         )}
+
+        {/* Unit Toggle (#153) */}
+        <UnitToggle />
 
         {/* Mode Badge (#152) */}
         <ModeBadge />
