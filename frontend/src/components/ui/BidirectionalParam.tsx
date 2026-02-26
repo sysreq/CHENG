@@ -264,9 +264,11 @@ export function BidirectionalParam({
   const idB = useId();
   const unitSystem = useUnitStore((s) => s.unitSystem);
 
-  // Determine display units
+  // Determine display units for both params
   const isMmFieldA = unitA === 'mm';
+  const isMmFieldB = unitB === 'mm';
   const displayUnitA = unitA ? getDisplayUnit(unitA, unitSystem) : unitA;
+  const displayUnitB = unitB ? getDisplayUnit(unitB, unitSystem) : unitB;
 
   const toggleMode = useCallback(() => {
     onModeChange(mode === 'a' ? 'b' : 'a');
@@ -367,7 +369,7 @@ export function BidirectionalParam({
               </span>
             )}
           </label>
-          <span className="text-xs text-zinc-500">{unitB}</span>
+          <span className="text-xs text-zinc-500">{displayUnitB}</span>
         </div>
 
         {bIsEditable ? (
@@ -377,7 +379,7 @@ export function BidirectionalParam({
             min={minB}
             max={maxB}
             step={stepB}
-            isMmField={false}
+            isMmField={isMmFieldB}
             onSliderChange={onSliderChangeB}
             onInputChange={onInputChangeB}
             hasWarning={hasWarningB}
