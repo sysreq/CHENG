@@ -77,9 +77,12 @@ function idbRequest<T>(
  */
 export async function idbSaveDesign(design: object): Promise<void> {
   const data = design as { id?: string };
-  const key = data.id ?? AUTOSAVE_KEY;
-  await idbRequest('readwrite', (store) => store.put(design, key));
-  // Mirror into the autosave slot (always latest design)
+  if (data.id) {
+    // Write under the design's own id key
+    await idbRequest('readwrite', (store) => store.put(design, data.id as string));
+  }
+  // Always mirror into the autosave slot so the last-active design survives
+  // a page refresh.  When there is no id this is the only write.
   await idbRequest('readwrite', (store) => store.put(design, AUTOSAVE_KEY));
 }
 
@@ -167,12 +170,15 @@ export async function idbEstimateUsageBytes(): Promise<number> {
         const store = tx.objectStore(STORE_NAME);
         let total = 0;
 
+        const encoder = new TextEncoder();
         const cursorReq = store.openCursor();
         cursorReq.onsuccess = (event) => {
           const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
           if (cursor) {
             try {
-              total += JSON.stringify(cursor.value).length;
+              // Use TextEncoder for accurate UTF-8 byte count (not JS .length
+              // which counts UTF-16 code units, not bytes)
+              total += encoder.encode(JSON.stringify(cursor.value)).byteLength;
             } catch {
               /* ignore un-serialisable values */
             }

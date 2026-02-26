@@ -94,15 +94,20 @@ async def lifespan(app: FastAPI):
         except OSError:
             logger.info("Cannot create %s — using default storage path", designs_dir)
 
-    # 5. Ensure presets storage directory exists
-    presets_dir = Path("/data/presets")
-    try:
-        presets_dir.mkdir(parents=True, exist_ok=True)
-        logger.info("Presets directory ready: %s", presets_dir)
-    except OSError:
-        logger.info("Cannot create /data/presets — presets will use module default")
+    # 5. Ensure presets storage directory exists (local mode only — cloud is
+    #    a stateless ephemeral environment; presets stored in /data/ would not
+    #    persist across container instances)
+    if CHENG_MODE != "cloud":
+        presets_dir = Path("/data/presets")
+        try:
+            presets_dir.mkdir(parents=True, exist_ok=True)
+            logger.info("Presets directory ready: %s", presets_dir)
+        except OSError:
+            logger.info("Cannot create /data/presets — presets will use module default")
 
     # 6. Clean up orphaned temp files from previous runs (#181)
+    # In cloud mode the export tmp dir uses the system temp directory, which
+    # Cloud Run's container filesystem allows, so cleanup still runs.
     try:
         deleted = cleanup_tmp_files(tmp_dir)
         if deleted:
