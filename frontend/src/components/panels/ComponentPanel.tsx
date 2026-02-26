@@ -66,10 +66,11 @@ function ComponentTabs({ selected, onSelect }: ComponentTabsProps): React.JSX.El
 
 /**
  * Routes to the correct detail panel based on:
- * - selectedComponent: 'wing' | 'tail' | 'fuselage' | 'landing_gear' | null
+ * - selectedComponent: 'global' | 'wing' | 'tail' | 'fuselage' | 'landing_gear' | null
  * - design.tailType: determines which tail panel to show
  *
- * Includes a tab strip for direct navigation to each component panel (#230).
+ * Includes a tab strip for direct navigation (#230). 'Global' is always the first tab
+ * and shows the core aircraft parameters that were previously in the right sidebar (#289).
  */
 export function ComponentPanel(): React.JSX.Element {
   const selectedComponent = useDesignStore((s) => s.selectedComponent);
