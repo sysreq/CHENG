@@ -20,6 +20,7 @@ from backend.export.package import EXPORT_TMP_DIR
 from backend.routes.designs import router as designs_router
 from backend.routes.generate import router as generate_router
 from backend.routes.export import router as export_router
+from backend.routes.info import router as info_router
 from backend.routes.presets import router as presets_router
 from backend.routes.websocket import router as websocket_router
 
@@ -110,6 +111,7 @@ app.add_middleware(
 app.include_router(designs_router)
 app.include_router(generate_router)
 app.include_router(export_router)
+app.include_router(info_router)
 app.include_router(presets_router)
 app.include_router(websocket_router)
 
