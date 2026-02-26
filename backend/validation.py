@@ -9,6 +9,9 @@ Implements:
   - 1 multi-section wing analysis       (V29)      [v0.7]
   - 4 landing gear warnings             (V31)      [v0.7]
   - 1 tail arm clamping warning         (V32)      [v0.7.x #237]
+  - 2 static stability warnings         (V34, V35) [v1.1]
+      V34: static margin marginal (0–2% MAC)
+      V35: static margin negative (pitch-unstable)
 
 All warnings are level="warn" and never block export.
 
@@ -249,6 +252,11 @@ def _check_v10(design: AircraftDesign, out: list[ValidationWarning]) -> None:
 
     Vertical tail volume: V_v = (S_v * l_t) / (S_w * b)
     Typical range: 0.02 - 0.05. Below 0.02 = poor directional stability.
+
+    V-tail note: This check uses the Purser-Campbell aerodynamic effectiveness
+    method (cos²/sin²) which differs from backend/stability.py which uses
+    geometric area projection (cos/sin per spec §5.1). Both are valid for their
+    respective purposes — aerodynamic effectiveness vs. geometric area.
     """
     mac = _mac(design)
     wing_area_mm2 = 0.5 * (design.wing_chord + design.wing_chord * design.wing_tip_root_ratio) * design.wing_span
@@ -257,10 +265,10 @@ def _check_v10(design: AircraftDesign, out: list[ValidationWarning]) -> None:
         return
 
     if design.tail_type == "V-Tail":
-        # V-tail effective areas using Purser-Campbell method:
-        # The aerodynamic effectiveness is reduced by the square of the
-        # trig function because both the force component and the effective
-        # angle-of-attack change are reduced by the dihedral angle.
+        # V-tail effective areas using Purser-Campbell aerodynamic effectiveness method:
+        # cos²/sin² because both the force component and the effective angle-of-attack
+        # change are each reduced by the dihedral trig factor, giving a squared effect.
+        # Note: stability.py uses linear cos/sin for geometric area projection — different intent.
         v_tail_area = design.v_tail_chord * design.v_tail_span
         dihedral_rad = math.radians(design.v_tail_dihedral)
         h_area = v_tail_area * math.cos(dihedral_rad) ** 2
@@ -1000,6 +1008,138 @@ def _check_v31(design: AircraftDesign, out: list[ValidationWarning]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Static stability warnings  (V34, V35)  [v1.1]
+# ---------------------------------------------------------------------------
+
+
+def _compute_static_margin_for_validation(design: AircraftDesign) -> float:
+    """Compute a lightweight static margin estimate for V34/V35 warnings.
+
+    Uses helpers from backend/stability.py to share the canonical math.
+    Passes design.tail_arm directly (not the engine-clamped effective arm)
+    since validation.py doesn't invoke the engine. This is acceptable for
+    warning purposes — the full clamped value is used in compute_derived_values().
+
+    Returns:
+        static_margin_pct: (NP% - CG%) in % MAC. Positive = pitch-stable.
+    """
+    from backend.stability import _tail_volume_h, _neutral_point_pct_mac, _static_margin_pct
+    from backend.geometry.engine import (
+        _compute_mac_cranked,
+        _compute_wing_mount,
+        _compute_weight_estimates,
+    )
+
+    mac, y_mac = _compute_mac_cranked(design)
+    if mac <= 0:
+        return 0.0
+
+    tip_chord = design.wing_chord * design.wing_tip_root_ratio
+    wing_area_mm2 = 0.5 * (design.wing_chord + tip_chord) * design.wing_span
+    if wing_area_mm2 <= 0:
+        return 0.0
+
+    # V_h for stability (geometric projection per stability.py spec)
+    v_h = _tail_volume_h(design, wing_area_mm2, mac, design.tail_arm)
+    np_pct = _neutral_point_pct_mac(v_h)
+
+    # Sweep-corrected MAC LE offset (mirrors stability.py logic)
+    import math as _math
+    sweep_rad = _math.radians(design.wing_sweep)
+    mac_le_offset = 0.25 * (design.wing_chord - mac) + y_mac * _math.tan(sweep_rad)
+
+    # CG from engine (relative to wing root LE)
+    wing_x, _ = _compute_wing_mount(design)
+    weights = _compute_weight_estimates(design)
+    # Replicate _compute_cg() without calling it directly to avoid re-importing
+    # complex engine internals — compute CG inline using the same formula.
+    w_wing = weights["weight_wing_g"]
+    w_tail = weights["weight_tail_g"]
+    w_fuse = weights["weight_fuselage_g"]
+    w_motor = design.motor_weight_g
+    w_battery = design.battery_weight_g
+    total_weight = w_wing + w_tail + w_fuse + w_motor + w_battery
+
+    from backend.geometry.engine import _compute_tail_x
+    tail_x = _compute_tail_x(design)
+    if design.tail_type == "V-Tail":
+        tail_chord = design.v_tail_chord
+    else:
+        h_w = design.h_stab_span
+        v_w = design.v_stab_height
+        total = h_w + v_w
+        tail_chord = (
+            (design.h_stab_chord * h_w + design.v_stab_root_chord * v_w) / max(total, 1.0)
+        )
+    wing_le_offset = y_mac * _math.tan(sweep_rad)
+    wing_cg_x = wing_x + wing_le_offset + 0.25 * mac
+    tail_cg_x = tail_x + 0.5 * tail_chord
+    fuse_cg_x = 0.45 * design.fuselage_length
+    motor_cg_x = 0.0 if design.motor_config == "Tractor" else design.fuselage_length
+    battery_cg_x = design.battery_position_frac * design.fuselage_length
+
+    if total_weight <= 0:
+        cg_from_root_le = 0.25 * mac + wing_le_offset
+    else:
+        abs_cg = (
+            wing_cg_x * w_wing + tail_cg_x * w_tail + fuse_cg_x * w_fuse
+            + motor_cg_x * w_motor + battery_cg_x * w_battery
+        ) / total_weight
+        cg_from_root_le = abs_cg - wing_x
+
+    # CG% from MAC LE
+    cg_pct = ((cg_from_root_le - mac_le_offset) / mac) * 100.0
+
+    return _static_margin_pct(cg_pct, np_pct)
+
+
+def _check_v34(
+    design: AircraftDesign,
+    out: list[ValidationWarning],
+    static_margin_pct: float,
+) -> None:
+    """V34: Static margin is marginal (0–2% MAC).
+
+    Marginal stability means the aircraft will tend to oscillate in pitch
+    (phugoid) and requires active pilot input to maintain level flight.
+    """
+    if 0.0 <= static_margin_pct < 2.0:
+        out.append(
+            ValidationWarning(
+                id="V34",
+                message=(
+                    f"Static margin is marginal ({static_margin_pct:.1f}% MAC). "
+                    f"Consider moving CG forward or increasing tail arm."
+                ),
+                fields=["tail_arm", "battery_position_frac"],
+            )
+        )
+
+
+def _check_v35(
+    design: AircraftDesign,
+    out: list[ValidationWarning],
+    static_margin_pct: float,
+) -> None:
+    """V35: Aircraft is pitch-unstable (negative static margin).
+
+    The CG is aft of the neutral point — the aircraft will diverge in pitch
+    after any perturbation. This is unsafe for manual RC flight.
+    """
+    if static_margin_pct < 0.0:
+        out.append(
+            ValidationWarning(
+                id="V35",
+                message=(
+                    f"Aircraft is pitch-unstable (static margin {static_margin_pct:.1f}% MAC). "
+                    f"CG must be moved forward of the neutral point."
+                ),
+                fields=["tail_arm", "battery_position_frac", "h_stab_span", "h_stab_chord"],
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -1010,8 +1150,8 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
     Returns a list of ValidationWarning objects.  Each warning has a unique
     ID (V01-V08 structural, V09-V13 aero/structural, V16-V23 print,
     V24-V28 printability, V30 control surfaces, V29 multi-section wing,
-    V31 landing gear, V32 tail arm clamping), a human-readable message,
-    and the list of affected parameter field names.
+    V31 landing gear, V32 tail arm clamping, V34-V35 static stability),
+    a human-readable message, and the list of affected parameter field names.
     """
     warnings: list[ValidationWarning] = []
 
@@ -1062,5 +1202,10 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
 
     # Tail arm clamping (V32) [v0.7.x #237]
     _check_v32(design, warnings)
+
+    # Static stability warnings (V34, V35) [v1.1]
+    static_margin_pct = _compute_static_margin_for_validation(design)
+    _check_v34(design, warnings, static_margin_pct)
+    _check_v35(design, warnings, static_margin_pct)
 
     return warnings
