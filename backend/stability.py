@@ -81,9 +81,14 @@ def compute_static_stability(
         return _zero_stability()
 
     # Sweep-corrected MAC LE offset from wing root LE.
-    # On a swept wing the MAC LE is shifted aft by this amount.
+    # design.wing_sweep is the quarter-chord sweep angle, so the LE offset is:
+    #   mac_le_offset = 0.25 * (root_chord - mac_mm) + y_mac * tan(qc_sweep)
+    # The first term corrects for the taper-induced shift from QC sweep to LE sweep;
+    # the second is the standard sweep contribution along the span.
+    # Note: multi-section panel_sweeps are not individually accumulated here;
+    # this is a single-sweep approximation valid for all current CHENG presets.
     sweep_rad = math.radians(design.wing_sweep)
-    mac_le_offset = y_mac_mm * math.tan(sweep_rad)
+    mac_le_offset = 0.25 * (design.wing_chord - mac_mm) + y_mac_mm * math.tan(sweep_rad)
 
     # Tail volume coefficients — use effective_tail_arm_mm so stability
     # is consistent with the actual 3D geometry (tail clamped to fuselage).
@@ -153,7 +158,9 @@ def _tail_volume_h(
         return 0.0
 
     if design.tail_type == "V-Tail":
-        # Geometric area projection for horizontal component
+        # Geometric area projection for horizontal component.
+        # Spec section 5.1 specifies cos(dihedral) for area projection
+        # (not cos² which validation.py uses for aerodynamic effectiveness).
         dihedral_rad = math.radians(design.v_tail_dihedral)
         s_h = design.v_tail_span * design.v_tail_chord * math.cos(dihedral_rad)
     else:
@@ -185,7 +192,9 @@ def _tail_volume_v(
         dihedral_rad = math.radians(design.v_tail_dihedral)
         s_v = design.v_tail_span * design.v_tail_chord * math.sin(dihedral_rad)
     else:
-        s_v = design.v_stab_root_chord * design.v_stab_height
+        # tail.py hardcodes v_stab taper_ratio=0.6, so average chord = 0.8 * root_chord.
+        # Trapezoidal area = 0.5 * (1.0 + 0.6) * root_chord * height = 0.8 * root * h
+        s_v = 0.8 * design.v_stab_root_chord * design.v_stab_height
 
     return (s_v * effective_tail_arm_mm) / denom
 
