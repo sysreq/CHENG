@@ -32,7 +32,7 @@
   --color-tail: #e6a65c;
 
   /* Panel dimensions */
-  --sidebar-width: min(320px, 30vw);
+  /* --sidebar-width removed: Global panel is now inlined as a tab (#289) */
   --toolbar-height: 48px;
   --statusbar-height: 32px;
 
@@ -99,45 +99,5 @@ body {
 }
 
 /* ============================================================================
-   Responsive Layout — Collapse sidebar below 768px
+   Responsive Layout — sidebar removed in #289 (Global params inlined as tab)
    ============================================================================ */
-
-@media (max-width: 768px) {
-  :root {
-    --sidebar-width: 0px;
-  }
-
-  .sidebar-toggle {
-    display: flex;
-  }
-
-  .app-sidebar {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 320px;
-    max-width: 85vw;
-    z-index: 30;
-    transform: translateX(100%);
-    transition: transform 0.2s ease;
-  }
-
-  .app-sidebar.sidebar-open {
-    transform: translateX(0);
-  }
-
-  .sidebar-backdrop {
-    display: block;
-  }
-}
-
-@media (min-width: 769px) {
-  .sidebar-toggle {
-    display: none;
-  }
-
-  .sidebar-backdrop {
-    display: none;
-  }
-}
