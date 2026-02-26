@@ -23,6 +23,10 @@ export default defineConfig({
     alias: {
       '@': path.resolve(frontendDir, 'src'),
       '@testing-library/react': path.resolve(frontendDir, 'node_modules/@testing-library/react'),
+      // fake-indexeddb is installed in frontend node_modules; resolve it from there
+      // so tests in the tests/ directory can import it (#150)
+      'fake-indexeddb/auto': path.resolve(frontendDir, 'node_modules/fake-indexeddb/auto'),
+      'fake-indexeddb': path.resolve(frontendDir, 'node_modules/fake-indexeddb'),
     },
   },
 });
