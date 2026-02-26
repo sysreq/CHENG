@@ -137,10 +137,15 @@ function InlineSliderInput({
       const clamped = Math.min(displayRange.max, Math.max(displayRange.min, val));
       setLocalValue(String(clamped));
       const nativeVal = isMmField ? fromDisplayUnit(clamped, unitSystem) : clamped;
-      onInputChange(nativeVal);
+      // Only fire if native value actually changed — prevents drift when blurring
+      // without editing in inches mode (e.g. 39.370in → 999.998mm is a no-op).
+      const hasChanged = Math.abs(nativeVal - value) > 1e-6;
+      if (hasChanged) {
+        onInputChange(nativeVal);
+      }
     }
     setIsFocused(false);
-  }, [localValue, displayValue, displayRange.min, displayRange.max, onInputChange, isMmField, unitSystem]);
+  }, [localValue, displayValue, displayRange.min, displayRange.max, onInputChange, isMmField, unitSystem, value]);
 
   const handleFocus = useCallback(() => setIsFocused(true), []);
   const handleBlur = useCallback(() => commitValue(), [commitValue]);

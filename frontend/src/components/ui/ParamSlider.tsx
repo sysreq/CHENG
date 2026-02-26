@@ -151,7 +151,9 @@ export function ParamSlider({
     [],
   );
 
-  // On blur or Enter: clamp (in display units) and send to backend (in native units)
+  // On blur or Enter: clamp (in display units) and send to backend (in native units).
+  // Only calls onInputChange when the native value has actually changed from the current
+  // prop value — prevents round-trip precision drift when the user blurs without editing.
   const commitValue = useCallback(() => {
     const val = parseFloat(localValue);
     if (Number.isNaN(val)) {
@@ -162,10 +164,16 @@ export function ParamSlider({
       setLocalValue(String(clamped));
       // Convert back to native mm before calling onInputChange
       const nativeVal = isMmField ? fromDisplayUnit(clamped, unitSystem) : clamped;
-      onInputChange(nativeVal);
+      // Only fire the change callback if the native value actually changed.
+      // This prevents mm drift when: user has 1000mm, switches to inches (39.370in),
+      // and immediately blurs — 39.370 * 25.4 = 999.998mm (unintended drift).
+      const hasChanged = Math.abs(nativeVal - value) > 1e-6;
+      if (hasChanged) {
+        onInputChange(nativeVal);
+      }
     }
     setIsFocused(false);
-  }, [localValue, displayValue, displayRange.min, displayRange.max, onInputChange, isMmField, unitSystem]);
+  }, [localValue, displayValue, displayRange.min, displayRange.max, onInputChange, isMmField, unitSystem, value]);
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
