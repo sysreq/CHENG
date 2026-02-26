@@ -420,7 +420,9 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
 
     # Static stability metrics (v1.1) — pass already-computed values to avoid
     # re-calculation. All required inputs are already in scope from the
-    # computation above.
+    # computation above. Always populate all 7 stability keys to guarantee a
+    # consistent response shape — use _zero_stability() defaults on failure.
+    from backend.stability import _zero_stability as _stability_zero
     try:
         wing_le_ref_mm, _ = _compute_wing_mount(design)
         tail_x = _compute_tail_x(design)
@@ -440,11 +442,11 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
             effective_tail_arm_mm=effective_tail_arm_mm,
             weight_total_g=weight_total_g,
         )
-        result.update(stability)
     except Exception:
-        # Stability computation failure is non-fatal — return basic derived values
-        # without stability fields. DerivedValues defaults (0.0) will be used.
-        pass
+        # Stability computation failure is non-fatal — populate with safe defaults
+        # so the response shape remains consistent (all 19 keys always present).
+        stability = _stability_zero()
+    result.update(stability)
 
     return result
 
