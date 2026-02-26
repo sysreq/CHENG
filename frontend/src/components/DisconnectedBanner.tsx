@@ -28,6 +28,8 @@ export default function DisconnectedBanner() {
 
   return (
     <div
+      role="alert"
+      aria-live="assertive"
       style={{
         position: 'absolute',
         top: 'var(--toolbar-height, 36px)',

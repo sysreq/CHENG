@@ -202,6 +202,8 @@ function BedVisualization({
       <svg
         width={svgW}
         height={svgH}
+        role="img"
+        aria-label={`Print bed layout schematic: ${bedX} x ${bedY} mm bed with wing and fuselage sections`}
         className="bg-zinc-800/50 border border-zinc-700/50 rounded"
       >
         {/* Bed outline */}
@@ -297,7 +299,13 @@ function PartBedFootprint({
   const colors = componentColor(part.component);
 
   return (
-    <svg width={svgW} height={svgH} className="shrink-0">
+    <svg
+      width={svgW}
+      height={svgH}
+      role="img"
+      aria-label={`${componentLabel(part.component)} part ${part.filename}: ${dx} x ${dy} mm on ${bedX} x ${bedY} mm bed`}
+      className="shrink-0"
+    >
       {/* Bed outline */}
       <rect
         x={ox}
@@ -973,8 +981,12 @@ export function ExportDialog({
 
               {/* Export success */}
               {exportSuccess && (
-                <div className="mt-3 px-3 py-2 text-xs text-green-200 bg-green-900/40
-                  border border-green-700/50 rounded flex items-center justify-between">
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="mt-3 px-3 py-2 text-xs text-green-200 bg-green-900/40
+                    border border-green-700/50 rounded flex items-center justify-between"
+                >
                   <span>Export complete! Download started.</span>
                   <button
                     onClick={handleDone}
@@ -988,8 +1000,11 @@ export function ExportDialog({
 
               {/* Export error */}
               {exportError && (
-                <div className="mt-3 px-3 py-2 text-xs text-red-200 bg-red-900/40
-                  border border-red-700/50 rounded">
+                <div
+                  role="alert"
+                  className="mt-3 px-3 py-2 text-xs text-red-200 bg-red-900/40
+                    border border-red-700/50 rounded"
+                >
                   {exportError}
                 </div>
               )}

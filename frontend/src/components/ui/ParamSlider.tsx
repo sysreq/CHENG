@@ -233,7 +233,7 @@ export function ParamSlider({
         <span className="text-xs text-zinc-500">{displayUnit}</span>
       </div>
 
-      {/* Slider — operates in display units */}
+      {/* Slider — operates in display units; decorative, linked to the number input below */}
       <input
         type="range"
         min={displayRange.min}
@@ -247,10 +247,14 @@ export function ParamSlider({
         className={`w-full h-1.5 rounded-full appearance-none cursor-pointer
           bg-zinc-700 accent-blue-500 ${warningRing}
           disabled:opacity-50 disabled:cursor-not-allowed`}
-        aria-label={`${label} slider`}
+        aria-label={`${label}${unit ? ` (${unit})` : ''}`}
+        aria-valuetext={`${value}${unit ? ` ${unit}` : ''}`}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={value}
       />
 
-      {/* Number input — displays in current unit system */}
+      {/* Number input — primary labelled control; displays in current unit system */}
       <input
         id={id}
         type="number"
@@ -263,6 +267,7 @@ export function ParamSlider({
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         disabled={disabled}
+        aria-label={`${label}${unit ? `, in ${unit}` : ''}`}
         className={`mt-1 w-full px-2 py-1 text-xs text-zinc-100 bg-zinc-800
           border ${outOfRangeBorder} rounded focus:outline-none focus:border-blue-500
           [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none

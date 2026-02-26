@@ -24,6 +24,7 @@ import {
   deleteCustomPreset,
 } from '../lib/presetApi';
 import type { PresetName, CustomPresetSummary } from '../types/design';
+import { useLiveRegionStore } from '../store/liveRegionStore';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -109,17 +110,23 @@ function LoadDesignDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 z-50" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] max-h-[70vh] bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl z-50 flex flex-col">
+        <Dialog.Content
+          className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] max-h-[70vh] bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl z-50 flex flex-col"
+          aria-describedby="load-dialog-description"
+        >
           <Dialog.Title className="px-4 pt-4 pb-2 text-sm font-semibold text-zinc-200">
             Load Design
           </Dialog.Title>
+          <p id="load-dialog-description" className="sr-only">
+            Select a saved design to load. This will replace the current design.
+          </p>
 
           <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0">
             {loading && (
-              <p className="text-xs text-zinc-500 py-4 text-center">Loading...</p>
+              <p className="text-xs text-zinc-500 py-4 text-center" aria-live="polite">Loading designs...</p>
             )}
             {error && (
-              <p className="text-xs text-red-400 py-4 text-center">{error}</p>
+              <p className="text-xs text-red-400 py-4 text-center" role="alert">{error}</p>
             )}
             {!loading && !error && designs.length === 0 && (
               <p className="text-xs text-zinc-500 py-4 text-center">
@@ -127,15 +134,19 @@ function LoadDesignDialog({
               </p>
             )}
             {!loading && !error && designs.length > 0 && (
-              <ul className="space-y-1">
+              <ul
+                className="space-y-1"
+                aria-label={`${designs.length} saved design${designs.length === 1 ? '' : 's'}`}
+              >
                 {designs.map((d) => (
                   <li key={d.id}>
                     <button
                       onClick={() => handleSelect(d.id)}
+                      aria-label={`Load design: ${d.name}, last modified ${formatDate(d.modifiedAt)}`}
                       className="w-full text-left px-3 py-2 rounded text-xs text-zinc-200 hover:bg-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600 flex items-center justify-between"
                     >
                       <span className="truncate mr-2">{d.name}</span>
-                      <span className="text-zinc-500 text-[10px] whitespace-nowrap">
+                      <span className="text-zinc-500 text-[10px] whitespace-nowrap" aria-hidden="true">
                         {formatDate(d.modifiedAt)}
                       </span>
                     </button>
@@ -147,7 +158,7 @@ function LoadDesignDialog({
 
           <div className="px-4 py-3 border-t border-zinc-800 flex justify-end">
             <Dialog.Close asChild>
-              <button className="px-3 py-1 text-xs text-zinc-400 rounded hover:bg-zinc-800">
+              <button className="px-3 py-1 text-xs text-zinc-400 rounded hover:bg-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
                 Cancel
               </button>
             </Dialog.Close>
@@ -203,6 +214,7 @@ function PresetsMenu(): React.JSX.Element {
   const loadPreset = useDesignStore((s) => s.loadPreset);
   const loadCustomPresetDesign = useDesignStore((s) => s.loadCustomPresetDesign);
   const design = useDesignStore((s) => s.design);
+  const announce = useLiveRegionStore((s) => s.announce);
 
   // ── Built-in preset confirmation ──────────────────────────────────
   const [pendingPreset, setPendingPreset] = useState<Exclude<PresetName, 'Custom'> | null>(null);
@@ -210,9 +222,10 @@ function PresetsMenu(): React.JSX.Element {
   const confirmPreset = useCallback(() => {
     if (pendingPreset) {
       loadPreset(pendingPreset);
+      announce(`Preset "${PRESET_DISPLAY_LABELS[pendingPreset]}" loaded`);
       setPendingPreset(null);
     }
-  }, [pendingPreset, loadPreset]);
+  }, [pendingPreset, loadPreset, announce]);
 
   const cancelPreset = useCallback(() => {
     setPendingPreset(null);
@@ -246,6 +259,7 @@ function PresetsMenu(): React.JSX.Element {
     setPresetError(null);
     try {
       await saveCustomPreset(savePresetName.trim(), design);
+      announce(`Preset "${savePresetName.trim()}" saved`);
       setShowSaveDialog(false);
       setSavePresetName('');
       await refreshPresets();
@@ -254,7 +268,7 @@ function PresetsMenu(): React.JSX.Element {
     } finally {
       setIsSavingPreset(false);
     }
-  }, [savePresetName, design, refreshPresets]);
+  }, [savePresetName, design, refreshPresets, announce]);
 
   const handleLoadCustomPreset = useCallback(
     async (id: string) => {
@@ -509,8 +523,23 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
   const [importError, setImportError] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const announce = useLiveRegionStore((s) => s.announce);
 
   const warningBadge = getWarningCountBadge(warnings);
+
+  // Announce warning count changes to screen readers
+  const prevWarningCount = useRef<number | null>(null);
+  useEffect(() => {
+    const count = warnings.length;
+    if (prevWarningCount.current !== null && prevWarningCount.current !== count) {
+      if (count === 0) {
+        announce('All validation warnings cleared');
+      } else {
+        announce(`${count} validation ${count === 1 ? 'warning' : 'warnings'}`);
+      }
+    }
+    prevWarningCount.current = count;
+  }, [warnings.length, announce]);
 
   // ── File Operations ────────────────────────────────────────────────
 
@@ -528,12 +557,14 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
     saveDesign()
       .then(() => {
         setSaveFlash(true);
+        announce('Design saved successfully');
         setTimeout(() => setSaveFlash(false), 2000);
       })
       .catch((err: unknown) => {
         console.error('Failed to save design:', err);
+        announce('Failed to save design');
       });
-  }, [saveDesign]);
+  }, [saveDesign, announce]);
 
   const handleLoad = useCallback(() => {
     setLoadDialogOpen(true);
@@ -670,7 +701,11 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
 
   return (
     <>
-      <div className="flex items-center h-10 px-2 bg-zinc-900 border-b border-zinc-800 gap-1 overflow-hidden">
+      <div
+        role="toolbar"
+        aria-label="Main toolbar"
+        className="flex items-center h-10 px-2 bg-zinc-900 border-b border-zinc-800 gap-1 overflow-hidden"
+      >
         {/* ════════════════════════════════════════════════════════════
             LEFT SECTION: File / Edit / Presets dropdown menus
             ════════════════════════════════════════════════════════════ */}
@@ -841,11 +876,13 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
             ref={nameInputRef}
             className="toolbar-design-name text-xs text-zinc-200 bg-zinc-800 border border-zinc-600 rounded px-1.5 py-0.5 mr-2 max-w-[160px] focus:outline-none focus:border-blue-500"
             value={editNameValue}
+            aria-label="Design name"
             onChange={(e) => setEditNameValue(e.target.value)}
             onBlur={() => {
               const trimmed = editNameValue.trim();
               if (trimmed && trimmed !== designName) {
                 setDesignName(trimmed);
+                announce(`Design renamed to ${trimmed}`);
               }
               setIsEditingName(false);
             }}
@@ -861,31 +898,33 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
           />
         ) : (
           <button
-            className="toolbar-design-name text-xs text-zinc-500 mr-2 truncate max-w-[160px] hover:text-zinc-300 cursor-text bg-transparent border-none p-0"
+            className="toolbar-design-name text-xs text-zinc-500 mr-2 truncate max-w-[160px] hover:text-zinc-300 cursor-text bg-transparent border-none p-0 focus:outline-none focus:ring-1 focus:ring-zinc-500 focus:rounded"
             onClick={() => {
               setEditNameValue(designName);
               setIsEditingName(true);
             }}
+            aria-label={`Design name: ${designName}${isDirty ? ' (unsaved changes)' : ''}. Click to rename.`}
             title="Click to rename"
           >
             {designName}
-            {isDirty && <span className="text-zinc-600 ml-1">*</span>}
+            {isDirty && <span className="text-zinc-600 ml-1" aria-hidden="true">*</span>}
           </button>
         )}
 
-        {/* Save Feedback — hidden below 1400px (#157) */}
+        {/* Save Feedback — hidden below 1400px (#157); visual only — SR uses LiveRegion */}
         {saveFlash && (
-          <span className="toolbar-design-name text-[10px] text-green-400 mr-2 animate-pulse">Saved!</span>
+          <span className="toolbar-design-name text-[10px] text-green-400 mr-2 animate-pulse" aria-hidden="true">Saved!</span>
         )}
         {/* Save error — only set by saveDesign(), never by importDesignFromJson() (#156) */}
         {fileError && (
-          <span
-            className="toolbar-design-name text-[10px] text-red-400 mr-2 cursor-pointer truncate max-w-[120px]"
+          <button
+            className="toolbar-design-name text-[10px] text-red-400 mr-2 cursor-pointer truncate max-w-[160px] bg-transparent border-none p-0 focus:outline-none focus:ring-1 focus:ring-red-400 focus:rounded"
             title={fileError}
+            aria-label={`Save failed: ${fileError}. Click to dismiss.`}
             onClick={clearFileError}
           >
             Save failed
-          </span>
+          </button>
         )}
         {/* Import error — managed by local importError state, not fileError (#156) */}
         {importError && (
@@ -903,6 +942,9 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
           <span
             className="px-2 py-0.5 text-[10px] font-medium text-amber-100
               bg-amber-600 rounded-full mr-2"
+            role="status"
+            aria-label={`${warningBadge} — validation warnings active`}
+            title={`${warningBadge} — validation warnings active`}
           >
             {warningBadge}
           </span>
@@ -918,6 +960,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
         <button
           onClick={onOpenExport}
           disabled={!isConnected}
+          aria-label={isConnected ? 'Export design (open export dialog)' : 'Export design (unavailable: not connected)'}
           className="px-3 py-1 text-xs font-medium text-zinc-100 bg-blue-600
             rounded hover:bg-blue-500 focus:outline-none focus:ring-2
             focus:ring-blue-400 focus:ring-offset-1 focus:ring-offset-zinc-900

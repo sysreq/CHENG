@@ -128,6 +128,9 @@ function GeneratingOverlay() {
 
   return (
     <div
+      role="status"
+      aria-live="polite"
+      aria-label="Generating 3D aircraft model"
       style={{
         position: 'absolute',
         inset: 0,
@@ -139,7 +142,7 @@ function GeneratingOverlay() {
         pointerEvents: 'none',
       }}
     >
-      <div className="generating-spinner" />
+      <div className="generating-spinner" aria-hidden="true" />
     </div>
   );
 }
@@ -206,13 +209,19 @@ export default function Scene() {
   }
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div
+      style={{ width: '100%', height: '100%', position: 'relative' }}
+      role="region"
+      aria-label="3D aircraft viewport — use mouse to orbit, scroll to zoom, right-click to pan. Keyboard shortcuts: 1=Front, 2=Side, 3=Top, 4=Perspective."
+      tabIndex={0}
+    >
       <ViewportErrorBoundary>
         <Canvas
           gl={{ antialias: true }}
           camera={{ position: [500, 300, 500], fov: 50, near: 1, far: 10000 }}
           style={{ background: '#2A2A2E' }}
           onCreated={handleCreated}
+          aria-label="3D aircraft model preview"
         >
           <ambientLight intensity={0.4} />
           <directionalLight position={[500, 500, 500]} intensity={0.8} />

@@ -4,7 +4,7 @@
 // Clicking an entry jumps to that state.
 // ============================================================================
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useDesignStore, type UndoableState } from '../store/designStore';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 
@@ -93,6 +93,14 @@ interface HistoryPanelProps {
 export function HistoryPanel({ open, onClose }: HistoryPanelProps): React.JSX.Element | null {
   const entries = useHistoryEntries();
   const temporalStore = useDesignStore.temporal;
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Focus the close button when the panel opens, for keyboard/screen-reader users.
+  useEffect(() => {
+    if (open && closeBtnRef.current) {
+      closeBtnRef.current.focus();
+    }
+  }, [open]);
 
   const handleJumpTo = useCallback(
     (entry: HistoryEntry) => {
@@ -118,12 +126,19 @@ export function HistoryPanel({ open, onClose }: HistoryPanelProps): React.JSX.El
   if (!open) return null;
 
   return (
-    <div className="fixed top-[calc(var(--toolbar-height,40px)+44px)] left-2 z-50 w-72 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl shadow-black/50 flex flex-col overflow-hidden" style={{ maxHeight: 'calc(100vh - var(--toolbar-height, 40px) - 60px)' }}>
+    <div
+      role="dialog"
+      aria-labelledby="history-panel-title"
+      aria-modal="false"
+      className="fixed top-[calc(var(--toolbar-height,40px)+44px)] left-2 z-50 w-72 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl shadow-black/50 flex flex-col overflow-hidden"
+      style={{ maxHeight: 'calc(100vh - var(--toolbar-height, 40px) - 60px)' }}
+    >
       <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
-        <span className="text-xs font-semibold text-zinc-300">History</span>
+        <span className="text-xs font-semibold text-zinc-300" id="history-panel-title">History</span>
         <button
+          ref={closeBtnRef}
           onClick={onClose}
-          className="text-xs text-zinc-500 hover:text-zinc-300 px-1"
+          className="text-xs text-zinc-500 hover:text-zinc-300 px-1 focus:outline-none focus:ring-1 focus:ring-zinc-500 rounded"
           aria-label="Close history panel"
         >
           {'\u2715'}

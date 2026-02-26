@@ -161,7 +161,7 @@ function InlineSliderInput({
 
   const warningRing = hasWarning ? 'ring-1 ring-amber-500/50' : '';
   const outOfRangeBorder = isOutOfRange ? 'border-red-500' : 'border-zinc-700';
-  void warningText; // used for future tooltip enhancement
+  void warningText; // suppress unused warning — will be used for tooltip in a future enhancement
 
   return (
     <>
@@ -177,6 +177,9 @@ function InlineSliderInput({
           bg-zinc-700 accent-blue-500 ${warningRing}
           disabled:opacity-50 disabled:cursor-not-allowed`}
         aria-label={`${id} slider`}
+        aria-valuenow={value}
+        aria-valuemin={min}
+        aria-valuemax={max}
       />
       <input
         id={id}

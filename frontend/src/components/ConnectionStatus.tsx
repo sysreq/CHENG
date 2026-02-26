@@ -55,8 +55,15 @@ export default function ConnectionStatus() {
 
   const config = STATE_CONFIG[state];
 
+  const ariaLabel = state === 'reconnecting'
+    ? `Connection status: ${config.label} (attempt ${reconnectAttempts} of ${maxReconnectAttempts})`
+    : `Connection status: ${config.label}`;
+
   return (
     <div
+      role="status"
+      aria-live="polite"
+      aria-label={ariaLabel}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -65,8 +72,9 @@ export default function ConnectionStatus() {
         color: 'var(--color-text-secondary)',
       }}
     >
-      {/* Status dot */}
+      {/* Status dot (decorative) */}
       <span
+        aria-hidden="true"
         style={{
           display: 'inline-block',
           width: 8,
@@ -78,7 +86,7 @@ export default function ConnectionStatus() {
         }}
       />
 
-      {/* Label */}
+      {/* Label — not hidden; aria-label on container provides the full description */}
       <span>{config.label}</span>
 
       {/* Show attempt count when reconnecting */}

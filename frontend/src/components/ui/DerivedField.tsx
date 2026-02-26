@@ -3,7 +3,7 @@
 // Issue #153 (Unit toggle: mm / inches), #154 (title prop for tooltips)
 // ============================================================================
 
-import React from 'react';
+import React, { useId } from 'react';
 import { useUnitStore } from '../../store/unitStore';
 import { toDisplayUnit, getDisplayUnit } from '../../lib/units';
 
@@ -42,6 +42,7 @@ export function DerivedField({
   title,
 }: DerivedFieldProps): React.JSX.Element {
   const unitSystem = useUnitStore((s) => s.unitSystem);
+  const labelId = useId();
 
   let formatted: string;
   if (value == null) {
@@ -61,11 +62,18 @@ export function DerivedField({
 
   return (
     <div className="mb-2" title={title}>
-      <span className="block text-xs font-medium text-zinc-400 mb-0.5">{label}</span>
+      <span
+        id={labelId}
+        className="block text-xs font-medium text-zinc-400 mb-0.5"
+      >
+        {label}
+      </span>
       <div
         className="w-full px-2 py-1 text-xs text-zinc-300 bg-zinc-800/50
           border border-zinc-700/50 rounded cursor-default"
         aria-readonly="true"
+        aria-labelledby={labelId}
+        role="status"
       >
         {formatted}
       </div>
