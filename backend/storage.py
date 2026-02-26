@@ -10,6 +10,7 @@ without modifying calling code.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import tempfile
@@ -140,16 +141,12 @@ class MemoryStorage:
         Deep-copying prevents accidental mutation of stored data via the
         original dict reference.
         """
-        import copy
-
         with self._lock:
             self._store[design_id] = copy.deepcopy(data)
             self._timestamps[design_id] = datetime.now(tz=timezone.utc)
 
     def load_design(self, design_id: str) -> dict:
         """Return a deep copy of the stored design.  Raises FileNotFoundError if missing."""
-        import copy
-
         with self._lock:
             if design_id not in self._store:
                 raise FileNotFoundError(f"Design not found: {design_id}")

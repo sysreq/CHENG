@@ -85,11 +85,23 @@ def test_list_returns_summaries(mem: MemoryStorage) -> None:
 
 
 def test_list_newest_first(mem: MemoryStorage) -> None:
-    """list_designs returns designs in newest-first order."""
+    """list_designs returns designs in newest-first order.
+
+    We patch the internal _timestamps dict directly to guarantee distinct
+    timestamps without relying on wall-clock sub-millisecond timing, which
+    can be flaky on fast CI machines.
+    """
+    from datetime import timedelta
+
+    base = datetime(2024, 1, 1, tzinfo=timezone.utc)
     mem.save_design("old", {"id": "old", "name": "Old"})
     mem.save_design("new", {"id": "new", "name": "New"})
+    # Force distinct timestamps to ensure deterministic sort order
+    mem._timestamps["old"] = base
+    mem._timestamps["new"] = base + timedelta(seconds=1)
+
     result = mem.list_designs()
-    # "new" was saved last, so it should appear first
+    # "new" has the later timestamp, so it should appear first
     assert result[0]["id"] == "new"
     assert result[1]["id"] == "old"
 

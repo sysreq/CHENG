@@ -74,16 +74,29 @@ function idbRequest<T>(
 /**
  * Save a design to IndexedDB under its own id.
  * Also writes the autosave slot so the last-active design can be restored.
+ *
+ * Uses a single transaction for both writes to avoid the overhead of opening
+ * two separate transactions when a design id is present.
  */
 export async function idbSaveDesign(design: object): Promise<void> {
   const data = design as { id?: string };
-  if (data.id) {
-    // Write under the design's own id key
-    await idbRequest('readwrite', (store) => store.put(design, data.id as string));
-  }
-  // Always mirror into the autosave slot so the last-active design survives
-  // a page refresh.  When there is no id this is the only write.
-  await idbRequest('readwrite', (store) => store.put(design, AUTOSAVE_KEY));
+  return openDb().then(
+    (db) =>
+      new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+
+        const store = tx.objectStore(STORE_NAME);
+        if (data.id) {
+          // Write under the design's own id key
+          store.put(design, data.id);
+        }
+        // Always mirror into the autosave slot so the last-active design
+        // survives a page refresh.  When there is no id this is the only write.
+        store.put(design, AUTOSAVE_KEY);
+      }),
+  );
 }
 
 /**
