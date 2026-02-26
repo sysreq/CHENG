@@ -114,7 +114,7 @@ export function StaticMarginGauge({
             className="absolute text-[10px] text-zinc-500 -translate-x-1/2"
             style={{ left: `${valueToBarPct(tick)}%` }}
           >
-            {tick >= 0 ? `${tick}%` : `${tick}%`}
+            {tick}%
           </span>
         ))}
       </div>
