@@ -128,7 +128,7 @@ export function HistoryPanel({ open, onClose }: HistoryPanelProps): React.JSX.El
   return (
     <div
       role="dialog"
-      aria-label="Edit history"
+      aria-labelledby="history-panel-title"
       aria-modal="false"
       className="fixed top-[calc(var(--toolbar-height,40px)+44px)] left-2 z-50 w-72 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl shadow-black/50 flex flex-col overflow-hidden"
       style={{ maxHeight: 'calc(100vh - var(--toolbar-height, 40px) - 60px)' }}

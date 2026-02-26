@@ -118,6 +118,7 @@ export default function App() {
         className="component-panel-section"
         id="parameter-panel"
         aria-label="Aircraft parameter controls"
+        tabIndex={-1}
         style={{
           gridColumn: '1',
           gridRow: '2',

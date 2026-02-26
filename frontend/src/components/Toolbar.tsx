@@ -534,7 +534,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
     if (prevWarningCount.current !== null && prevWarningCount.current !== count) {
       if (count === 0) {
         announce('All validation warnings cleared');
-      } else if (count > (prevWarningCount.current ?? 0)) {
+      } else {
         announce(`${count} validation ${count === 1 ? 'warning' : 'warnings'}`);
       }
     }

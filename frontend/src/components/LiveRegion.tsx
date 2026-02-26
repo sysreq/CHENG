@@ -33,6 +33,9 @@ export function LiveRegion() {
       clearPolite();
       politeTimer.current = null;
     }, 5000);
+    return () => {
+      if (politeTimer.current) clearTimeout(politeTimer.current);
+    };
   }, [politeMsg, clearPolite]);
 
   useEffect(() => {
@@ -42,6 +45,9 @@ export function LiveRegion() {
       clearAssertive();
       assertiveTimer.current = null;
     }, 5000);
+    return () => {
+      if (assertiveTimer.current) clearTimeout(assertiveTimer.current);
+    };
   }, [assertiveMsg, clearAssertive]);
 
   return (
