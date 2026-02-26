@@ -24,8 +24,12 @@ export type TailType = 'Conventional' | 'T-Tail' | 'V-Tail' | 'Cruciform';
 
 /** Available airfoil profiles. Corresponding .dat files in airfoils/ directory. */
 export type WingAirfoil =
-  | 'Flat-Plate' | 'NACA-0012' | 'NACA-2412' | 'NACA-4412' | 'NACA-6412'
+  | 'Flat-Plate' | 'NACA-0006' | 'NACA-0009' | 'NACA-0012' | 'NACA-2412' | 'NACA-4412' | 'NACA-6412'
   | 'Clark-Y' | 'Eppler-193' | 'Eppler-387' | 'Selig-1223' | 'AG-25';
+
+/** Tail surface airfoil profiles — symmetric sections only (T23).
+ *  NACA-0012 is the default for backward compatibility. */
+export type TailAirfoil = 'Flat-Plate' | 'NACA-0006' | 'NACA-0009' | 'NACA-0012';
 
 /** Joint mechanism for sectioned parts. */
 export type JointType = 'Tongue-and-Groove' | 'Dowel-Pin' | 'Flat-with-Alignment-Pins';
@@ -177,6 +181,9 @@ export interface AircraftDesign {
   vTailSweep: number;
 
   // ── Shared Tail ───────────────────────────────────────────────────
+  /** T23: Tail surface airfoil profile. Symmetric sections only.
+   *  NACA-0012 is the default for backward compatibility with existing designs. */
+  tailAirfoil: TailAirfoil;
   /** Wing AC to tail AC distance. @unit mm @min 80 @max 1500 @default 180 */
   tailArm: number;
 

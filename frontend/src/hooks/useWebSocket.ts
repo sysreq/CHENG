@@ -290,6 +290,7 @@ function serializeDesign(design: AircraftDesign): Record<string, unknown> {
     v_tail_sweep: design.vTailSweep,
 
     // Shared tail
+    tail_airfoil: design.tailAirfoil,
     tail_arm: design.tailArm,
 
     // Fuselage section transition points (F11/F12) — #244

@@ -23,6 +23,8 @@ AIRFOIL_DIR: str = os.environ.get(
 
 SUPPORTED_AIRFOILS: list[str] = [
     "Flat-Plate",
+    "NACA-0006",
+    "NACA-0009",
     "NACA-0012",
     "NACA-2412",
     "NACA-4412",
@@ -34,10 +36,21 @@ SUPPORTED_AIRFOILS: list[str] = [
     "AG-25",
 ]
 
+# Symmetric airfoils suitable for tail surfaces (low-drag, symmetric profiles).
+# NACA-0012 is kept as the default for backward compatibility.
+TAIL_AIRFOILS: list[str] = [
+    "Flat-Plate",
+    "NACA-0006",
+    "NACA-0009",
+    "NACA-0012",
+]
+
 # Map display name -> filename on disk.
 # NOTE: NACA files have NO underscore (matches actual files in airfoils/).
 _NAME_TO_FILE: dict[str, str] = {
     "Flat-Plate": "flat_plate.dat",
+    "NACA-0006": "naca0006.dat",
+    "NACA-0009": "naca0009.dat",
     "NACA-0012": "naca0012.dat",
     "NACA-2412": "naca2412.dat",
     "NACA-4412": "naca4412.dat",

@@ -1,16 +1,24 @@
 // ============================================================================
 // CHENG — Tail V-Tail Panel: V-tail specific parameters
 // Shown when tailType === 'V-Tail'
-// Issue #27, #144 (control surfaces — ruddervators)
-// Issue #154 — Parameter renaming for beginners
+// Issue #27, #144 (control surfaces — ruddervators), #154 (parameter renaming), #217 (tail airfoil T23)
 // ============================================================================
 
 import React, { useCallback } from 'react';
 import { useDesignStore } from '../../store/designStore';
 import { fieldHasWarning, getFieldWarnings, formatWarning } from '../../lib/validation';
-import { ParamSlider } from '../ui';
+import { ParamSlider, ParamSelect } from '../ui';
 import { PrintSettingsSection } from './PrintSettingsSection';
 import { ControlSurfaceSection } from './shared/ControlSurfaceSection';
+import type { TailAirfoil } from '../../types/design';
+
+// T23: Available tail airfoil profiles — symmetric sections only.
+const TAIL_AIRFOIL_OPTIONS: readonly TailAirfoil[] = [
+  'Flat-Plate',
+  'NACA-0006',
+  'NACA-0009',
+  'NACA-0012',
+] as const;
 
 export function TailVTailPanel(): React.JSX.Element {
   const design = useDesignStore((s) => s.design);
@@ -84,6 +92,13 @@ export function TailVTailPanel(): React.JSX.Element {
   );
   const setRuddervatorSpanInput = useCallback(
     (v: number) => setParam('ruddervatorSpanPercent', v, 'text'),
+    [setParam],
+  );
+
+  // ── Tail Airfoil handler (T23) ─────────────────────────────────────
+
+  const setTailAirfoil = useCallback(
+    (v: TailAirfoil) => setParam('tailAirfoil', v, 'immediate'),
     [setParam],
   );
 
@@ -222,6 +237,16 @@ export function TailVTailPanel(): React.JSX.Element {
 
       {/* ── Shared ─────────────────────────────────────────────────── */}
       <div className="border-t border-zinc-700/50 mt-3 mb-2" />
+
+      {/* T23 — Tail Airfoil */}
+      <ParamSelect
+        label="Tail Airfoil"
+        value={design.tailAirfoil}
+        options={TAIL_AIRFOIL_OPTIONS}
+        onChange={setTailAirfoil}
+        hasWarning={fieldHasWarning(warnings, 'tailAirfoil')}
+        title="Airfoil profile for V-tail surfaces. NACA-0012 is the default. Thinner profiles (0006, 0009) reduce drag. Flat-Plate suits micro/foamy builds."
+      />
 
       {/* T22 — Tail Distance (formerly "Tail Arm") */}
       <ParamSlider
