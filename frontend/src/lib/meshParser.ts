@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import type { DerivedValues, ValidationWarning, ComponentRanges } from '@/types/design';
+import { DEFAULT_DERIVED_VALUES } from '@/types/design';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -141,17 +142,8 @@ function parseMeshUpdate(data: ArrayBuffer, view: DataView): MeshFrame {
     validation = trailer.validation;
     componentRanges = trailer.componentRanges ?? null;
   } else {
-    // No trailer — provide empty defaults
-    derived = {
-      tipChordMm: 0,
-      wingAreaCm2: 0,
-      aspectRatio: 0,
-      meanAeroChordMm: 0,
-      taperRatio: 0,
-      estimatedCgMm: 0,
-      minFeatureThicknessMm: 0,
-      wallThicknessMm: 0,
-    };
+    // No trailer — use canonical defaults
+    derived = { ...DEFAULT_DERIVED_VALUES };
     validation = [];
   }
 

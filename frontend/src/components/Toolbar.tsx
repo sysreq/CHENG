@@ -16,6 +16,7 @@ import { HistoryPanel } from './HistoryPanel';
 import { ModeBadge } from './ModeBadge';
 import { useModeInfo } from '../hooks/useModeInfo';
 import { UnitToggle } from './UnitToggle';
+import { StabilityOverlay } from './StabilityOverlay';
 import { PRESET_DESCRIPTIONS } from '../lib/presets';
 import {
   listCustomPresets,
@@ -517,7 +518,9 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
 
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [plotsOpen, setPlotsOpen] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
+  const togglePlotsButtonRef = useRef<HTMLButtonElement>(null);
   const [editNameValue, setEditNameValue] = useState(designName);
   const [saveFlash, setSaveFlash] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -788,6 +791,22 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
 
         <PresetsMenu />
 
+        {/* Toggle Plots button (#317) — opens/closes the stability plots overlay */}
+        <button
+          ref={togglePlotsButtonRef}
+          onClick={() => setPlotsOpen((v) => !v)}
+          aria-pressed={plotsOpen}
+          aria-controls="stability-overlay"
+          aria-label={plotsOpen ? 'Hide stability plots' : 'Show stability plots'}
+          className={`px-3 py-1 text-xs rounded focus:outline-none focus:ring-1 focus:ring-zinc-600
+            ${plotsOpen
+              ? 'text-blue-300 bg-zinc-800'
+              : 'text-zinc-300 hover:bg-zinc-800'
+            }`}
+        >
+          Toggle Plots
+        </button>
+
         {/* ════════════════════════════════════════════════════════════
             CENTER SECTION: Camera view buttons + Undo/Redo icon buttons
             F/S/T/3D buttons are the canonical camera-view controls (#221).
@@ -975,6 +994,14 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
         <div style={{ position: 'relative' }}>
           <HistoryPanel open onClose={() => setHistoryOpen(false)} />
         </div>
+      )}
+
+      {/* Stability Plots Overlay (#317) — fixed-position floating card */}
+      {plotsOpen && (
+        <StabilityOverlay
+          onClose={() => setPlotsOpen(false)}
+          toggleButtonRef={togglePlotsButtonRef}
+        />
       )}
 
       {/* Load Design Dialog (#93) */}
