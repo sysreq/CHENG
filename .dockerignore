@@ -23,6 +23,12 @@ __pycache__
 docker-compose.yml
 Dockerfile
 
+# Cloud / Deployment (not needed inside the image)
+cloudbuild.yaml
+cloudrun.yaml
+deploy.sh
+.gcloudignore
+
 # Docs and tests
 docs/
 tests/
