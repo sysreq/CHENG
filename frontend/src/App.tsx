@@ -7,6 +7,7 @@ import Scene from '@/components/Viewport/Scene';
 import { ComponentPanel } from '@/components/panels/ComponentPanel';
 import ConnectionStatus from '@/components/ConnectionStatus';
 import DisconnectedBanner from '@/components/DisconnectedBanner';
+import ColdStartOverlay from '@/components/ColdStartOverlay';
 import { ExportDialog } from '@/components/ExportDialog';
 
 /**
@@ -66,6 +67,8 @@ export default function App() {
         <div style={{ position: 'absolute', inset: 0, top: 'var(--toolbar-height)' }}>
           <Scene />
         </div>
+        {/* Cold start overlay -- shown on slow initial connection (e.g. Cloud Run) */}
+        <ColdStartOverlay />
       </main>
 
       {/* Bottom — Component Panel (Global / Wing / Tail / Fuselage / Landing Gear) */}
