@@ -64,11 +64,11 @@ class TestInfoEndpoint:
         assert resp.status_code == 200
         assert resp.json()["mode"] == "cloud"
 
-    def test_version_field_present(self, client: TestClient, monkeypatch) -> None:
-        """Response always includes a version field."""
+    def test_version_field_matches_app_version(self, client: TestClient, monkeypatch) -> None:
+        """Version field matches the FastAPI app version from main.py."""
         monkeypatch.delenv("CHENG_MODE", raising=False)
         resp = client.get("/api/info")
         data = resp.json()
         assert "version" in data
         assert isinstance(data["version"], str)
-        assert len(data["version"]) > 0
+        assert data["version"] == app.version
