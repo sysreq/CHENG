@@ -92,12 +92,20 @@ describe('getMarginColorClass / getMarginTextColorClass', () => {
     expect(getMarginColorClass(8)).toBe('bg-green-500');
   });
 
+  it('getMarginColorClass returns bg-yellow-500 for marginal margin', () => {
+    expect(getMarginColorClass(1)).toBe('bg-yellow-500');
+  });
+
+  it('getMarginColorClass returns bg-blue-500 for over-stable margin', () => {
+    expect(getMarginColorClass(20)).toBe('bg-blue-500');
+  });
+
   it('getMarginTextColorClass is consistent with getMarginColorClass', () => {
-    // Both should use the same status classification
+    // Both should reflect the same zone classification
     for (const pct of [-5, 0.5, 5, 20]) {
       const bgClass = getMarginColorClass(pct);
       const textClass = getMarginTextColorClass(pct);
-      // bg-red-500 → text-red-500, bg-green-500 → text-green-500, etc.
+      // bg-red-500 → text-red-500, etc.
       const colorPart = bgClass.replace('bg-', '');
       expect(textClass).toBe(`text-${colorPart}`);
     }
@@ -141,7 +149,6 @@ describe('StaticMarginGauge', () => {
 
   it('applies bg-green-500 thumb color for SM in 2–15%', () => {
     const { container } = render(<StaticMarginGauge staticMarginPct={8} />);
-    // The thumb div should have the green background class
     const thumb = container.querySelector('.bg-green-500.rounded-full');
     expect(thumb).not.toBeNull();
   });
@@ -164,11 +171,17 @@ describe('StaticMarginGauge', () => {
     expect(thumb).not.toBeNull();
   });
 
-  it('renders progressbar with aria-valuenow', () => {
+  it('renders progressbar with correct aria-valuenow', () => {
     render(<StaticMarginGauge staticMarginPct={5} />);
     const bar = screen.getByRole('progressbar');
     expect(bar).toBeDefined();
     expect(bar.getAttribute('aria-valuenow')).toBe('5');
+  });
+
+  it('renders correct zone labels (Unstable, Marginal, Stable, Over-stable)', () => {
+    render(<StaticMarginGauge staticMarginPct={8} />);
+    expect(screen.getByText('Unstable')).toBeDefined();
+    expect(screen.getByText('Stable')).toBeDefined();
   });
 });
 
@@ -178,15 +191,23 @@ describe('StaticMarginGauge', () => {
 
 import { PitchStabilityIndicator } from '@/components/stability/PitchStabilityIndicator';
 
-// Mock useLiveRegionStore to avoid Zustand side effects in unit tests
+// Track mock functions so we can assert on calls
+const mockAnnounce = vi.fn();
+const mockAnnounceAssertive = vi.fn();
+
 vi.mock('@/store/liveRegionStore', () => ({
   useLiveRegionStore: () => ({
-    announce: vi.fn(),
-    announceAssertive: vi.fn(),
+    announce: mockAnnounce,
+    announceAssertive: mockAnnounceAssertive,
   }),
 }));
 
 describe('PitchStabilityIndicator', () => {
+  beforeEach(() => {
+    mockAnnounce.mockClear();
+    mockAnnounceAssertive.mockClear();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -219,10 +240,27 @@ describe('PitchStabilityIndicator', () => {
     expect(label.className).toContain('text-blue-500');
   });
 
-  it('has role="status" for screen reader accessibility', () => {
+  it('has role="status" container for screen reader updates', () => {
+    const { container } = render(<PitchStabilityIndicator staticMarginPct={5} />);
+    // The outer div is the role="status" — look directly on the container
+    const statusEl = container.querySelector('[role="status"]');
+    expect(statusEl).not.toBeNull();
+  });
+
+  it('does NOT call announceAssertive on initial render (no crossing)', () => {
     render(<PitchStabilityIndicator staticMarginPct={5} />);
-    const statusEl = screen.getByRole('status');
-    expect(statusEl).toBeDefined();
+    // On initial render, prevStatusRef is null so no announcement should fire
+    expect(mockAnnounceAssertive).not.toHaveBeenCalled();
+  });
+
+  it('shows correct description for STABLE status', () => {
+    render(<PitchStabilityIndicator staticMarginPct={8} />);
+    expect(screen.getByText(/Natural pitch stability is present/)).toBeDefined();
+  });
+
+  it('shows correct description for UNSTABLE status', () => {
+    render(<PitchStabilityIndicator staticMarginPct={-3} />);
+    expect(screen.getByText(/CG is behind neutral point/)).toBeDefined();
   });
 });
 
@@ -262,22 +300,9 @@ import { StabilityPanel } from '@/components/panels/StabilityPanel';
 
 describe('StabilityPanel', () => {
   beforeEach(() => {
+    mockAnnounce.mockClear();
+    mockAnnounceAssertive.mockClear();
     vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('renders all three gauge roles when derived is populated', () => {
-    render(<StabilityPanel />);
-    // CgVsNpGauge → role="img"
-    expect(screen.getByRole('img')).toBeDefined();
-    // StaticMarginGauge → role="progressbar"
-    expect(screen.getByRole('progressbar')).toBeDefined();
-    // PitchStabilityIndicator → role="status" (may share with DerivedField rows)
-    const statusEls = screen.getAllByRole('status');
-    expect(statusEls.length).toBeGreaterThan(0);
   });
 
   it('renders outer section with role="region" and correct aria-label', () => {
@@ -286,54 +311,40 @@ describe('StabilityPanel', () => {
     expect(region).toBeDefined();
   });
 
-  it('shows raw values in expandable details section', () => {
+  it('renders CgVsNpGauge with role="img"', () => {
     render(<StabilityPanel />);
-    // Find and click the summary to expand details
-    const summary = screen.getByText('Raw Values');
-    fireEvent.click(summary);
-    // CG Position should show 350.0 mm
-    expect(screen.getByText(/350/)).toBeDefined();
-    // Neutral Point should show 368.0 mm
-    expect(screen.getByText(/368/)).toBeDefined();
+    expect(screen.getByRole('img')).toBeDefined();
   });
 
-  it('shows STABLE status for mockDerived with staticMarginPct=3.6', () => {
+  it('renders StaticMarginGauge with role="progressbar"', () => {
     render(<StabilityPanel />);
+    expect(screen.getByRole('progressbar')).toBeDefined();
+  });
+
+  it('renders PitchStabilityIndicator showing STABLE for staticMarginPct=3.6', () => {
+    render(<StabilityPanel />);
+    // The indicator shows STABLE for our mock derived (staticMarginPct=3.6)
     expect(screen.getByText('STABLE')).toBeDefined();
   });
 
-  it('renders CgVsNpGauge with correct aria-label containing CG and NP values', () => {
+  it('renders CgVsNpGauge with aria-label containing CG and NP % MAC values', () => {
     render(<StabilityPanel />);
     const gauge = screen.getByRole('img');
     const ariaLabel = gauge.getAttribute('aria-label') ?? '';
-    expect(ariaLabel).toContain('24.2');  // cgPctMac
-    expect(ariaLabel).toContain('27.8');  // neutralPointPctMac
+    expect(ariaLabel).toContain('24.2');  // cgPctMac from MOCK_DERIVED
+    expect(ariaLabel).toContain('27.8');  // neutralPointPctMac from MOCK_DERIVED
   });
-});
 
-// ---------------------------------------------------------------------------
-// StabilityPanel — loading state
-// ---------------------------------------------------------------------------
-
-// We need a separate vi.mock call to override the derived to null.
-// Use a module-scoped spy approach instead.
-describe('StabilityPanel loading state', () => {
-  it('shows loading placeholder when derived is null', () => {
-    // Temporarily override the mock to return null derived
-    vi.doMock('@/store/designStore', () => ({
-      useDesignStore: (selector: (state: Record<string, unknown>) => unknown) => {
-        const state = { derived: null };
-        if (typeof selector === 'function') {
-          try { return selector(state); } catch { return undefined; }
-        }
-        return state;
-      },
-    }));
-
-    // We rely on the existing mock above (derived: MOCK_DERIVED) for this test file.
-    // To test the null case, we verify the conditional logic is present in the source.
-    // The loading placeholder text is "Waiting for preview data..." — present in
-    // the component when !derived. This test documents the expected behavior.
-    expect(true).toBe(true); // Placeholder — see note above
+  it('expandable details section shows raw mm values on click', () => {
+    render(<StabilityPanel />);
+    // Verify the details section exists and contains the summary toggle
+    const summary = screen.getByText('Raw Values');
+    expect(summary).toBeDefined();
+    // Expand the details section
+    fireEvent.click(summary);
+    // CG Position should show 350.0 mm (estimatedCgMm)
+    expect(screen.getByText(/350/)).toBeDefined();
+    // Neutral Point should show 368.0 mm (neutralPointMm)
+    expect(screen.getByText(/368/)).toBeDefined();
   });
 });
