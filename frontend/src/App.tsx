@@ -14,10 +14,10 @@ import { ExportDialog } from '@/components/ExportDialog';
 import StorageUsageIndicator from '@/components/StorageUsageIndicator';
 
 /**
- * Root application layout (updated for #289):
+ * Root application layout (updated for #221, #289):
  *
  * +------------------------------------------+
- * |  TOOLBAR (File / Edit / Presets / View)  |
+ * |  TOOLBAR (File / Edit / Presets)         |
  * +------------------------------------------+
  * |                                          |
  * |            3D VIEWPORT                   |
