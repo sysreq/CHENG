@@ -55,7 +55,7 @@ describe('presets', () => {
     expect(d.wingMountType).toBe('High-Wing');
     expect(d.wingAirfoil).toBe('Clark-Y');
     expect(d.wingTipRootRatio).toBe(1.0);
-    expect(d.fuselageLength).toBe(400);
+    expect(d.fuselageLength).toBe(750);
   });
 
   it('Sport preset has correct sweep and taper', () => {

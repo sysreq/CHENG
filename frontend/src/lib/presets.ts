@@ -107,7 +107,7 @@ function createTrainerPreset(): AircraftDesign {
     wingSpan: 1200,
     wingChord: 200,
     wingMountType: 'High-Wing',
-    fuselageLength: 400,
+    fuselageLength: 750,
     tailType: 'Conventional',
 
     // Wing
@@ -126,15 +126,14 @@ function createTrainerPreset(): AircraftDesign {
     vStabHeight: 120,
     vStabRootChord: 130,
     tailAirfoil: TAIL_AIRFOIL_DEFAULT,
-    tailArm: 220,
+    tailArm: 450,
 
     // V-tail defaults
     ...VTAIL_DEFAULTS,
 
     // Fuselage section transition points (F11/F12)
-    // nose=100/400=25%, nose+cabin=300/400=75%
     noseCabinBreakPct: 25,
-    cabinTailBreakPct: 75,
+    cabinTailBreakPct: 50,
 
     // Fuselage wall
     wallThickness: 1.6,
