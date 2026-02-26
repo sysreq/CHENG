@@ -33,8 +33,12 @@
 
   /* Panel dimensions */
   /* --sidebar-width removed: Global panel is now inlined as a tab (#289) */
-  --toolbar-height: 48px;
+  /* Toolbar is h-10 = 40px in Tailwind. The CSS var is used by Scene/viewport offset. */
+  --toolbar-height: 40px;
   --statusbar-height: 32px;
+  /* Minimum supported viewport (#157) */
+  --min-app-width: 1280px;
+  --min-app-height: 720px;
 
   /* Borders */
   --color-border: #404048;
@@ -118,5 +122,27 @@ body {
 }
 
 /* ============================================================================
-   Responsive Layout — sidebar removed in #289 (Global params inlined as tab)
+   Responsive Layout (#157) — minimum supported size: 1280x720
+   Sidebar was removed in #289 (Global params inlined as tab).
    ============================================================================ */
+
+/*
+ * Toolbar responsive behaviour:
+ * - Design name field: hidden below 1400px to save horizontal space
+ * - Save-flash / error indicators: hidden below 1400px
+ * The toolbar menu buttons (File / Edit / Presets / View) and camera shortcuts
+ * always remain visible at 1280px.
+ */
+@media (max-width: 1399px) {
+  .toolbar-design-name {
+    display: none !important;
+  }
+}
+
+/*
+ * Component panel: enforce a minimum height so the tab strip is always
+ * visible, even when the viewport is at minimum height.
+ */
+.component-panel-section {
+  min-height: 80px;
+}
