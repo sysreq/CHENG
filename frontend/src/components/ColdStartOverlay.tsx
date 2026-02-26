@@ -45,7 +45,7 @@ function ProgressBar({ phase }: { phase: ColdStartPhase }) {
 }
 
 function Spinner() {
-  return <div aria-hidden='true' style={{ width: 24, height: 24, border: '2.5px solid var(--skeleton-base)', borderTopColor: 'var(--color-accent, #3b82f6)', borderRadius: '50%', animation: 'spinnerRotate 0.8s linear infinite', flexShrink: 0 }} />;
+  return <div aria-hidden='true' style={{ width: 24, height: 24, border: '2.5px solid var(--skeleton-base)', borderTopColor: 'var(--color-accent, #3b82f6)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />;
 }
 
 /**

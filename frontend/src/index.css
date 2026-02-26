@@ -96,6 +96,8 @@ body {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
 /* ============================================================================
    Cold Start Overlay -- skeleton shimmer and animation keyframes (#151)
    ============================================================================ */
@@ -110,15 +112,9 @@ body {
   50% { opacity: 1; }
 }
 
-@keyframes spinnerRotate {
-  to { transform: rotate(360deg); }
-}
-
 @keyframes coldStartFadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
-}
-
 }
 
 /* ============================================================================

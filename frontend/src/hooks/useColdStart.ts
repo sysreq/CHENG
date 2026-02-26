@@ -140,17 +140,14 @@ export function useColdStart(): ColdStartState {
 
       // If we've already detected a reconnect (not first connect), permanently
       // deactivate this hook so the overlay never shows for reconnects.
-      if (connectionState === 'reconnecting') {
-        // Do NOT permanently deactivate on reconnect -- the initial cold-start
-        // may still be in progress (backend still booting after a 503/504).
-        // Just hide the overlay if it was showing during this transition.
-        setPhase((prev) => {
-          if (prev !== 'idle' && prev !== 'dismissed') {
-            return 'dismissed';
-          }
-          return prev;
-        });
-      }
+      // Dismiss overlay for all non-initial-connect states so other
+      // error UI (DisconnectedBanner) is visible.
+      setPhase((prev) => {
+        if (prev !== 'idle' && prev !== 'dismissed') {
+          return 'dismissed';
+        }
+        return prev;
+      });
     }
 
     return () => {
