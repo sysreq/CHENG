@@ -60,6 +60,9 @@ function ComponentTabs({ selected, onSelect }: ComponentTabsProps): React.JSX.El
     >
       {COMPONENT_TABS.map(({ key, label }, index) => {
         const isActive = selected === key;
+        // Fallback: if somehow no tab matches (shouldn't happen since selected is non-null),
+        // make the first tab focusable so the tablist is always keyboard-reachable.
+        const isFirstAndNoneActive = index === 0 && !COMPONENT_TABS.some((t) => t.key === selected);
         // 'global' tab cannot be toggled off. Other tabs toggle off to 'global' (not null).
         const handleClick = () => onSelect(isActive && key !== 'global' ? 'global' : key);
         return (
@@ -72,7 +75,7 @@ function ComponentTabs({ selected, onSelect }: ComponentTabsProps): React.JSX.El
             aria-selected={isActive}
             onClick={handleClick}
             onKeyDown={(e) => handleKeyDown(e, key as Exclude<ComponentSelection, null>, index)}
-            tabIndex={isActive ? 0 : -1}
+            tabIndex={isActive || isFirstAndNoneActive ? 0 : -1}
             className={`flex-1 px-2 py-1.5 text-[10px] font-medium truncate transition-colors
               focus:outline-none focus:ring-1 focus:ring-inset focus:ring-blue-500
               ${isActive
