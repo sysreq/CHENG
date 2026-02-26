@@ -1,33 +1,42 @@
-"""GET /api/info -- Returns deployment mode and app metadata.
+"""Info route — exposes runtime configuration to the frontend.
 
-Reads the CHENG_MODE environment variable (default: "local").
-Used by the frontend to display the mode badge in the toolbar.
+GET /api/info returns the current CHENG_MODE so the UI can adapt its
+behaviour (e.g. hide "Save design" in cloud mode where storage is stateless).
 
-Issue #149 (CHENG_MODE toggle), #152 (Mode badge)
+Used by the frontend mode badge (issue #152) and CHENG_MODE toggle (issue #149).
 """
 
 from __future__ import annotations
 
-import os
-
 from fastapi import APIRouter, Request
 
-router = APIRouter(prefix="/api", tags=["info"])
+from backend.storage import get_cheng_mode
 
-_VALID_MODES = {"local", "cloud"}
+router = APIRouter(prefix="/api", tags=["info"])
 
 
 @router.get("/info")
 async def get_info(request: Request) -> dict:
-    """Return deployment mode and app version.
+    """Return runtime information about the current CHENG deployment.
 
-    Reads CHENG_MODE from the environment (default: "local").
-    The version is sourced dynamically from the FastAPI app metadata.
-
-    Returns:
-        mode: "local" or "cloud" (default: "local")
-        version: app version string from main.py
+    Response fields
+    ---------------
+    mode : str
+        ``"local"`` — file-backed Docker container (default).
+        ``"cloud"`` — stateless Cloud Run instance; no server-side persistence.
+    version : str
+        Application version string sourced from the FastAPI app metadata.
+    storage : str
+        Human-readable description of the active storage backend.
     """
-    raw = os.environ.get("CHENG_MODE", "local").strip().lower()
-    mode = raw if raw in _VALID_MODES else "local"
-    return {"mode": mode, "version": request.app.version}
+    mode = get_cheng_mode()
+    storage_desc = (
+        "LocalStorage (file-based, /data/designs/)"
+        if mode == "local"
+        else "MemoryStorage (in-memory, ephemeral)"
+    )
+    return {
+        "mode": mode,
+        "version": request.app.version,
+        "storage": storage_desc,
+    }

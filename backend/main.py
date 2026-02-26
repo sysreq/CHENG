@@ -7,6 +7,7 @@ and mounts static files for the SPA frontend.
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from backend.routes.export import router as export_router
 from backend.routes.info import router as info_router
 from backend.routes.presets import router as presets_router
 from backend.routes.websocket import router as websocket_router
+from backend.storage import get_cheng_mode
 
 logger = logging.getLogger("cheng")
 
@@ -33,6 +35,10 @@ async def lifespan(app: FastAPI):
     1. Pre-warm CadQuery/OpenCascade kernel (first import takes ~2-4 s)
     2. Ensure /data/tmp directory exists for export temp files
     """
+    # Log active mode so operators can confirm deployment configuration
+    mode = get_cheng_mode()
+    logger.info("CHENG_MODE=%s", mode)
+
     # 1. CadQuery warm-up with graceful degradation
     try:
         import cadquery as cq
@@ -59,20 +65,22 @@ async def lifespan(app: FastAPI):
         # Fall back to system temp — the export module handles this via EXPORT_TMP_DIR.
         logger.info("Cannot create %s — export will use module default", tmp_dir)
 
-    # 3. Ensure designs storage directory exists
-    designs_dir = Path("/data/designs")
-    try:
-        designs_dir.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        logger.info("Cannot create /data/designs — using default storage path")
+    # 3. Ensure designs storage directory exists (local mode only)
+    if mode == "local":
+        designs_dir = Path(os.environ.get("CHENG_DATA_DIR", "/data/designs"))
+        try:
+            designs_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logger.info("Cannot create /data/designs — using default storage path")
 
-    # 4. Ensure presets storage directory exists
-    presets_dir = Path("/data/presets")
-    try:
-        presets_dir.mkdir(parents=True, exist_ok=True)
-        logger.info("Presets directory ready: %s", presets_dir)
-    except OSError:
-        logger.info("Cannot create /data/presets — presets will use module default")
+    # 4. Ensure presets storage directory exists (local mode only — cloud mode is stateless)
+    if mode == "local":
+        presets_dir = Path("/data/presets")
+        try:
+            presets_dir.mkdir(parents=True, exist_ok=True)
+            logger.info("Presets directory ready: %s", presets_dir)
+        except OSError:
+            logger.info("Cannot create /data/presets — presets will use module default")
 
     # 5. Clean up orphaned temp files from previous runs (#181)
     try:
