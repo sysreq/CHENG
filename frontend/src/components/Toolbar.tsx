@@ -8,9 +8,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
+import * as Tooltip from '@radix-ui/react-tooltip';
 import { useStore } from 'zustand';
 import { useDesignStore } from '../store/designStore';
-import { getWarningCountBadge } from '../lib/validation';
+import { getWarningCountBadge, formatWarning } from '../lib/validation';
 import { useConnectionStore } from '../store/connectionStore';
 import { HistoryPanel } from './HistoryPanel';
 import { ModeBadge } from './ModeBadge';
@@ -958,15 +959,38 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
 
         {/* Warning Badge */}
         {warningBadge && (
-          <span
-            className="px-2 py-0.5 text-[10px] font-medium text-amber-100
-              bg-amber-600 rounded-full mr-2"
-            role="status"
-            aria-label={`${warningBadge} — validation warnings active`}
-            title={`${warningBadge} — validation warnings active`}
-          >
-            {warningBadge}
-          </span>
+          <Tooltip.Provider delayDuration={150}>
+            <Tooltip.Root>
+              <Tooltip.Trigger asChild>
+                <span
+                  className="px-2 py-0.5 text-[10px] font-medium text-amber-100
+                    bg-amber-600 rounded-full mr-2 cursor-default"
+                  role="status"
+                  aria-label={`${warningBadge} — validation warnings active`}
+                >
+                  {warningBadge}
+                </span>
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content
+                  className="z-50 px-3 py-2 text-xs text-zinc-100 bg-zinc-900
+                    border border-amber-500/50 rounded shadow-lg max-w-[320px]"
+                  side="bottom"
+                  align="end"
+                  sideOffset={6}
+                >
+                  <ul className="space-y-1">
+                    {warnings.map((w) => (
+                      <li key={w.id} className="text-amber-300">
+                        {formatWarning(w)}
+                      </li>
+                    ))}
+                  </ul>
+                  <Tooltip.Arrow className="fill-zinc-900" />
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip.Root>
+          </Tooltip.Provider>
         )}
 
         {/* Unit Toggle (#153) */}
