@@ -392,6 +392,13 @@ class DerivedValues(CamelModel):
     # None when DATCOM computation is unavailable or fails.
     dynamic_stability: Optional[DynamicStabilityResult] = None
 
+    # Mass property estimates (v1.3) — always geometric, regardless of MP01-MP07 overrides.
+    # Used by frontend to pre-fill override inputs and display meaningful defaults.
+    estimated_mass_g: float = 0.0
+    estimated_ixx_kg_m2: float = 0.0
+    estimated_iyy_kg_m2: float = 0.0
+    estimated_izz_kg_m2: float = 0.0
+
 
 # ---------------------------------------------------------------------------
 # Validation Warning

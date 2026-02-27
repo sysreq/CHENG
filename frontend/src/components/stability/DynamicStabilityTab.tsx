@@ -107,9 +107,11 @@ function formatPeriod(periodS: number): string {
   return `${periodS.toFixed(2)} s`;
 }
 
-function formatT2(t2S: number): string {
+function formatT2(t2S: number | null): string {
+  // null = Infinity (stable spiral) — backend sanitizes non-finite floats to null
+  if (t2S === null || t2S === Infinity) return 'stable';
   if (isNaN(t2S)) return '\u2014';
-  if (t2S === Infinity || t2S < 0) return 'stable';
+  if (t2S < 0) return 'stable';
   return `${t2S.toFixed(1)} s`;
 }
 

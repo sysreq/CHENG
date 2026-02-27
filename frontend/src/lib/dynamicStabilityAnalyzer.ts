@@ -102,18 +102,18 @@ export function classifyRollMode(tauS: number): ModeQuality {
  * Classify the spiral mode quality.
  *
  * Spiral divergence (t2 = time-to-double) boundaries:
- * - Good:       Stable (t2 = Infinity) or very slow divergence (t2 ≥ 20 s)
+ * - Good:       Stable (t2 = Infinity or null — JSON-sanitized) or t2 ≥ 20 s
  * - Acceptable: 8 s ≤ t2 < 20 s (pilot can correct in time)
  * - Poor:       t2 < 8 s (too fast for pilot correction)
  *
- * @param t2S Time-to-double amplitude in seconds. Use Infinity for stable/convergent spiral.
+ * @param t2S Time-to-double amplitude in seconds. null/Infinity = stable/convergent spiral.
  */
-export function classifySpiralMode(t2S: number): ModeQuality {
-  // NaN or undefined input is genuinely unknown (not good)
-  if (isNaN(t2S)) return 'unknown';
+export function classifySpiralMode(t2S: number | null): ModeQuality {
+  // null = Infinity (stable spiral) — the backend sanitizes Infinity → null for valid JSON
+  if (t2S === null || t2S === Infinity) return 'good';
 
-  // +Infinity = stable spiral (never diverges) — best case
-  if (t2S === Infinity) return 'good';
+  // NaN or undefined input is genuinely unknown
+  if (isNaN(t2S)) return 'unknown';
 
   if (t2S < 0) return 'good';         // negative t2 = convergent spiral
   if (t2S >= 20) return 'good';

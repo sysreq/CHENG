@@ -448,6 +448,24 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
         stability = _stability_zero()
     result.update(stability)
 
+    # Mass property estimates (v1.3) — geometric only, no MP01-MP07 overrides applied.
+    # Exposed so the frontend can show meaningful values and pre-fill override inputs.
+    try:
+        from backend.mass_properties import estimate_inertia as _ei
+        _airframe_g = result.get("weight_total_g", 0.0)
+        result["estimated_mass_g"] = round(
+            _airframe_g + design.motor_weight_g + design.battery_weight_g, 1
+        )
+        _ixx_e, _iyy_e, _izz_e = _ei(design, result)
+        result["estimated_ixx_kg_m2"] = round(_ixx_e, 6)
+        result["estimated_iyy_kg_m2"] = round(_iyy_e, 6)
+        result["estimated_izz_kg_m2"] = round(_izz_e, 6)
+    except Exception:
+        result.setdefault("estimated_mass_g", 0.0)
+        result.setdefault("estimated_ixx_kg_m2", 0.0)
+        result.setdefault("estimated_iyy_kg_m2", 0.0)
+        result.setdefault("estimated_izz_kg_m2", 0.0)
+
     # Dynamic stability metrics (v1.2) — DATCOM pipeline.
     # Wrapped in try/except: failure must never break the main preview path.
     try:

@@ -355,8 +355,8 @@ export interface DynamicStabilityResult {
   rollTauS: number;
   /** Spiral mode time constant (s). Negative = divergent. */
   spiralTauS: number;
-  /** Spiral mode doubling time (s). Infinity if stable or convergent. */
-  spiralT2S: number;
+  /** Spiral mode doubling time (s). null/Infinity if stable or convergent. */
+  spiralT2S: number | null;
 
   // ── Stability derivatives (longitudinal) ─────────────────────────────
   /** Lift-curve slope dCL/dα (per rad). */
@@ -440,6 +440,16 @@ export interface DerivedValues {
   // Dynamic stability (dynamic-stability-datcom plan)
   /** DATCOM dynamic stability analysis results. Null when not yet computed or on error. */
   dynamicStability?: DynamicStabilityResult | null;
+
+  // Mass property estimates (v1.3) — geometric, no overrides applied
+  /** Estimated total mass (airframe + motor + battery). @unit g */
+  estimatedMassG?: number;
+  /** Estimated roll moment of inertia (no override). @unit kg·m² */
+  estimatedIxxKgM2?: number;
+  /** Estimated pitch moment of inertia (no override). @unit kg·m² */
+  estimatedIyyKgM2?: number;
+  /** Estimated yaw moment of inertia (no override). @unit kg·m² */
+  estimatedIzzKgM2?: number;
 }
 
 /**
@@ -466,6 +476,11 @@ export const DEFAULT_DERIVED_VALUES: DerivedValues = {
   wingLoadingGDm2: 0,
   // Dynamic stability — null until backend DATCOM analysis completes
   dynamicStability: null,
+  // Mass property estimates — 0 until first WS frame
+  estimatedMassG: 0,
+  estimatedIxxKgM2: 0,
+  estimatedIyyKgM2: 0,
+  estimatedIzzKgM2: 0,
 };
 
 // ---------------------------------------------------------------------------

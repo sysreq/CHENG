@@ -124,11 +124,11 @@ class TestComputeDerivedValues:
         """Derived values should compute for default parameters."""
         result = compute_derived_values(default_design)
         assert isinstance(result, dict)
-        # 12 base fields + 7 stability fields (v1.1) + 1 dynamic stability field (v1.2)
-        assert len(result) == 20
+        # 12 base + 7 stability (v1.1) + 1 dynamic (v1.2) + 4 mass estimates (v1.3)
+        assert len(result) == 24
 
     def test_all_keys_present(self, default_design: AircraftDesign) -> None:
-        """All 20 derived value keys must be present (12 base + 7 stability v1.1 + 1 dynamic v1.2)."""
+        """All 24 derived value keys must be present (12 base + 7 stability v1.1 + 1 dynamic v1.2 + 4 mass estimates v1.3)."""
         result = compute_derived_values(default_design)
         expected_keys = {
             # Base derived values (12)
@@ -154,6 +154,11 @@ class TestComputeDerivedValues:
             "wing_loading_g_dm2",
             # Dynamic stability field (v1.2, 1 field)
             "dynamic_stability",
+            # Mass property estimates (v1.3, 4 fields)
+            "estimated_mass_g",
+            "estimated_ixx_kg_m2",
+            "estimated_iyy_kg_m2",
+            "estimated_izz_kg_m2",
         }
         assert set(result.keys()) == expected_keys
 

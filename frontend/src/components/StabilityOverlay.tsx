@@ -5,7 +5,7 @@
 // Issue #355
 // ============================================================================
 
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useLayoutEffect } from 'react';
 import { StabilityPanel } from './panels/StabilityPanel';
 import { MassPropertiesTab } from './stability/MassPropertiesTab';
 import { DynamicStabilityTab } from './stability/DynamicStabilityTab';
@@ -52,6 +52,9 @@ const TABS: { id: StabilityTab; label: string }[] = [
  *
  * Keyboard: Escape key closes the overlay (standard dialog behaviour).
  */
+// Panel width in px (matches w-80 = 320px)
+const PANEL_W = 320;
+
 export function StabilityOverlay({
   onClose,
   toggleButtonRef,
@@ -60,6 +63,46 @@ export function StabilityOverlay({
 }: StabilityOverlayProps): React.JSX.Element {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [activeTab, setActiveTab] = useState<StabilityTab>(initialTab);
+
+  // ── Drag-to-move ──────────────────────────────────────────────────────────
+  // Initial position mirrors the previous CSS `fixed top-14 right-4`.
+  const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 56 });
+
+  // Set initial x after mount so window.innerWidth is available
+  useLayoutEffect(() => {
+    setPos({ x: window.innerWidth - PANEL_W - 16, y: 56 });
+  }, []);
+
+  const dragRef = useRef<{
+    startX: number; startY: number;
+    originX: number; originY: number;
+  } | null>(null);
+
+  const onHeaderPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    // Don't drag when clicking the close button
+    if ((e.target as Element).closest('button')) return;
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: pos.x,
+      originY: pos.y,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }, [pos]);
+
+  const onHeaderPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    const newX = dragRef.current.originX + (e.clientX - dragRef.current.startX);
+    const newY = dragRef.current.originY + (e.clientY - dragRef.current.startY);
+    setPos({
+      x: Math.max(0, Math.min(newX, window.innerWidth - PANEL_W)),
+      y: Math.max(0, Math.min(newY, window.innerHeight - 60)),
+    });
+  }, []);
+
+  const onHeaderPointerUp = useCallback(() => {
+    dragRef.current = null;
+  }, []);
 
   // Close handler: dismiss overlay and restore focus to the toolbar toggle button.
   const handleClose = useCallback(() => {
@@ -100,12 +143,18 @@ export function StabilityOverlay({
       role="dialog"
       aria-label="Stability analysis"
       aria-modal="false"
-      className="fixed top-14 right-4 z-40 w-80 bg-zinc-900 border border-zinc-700
+      style={{ left: pos.x, top: pos.y }}
+      className="fixed z-40 w-80 bg-zinc-900 border border-zinc-700
         rounded-lg shadow-2xl shadow-black/60 flex flex-col"
     >
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-3 py-2
-        border-b border-zinc-800 flex-shrink-0">
+      {/* Header bar — drag handle */}
+      <div
+        onPointerDown={onHeaderPointerDown}
+        onPointerMove={onHeaderPointerMove}
+        onPointerUp={onHeaderPointerUp}
+        className="flex items-center justify-between px-3 py-2
+          border-b border-zinc-800 flex-shrink-0 cursor-grab active:cursor-grabbing select-none"
+      >
         <span className="text-xs font-semibold text-zinc-300">
           Stability Analysis
         </span>

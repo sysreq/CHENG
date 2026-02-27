@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import struct
 from typing import Any
 
@@ -40,6 +41,23 @@ from backend.validation import compute_warnings
 logger = logging.getLogger("cheng.ws")
 
 router = APIRouter()
+
+
+def _sanitize_json(obj: Any) -> Any:
+    """Recursively replace non-finite floats (Infinity, -Infinity, NaN) with None.
+
+    JSON does not support non-finite numbers (RFC 8259 §6). Python's json.dumps
+    emits them as bare tokens ('Infinity', 'NaN') which are rejected by
+    JSON.parse() in all browsers.  Replace them with null so the frontend
+    receives a valid payload and can display '—' instead.
+    """
+    if isinstance(obj, float):
+        return None if not math.isfinite(obj) else obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_json(v) for v in obj]
+    return obj
 
 # Maximum accepted WebSocket message size (bytes).  Messages larger than
 # this are rejected with an error frame to prevent memory exhaustion.
@@ -75,7 +93,7 @@ def _build_mesh_response(
     }
     if component_ranges is not None:
         trailer_dict["componentRanges"] = component_ranges
-    trailer = json.dumps(trailer_dict).encode("utf-8")
+    trailer = json.dumps(_sanitize_json(trailer_dict)).encode("utf-8")
     return mesh_binary + trailer
 
 
