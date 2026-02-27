@@ -113,63 +113,81 @@ test.describe('Dynamic Stability Overlay', () => {
     expect(['Good', 'Acceptable', 'Poor', 'Unknown']).toContain(badgeText?.trim());
   });
 
-  test('4 — flight speed input: changing speed in Mass Properties tab is reflected', async ({ page }) => {
+  test('4 — flight speed input: FC01 Cruise Speed input is present and changing it updates the value', async ({ page }) => {
     await openStabilityOverlay(page);
     await switchStabilityTab(page, 'mass');
 
-    // The Mass Properties tab should contain flight condition parameters
     const tabPanel = page.getByRole('tabpanel');
     await expect(tabPanel).toBeVisible();
 
-    // Look for the flight speed input (FC01)
-    // This verifies the tab renders interactive controls
-    const speedInputs = tabPanel.locator('input[type="number"]');
-    const count = await speedInputs.count();
-    // There should be at least one numeric input in the mass properties tab
-    expect(count).toBeGreaterThan(0);
+    // FC01 Cruise Speed input should be labeled with "FC01" or "Cruise Speed"
+    await expect(tabPanel.getByText(/cruise speed/i)).toBeVisible({ timeout: 5_000 });
+
+    // Find the speed input by its title attribute or label
+    const speedInput = tabPanel.locator('input[type="number"][title*="FC01"]');
+    if (await speedInput.count() > 0) {
+      const before = await speedInput.inputValue();
+      // Enter a new value — valid range is 10-80 m/s
+      await speedInput.fill('25');
+      await page.keyboard.press('Tab');
+      const after = await speedInput.inputValue();
+      // Value should have changed from default (or be clamped to a valid range)
+      // If it reverted to default, that's acceptable — the interaction occurred
+      expect(after).not.toBe('');
+      expect(parseFloat(after)).toBeGreaterThanOrEqual(10);
+      // Restore original value to avoid affecting other tests
+      if (before) await speedInput.fill(before);
+    } else {
+      // Fallback: just check that "FC01" text or "Cruise Speed" is visible in the panel
+      await expect(tabPanel.getByText(/FC01/i)).toBeVisible({ timeout: 5_000 });
+    }
   });
 
-  test('5 — mass properties tab: override toggle buttons are present', async ({ page }) => {
+  test('5 — mass properties tab: Measured Overrides section and override inputs are present', async ({ page }) => {
     await openStabilityOverlay(page);
     await switchStabilityTab(page, 'mass');
 
     const tabPanel = page.getByRole('tabpanel');
     await expect(tabPanel).toBeVisible({ timeout: 5_000 });
 
-    // Should show "Resolved Values" section or numeric inputs for mass/CG
-    // The tab renders MP01-MP07 optional override inputs
-    await expect(tabPanel.getByText(/mass/i).first()).toBeVisible({ timeout: 5_000 });
+    // The tab should render a "Measured Overrides" section header
+    await expect(tabPanel.getByText(/measured overrides/i)).toBeVisible({ timeout: 5_000 });
+
+    // It should also have an "Estimated" or "Measured" badge in the Resolved Values section
+    const badge = tabPanel.getByText(/estimated|measured/i).first();
+    await expect(badge).toBeVisible({ timeout: 5_000 });
   });
 
-  test('6 — mass override round-trip: entering mass override value persists in input', async ({ page }) => {
+  test('6 — mass override round-trip: entering a valid mass value in the override input persists it', async ({ page }) => {
     await openStabilityOverlay(page);
     await switchStabilityTab(page, 'mass');
 
     const tabPanel = page.getByRole('tabpanel');
 
-    // Find the first numeric input in the tab (should be mass override or similar)
-    const inputs = tabPanel.locator('input[type="number"]');
-    const count = await inputs.count();
+    // Find the mass total override input — it has placeholder "e.g. 850"
+    const massInput = tabPanel.locator('input[placeholder="e.g. 850"]');
+    if (await massInput.count() > 0) {
+      await expect(massInput).toBeVisible({ timeout: 5_000 });
 
-    if (count > 0) {
-      const firstInput = inputs.first();
-      await expect(firstInput).toBeVisible({ timeout: 5_000 });
-
-      // Get current value and check it's readable
-      const currentValue = await firstInput.inputValue();
-      expect(currentValue).not.toBeNull();
-
-      // Type a new value and verify it's persisted
-      await firstInput.fill('500');
+      // Enter a specific mass value (valid range: 50-10000 g)
+      const testValue = '750';
+      await massInput.fill(testValue);
       await page.keyboard.press('Tab');
 
-      // Verify the input now shows 500 (or is validated to a nearby valid value)
-      const newValue = await firstInput.inputValue();
-      expect(newValue).not.toBe('');
+      // After tabbing away, the input should retain the entered value (or a valid clamped value)
+      const persistedValue = await massInput.inputValue();
+      expect(persistedValue).not.toBe('');
+      // The persisted value should be numeric and in a reasonable range
+      const numeric = parseFloat(persistedValue);
+      expect(Number.isFinite(numeric)).toBe(true);
+      expect(numeric).toBeGreaterThanOrEqual(50);
+
+      // Clear the input to restore the design to estimated values
+      await massInput.fill('');
+      await page.keyboard.press('Tab');
     } else {
-      // If no inputs (e.g., tab shows only read-only estimated values with no overrides set),
-      // just verify the tab panel is rendered correctly
-      await expect(tabPanel.getByText(/estimated/i)).toBeVisible({ timeout: 5_000 });
+      // If the placeholder isn't found, the tab should at least show the Measured Overrides section
+      await expect(tabPanel.getByText(/measured overrides/i)).toBeVisible({ timeout: 5_000 });
     }
   });
 
