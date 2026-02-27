@@ -710,8 +710,13 @@ def compute_dynamic_modes(
     N_p = qSb2 * derivs.Cn_p / (2.0 * Izz * V)
     N_r = qSb2 * derivs.Cn_r / (2.0 * Izz * V)
 
+    # Lateral state matrix for [β, p, r, φ], Nelson (1998) eq. 5.31, θ≈0.
+    # Row 1 (β): Y_β*β + Y_p*p + (Y_r - 1)*r + (g/V)*φ
+    #   The '-1' comes from the kinematic coupling: β̇ = ... - r (from v̇ = ... - u0*r)
+    #   Y_p and Y_r are already dimensional (qSb/(2mV) × CY_p/r).
+    # Row 4 (φ): φ̇ = p  (roll rate integrates to bank angle, θ≈0 so tan(θ)≈0)
     A_lat = np.array([
-        [Y_beta,    1.0 + Y_p,    -(1.0 - Y_r),   _G / V],
+        [Y_beta,    Y_p,           Y_r - 1.0,      _G / V],
         [L_beta,    L_p,           L_r,            0.0   ],
         [N_beta,    N_p,           N_r,            0.0   ],
         [0.0,       1.0,           0.0,            0.0   ],
