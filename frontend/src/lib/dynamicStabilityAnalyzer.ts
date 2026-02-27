@@ -32,7 +32,7 @@ export function classifyShortPeriod(zeta: number, omegaN: number): ModeQuality {
   if (zeta < 0.20 || zeta > 2.0) return 'poor';
 
   const zetaGood = zeta >= 0.35 && zeta <= 1.30;
-  const omegaGood = omegaN >= 1.0;
+  const omegaGood = omegaN > 1.0;  // strictly greater than — ωn = 1.0 rad/s is boundary (acceptable, not good)
 
   if (zetaGood && omegaGood) return 'good';
 
