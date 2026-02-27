@@ -75,8 +75,9 @@ export function classifyDutchRoll(zeta: number, omegaN: number): ModeQuality {
   if (zeta < 0) return 'poor';     // divergent
   if (zeta < 0.02) return 'poor';  // nearly neutral — unacceptable
 
-  if (zeta >= 0.08) return 'good';
-  return 'acceptable';  // 0.02 ≤ zeta < 0.08
+  // MIL-F-8785C also requires ωn >= 0.4 rad/s for Level 1 Dutch roll
+  if (zeta >= 0.08 && omegaN >= 0.4) return 'good';
+  return 'acceptable';  // 0.02 ≤ zeta < 0.08, or ωn too low
 }
 
 /**
@@ -108,7 +109,11 @@ export function classifyRollMode(tauS: number): ModeQuality {
  * @param t2S Time-to-double amplitude in seconds. Use Infinity for stable/convergent spiral.
  */
 export function classifySpiralMode(t2S: number): ModeQuality {
-  if (!isFinite(t2S)) return 'good';  // Infinity = stable
+  // NaN or undefined input is genuinely unknown (not good)
+  if (isNaN(t2S)) return 'unknown';
+
+  // +Infinity = stable spiral (never diverges) — best case
+  if (t2S === Infinity) return 'good';
 
   if (t2S < 0) return 'good';         // negative t2 = convergent spiral
   if (t2S >= 20) return 'good';
