@@ -34,7 +34,8 @@ async def generate(design: AircraftDesign) -> GenerationResult:
     try:
         derived_dict = compute_derived_values(design)
         derived = DerivedValues(**derived_dict)
-        warnings = compute_warnings(design)
+        # Pass derived_dict so V36-V48 dynamic/mass-property warnings fire.
+        warnings = compute_warnings(design, derived_dict)
 
         return GenerationResult(derived=derived, warnings=warnings)
 
