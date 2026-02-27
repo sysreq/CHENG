@@ -130,15 +130,18 @@ class TestMemoryStorageIsolation:
 
 
 class TestGetChengMode:
+    @pytest.mark.smoke
     def test_default_is_local(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Without CHENG_MODE set the default is 'local'."""
         monkeypatch.delenv("CHENG_MODE", raising=False)
         assert get_cheng_mode() == "local"
 
+    @pytest.mark.smoke
     def test_local_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CHENG_MODE", "local")
         assert get_cheng_mode() == "local"
 
+    @pytest.mark.smoke
     def test_cloud_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CHENG_MODE", "cloud")
         assert get_cheng_mode() == "cloud"
@@ -167,6 +170,7 @@ class TestGetChengMode:
 
 
 class TestCreateStorageBackend:
+    @pytest.mark.smoke
     def test_local_mode_returns_local_storage(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ) -> None:
@@ -178,6 +182,7 @@ class TestCreateStorageBackend:
         backend = create_storage_backend()
         assert isinstance(backend, LocalStorage)
 
+    @pytest.mark.smoke
     def test_cloud_mode_returns_memory_storage(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -210,6 +215,7 @@ class TestInfoEndpoint:
 
         return TestClient(app)
 
+    @pytest.mark.smoke
     def test_info_local_mode(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -234,6 +240,7 @@ class TestInfoEndpoint:
         assert data["mode"] == "cloud"
         assert "MemoryStorage" in data["storage"]
 
+    @pytest.mark.smoke
     def test_info_returns_version(self, client: TestClient) -> None:
         """GET /api/info always includes a version field."""
         resp = client.get("/api/info")
