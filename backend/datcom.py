@@ -720,20 +720,36 @@ def compute_dynamic_modes(
     # ── Longitudinal eigenvalues ───────────────────────────────────────────
     try:
         evals_long = np.linalg.eig(A_long)[0]
-        # Sort by oscillation frequency |imag| (descending):
-        # short-period has HIGHER frequency than phugoid.
-        # Using abs(real) (damping) can mis-identify modes when phugoid is overdamped.
-        evals_long_sorted = sorted(evals_long, key=lambda e: abs(e.imag), reverse=True)
 
-        # Short-period: highest-frequency eigenvalue (complex pair, indices 0 & 1)
-        sp_ev = evals_long_sorted[0]
-        sp_omega_n, sp_zeta, sp_period_s = _damping_freq_from_eigenvalue(sp_ev)
+        # Separate oscillatory (complex) roots from aperiodic (real) roots.
+        # Threshold: |imag| > 1e-3 rad/s distinguishes oscillatory from aperiodic.
+        osc_long = sorted(
+            [e for e in evals_long if abs(e.imag) > 1e-3],
+            key=lambda e: abs(e.imag),
+            reverse=True,
+        )
 
-        # Phugoid: lowest-frequency eigenvalue (complex pair, indices 2 & 3)
-        ph_ev = evals_long_sorted[2]
-        ph_omega_n, ph_zeta, ph_period_s = _damping_freq_from_eigenvalue(ph_ev)
+        if len(osc_long) >= 2:
+            # Normal case: two complex-conjugate pairs.
+            # Highest |imag| = short-period, lowest |imag| = phugoid.
+            sp_ev = osc_long[0]
+            sp_omega_n, sp_zeta, sp_period_s = _damping_freq_from_eigenvalue(sp_ev)
+            # Phugoid is the other oscillatory mode (last pair after SP pair)
+            ph_ev = osc_long[-1]
+            ph_omega_n, ph_zeta, ph_period_s = _damping_freq_from_eigenvalue(ph_ev)
+        elif len(osc_long) == 1:
+            # Only short-period is oscillatory; phugoid is overdamped — real roots.
+            sp_ev = osc_long[0]
+            sp_omega_n, sp_zeta, sp_period_s = _damping_freq_from_eigenvalue(sp_ev)
+            # Phugoid: fall back to Lanchester approximation
+            ph_omega_n = _G * math.sqrt(2.0) / V
+            ph_zeta = 0.05
+            ph_period_s = 2.0 * math.pi / ph_omega_n
+        else:
+            # No oscillatory modes — pure fallback
+            raise ValueError("No oscillatory longitudinal eigenvalues found")
 
-        # Use Lanchester approximation as sanity check for phugoid
+        # Sanity check: phugoid frequency must be positive and finite
         ph_omega_lanchester = _G * math.sqrt(2.0) / V
         if ph_omega_n < 1e-6 or not math.isfinite(ph_omega_n):
             ph_omega_n = ph_omega_lanchester
