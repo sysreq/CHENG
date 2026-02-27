@@ -224,6 +224,137 @@ class AircraftDesign(CamelModel):
     tail_wheel_diameter: float = Field(default=12.0, ge=5.0, le=40.0)   # mm
     tail_gear_position: float = Field(default=92.0, ge=85.0, le=98.0)   # % fuselage length
 
+    # ── Mass Properties Override (MP01–MP07) ─────────────────────────────────
+    # Optional measured values that replace CHENG's geometric estimates when set.
+    # All default to None for backward compatibility with existing designs.
+    mass_total_override_g: Optional[float] = Field(
+        default=None,
+        ge=50.0,
+        le=10000.0,
+        description="MP01: Measured total aircraft mass in grams. Overrides weight_total_g.",
+    )
+    cg_override_x_mm: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=2000.0,
+        description="MP02: Measured CG position along fuselage longitudinal axis (mm from nose).",
+    )
+    cg_override_z_mm: Optional[float] = Field(
+        default=None,
+        ge=-50.0,
+        le=100.0,
+        description="MP03: Measured CG offset in vertical direction (mm, positive up).",
+    )
+    cg_override_y_mm: Optional[float] = Field(
+        default=None,
+        ge=-100.0,
+        le=100.0,
+        description="MP04: Measured CG offset in lateral direction (mm, positive starboard).",
+    )
+    ixx_override_kg_m2: Optional[float] = Field(
+        default=None,
+        ge=0.0001,
+        le=10.0,
+        description="MP05: Measured roll moment of inertia (kg·m²).",
+    )
+    iyy_override_kg_m2: Optional[float] = Field(
+        default=None,
+        ge=0.0001,
+        le=10.0,
+        description="MP06: Measured pitch moment of inertia (kg·m²).",
+    )
+    izz_override_kg_m2: Optional[float] = Field(
+        default=None,
+        ge=0.0001,
+        le=10.0,
+        description="MP07: Measured yaw moment of inertia (kg·m²).",
+    )
+
+    # ── Flight Condition (FC01–FC02) ─────────────────────────────────────────
+    # Used by the DATCOM dynamic stability analysis. Default 50 m/s / sea level.
+    flight_speed_ms: float = Field(
+        default=50.0,
+        ge=10.0,
+        le=100.0,
+        description="FC01: Cruise airspeed for dynamic stability analysis (m/s).",
+    )
+    flight_altitude_m: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=3000.0,
+        description="FC02: Flight altitude for ISA atmosphere model (m above MSL).",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Dynamic Stability Result — computed by DATCOM pipeline, read-only
+# ---------------------------------------------------------------------------
+
+class DynamicStabilityResult(CamelModel):
+    """DATCOM-computed dynamic stability mode characteristics.
+
+    Serialized to frontend as camelCase via alias_generator=to_camel.
+    All frequencies in rad/s; periods and time constants in seconds.
+    """
+
+    # Longitudinal modes
+    sp_omega_n: float = 0.0
+    """Short-period natural frequency (rad/s)."""
+
+    sp_zeta: float = 0.0
+    """Short-period damping ratio."""
+
+    sp_period_s: float = 0.0
+    """Short-period period (s)."""
+
+    phugoid_omega_n: float = 0.0
+    """Phugoid natural frequency (rad/s)."""
+
+    phugoid_zeta: float = 0.0
+    """Phugoid damping ratio."""
+
+    phugoid_period_s: float = 0.0
+    """Phugoid period (s)."""
+
+    # Lateral/directional modes
+    dr_omega_n: float = 0.0
+    """Dutch roll natural frequency (rad/s)."""
+
+    dr_zeta: float = 0.0
+    """Dutch roll damping ratio."""
+
+    dr_period_s: float = 0.0
+    """Dutch roll period (s)."""
+
+    roll_tau_s: float = 0.0
+    """Roll mode time constant (s)."""
+
+    spiral_tau_s: float = 0.0
+    """Spiral mode time constant (s). Negative = divergent."""
+
+    spiral_t2_s: float = 0.0
+    """Spiral time-to-double (s). Large positive = effectively stable."""
+
+    # Stability derivatives (passthrough for frontend display)
+    cl_alpha: float = 0.0
+    cd_alpha: float = 0.0
+    cm_alpha: float = 0.0
+    cl_q: float = 0.0
+    cm_q: float = 0.0
+    cl_alphadot: float = 0.0
+    cm_alphadot: float = 0.0
+    cy_beta: float = 0.0
+    cl_beta: float = 0.0
+    cn_beta: float = 0.0
+    cy_p: float = 0.0
+    cl_p: float = 0.0
+    cn_p: float = 0.0
+    cy_r: float = 0.0
+    cl_r: float = 0.0
+    cn_r: float = 0.0
+
+    derivatives_estimated: bool = True
+
 
 # ---------------------------------------------------------------------------
 # Derived Values — computed by geometry engine, read-only
@@ -256,6 +387,10 @@ class DerivedValues(CamelModel):
     tail_volume_h: float = 0.0
     tail_volume_v: float = 0.0
     wing_loading_g_dm2: float = 0.0
+
+    # Dynamic stability fields (v1.2) — computed by DATCOM pipeline.
+    # None when DATCOM computation is unavailable or fails.
+    dynamic_stability: Optional[DynamicStabilityResult] = None
 
 
 # ---------------------------------------------------------------------------
