@@ -49,6 +49,7 @@ _NEEDS_ENGINE = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.smoke
 def test_neutral_point_formula() -> None:
     """NP_pct = (0.25 + 0.88 * V_h) * 100."""
     v_h = 0.5
@@ -57,6 +58,7 @@ def test_neutral_point_formula() -> None:
     assert abs(np_pct - expected) < 0.001
 
 
+@pytest.mark.smoke
 def test_neutral_point_zero_v_h() -> None:
     """V_h=0 (no tail) => NP = 25% MAC (wing aerodynamic center)."""
     np_pct = _neutral_point_pct_mac(0.0)
@@ -68,6 +70,7 @@ def test_neutral_point_zero_v_h() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.smoke
 def test_static_margin_positive() -> None:
     """SM > 0 when CG is ahead of NP (pitch-stable)."""
     cg_pct = 25.0   # 25% MAC

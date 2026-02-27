@@ -25,6 +25,7 @@ def mem() -> MemoryStorage:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.smoke
 def test_save_and_load_roundtrip(mem: MemoryStorage) -> None:
     """Data saved then loaded must be identical."""
     data = {"id": "d1", "name": "Test", "wing_span": 1000}
@@ -33,6 +34,7 @@ def test_save_and_load_roundtrip(mem: MemoryStorage) -> None:
     assert loaded == data
 
 
+@pytest.mark.smoke
 def test_save_overwrites_existing(mem: MemoryStorage) -> None:
     """Saving with an existing id must replace the previous data."""
     mem.save_design("d1", {"id": "d1", "name": "Original"})
@@ -41,6 +43,7 @@ def test_save_overwrites_existing(mem: MemoryStorage) -> None:
     assert loaded["name"] == "Updated"
 
 
+@pytest.mark.smoke
 def test_load_not_found_raises(mem: MemoryStorage) -> None:
     """load_design must raise FileNotFoundError for unknown ids."""
     with pytest.raises(FileNotFoundError, match="Design not found: missing"):

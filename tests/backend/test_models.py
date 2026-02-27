@@ -18,6 +18,7 @@ from backend.models import (
 class TestAircraftDesign:
     """Tests for the AircraftDesign model."""
 
+    @pytest.mark.smoke
     def test_defaults(self) -> None:
         """Default construction should produce a valid model."""
         d = AircraftDesign()
@@ -27,6 +28,7 @@ class TestAircraftDesign:
         assert d.fuselage_preset == "Conventional"
         assert d.tail_type == "Conventional"
 
+    @pytest.mark.smoke
     def test_custom_values(self) -> None:
         """Construction with custom values should preserve them."""
         d = AircraftDesign(
@@ -88,6 +90,7 @@ class TestAircraftDesign:
         with pytest.raises(ValidationError):
             AircraftDesign(wing_tip_root_ratio=1.5)
 
+    @pytest.mark.smoke
     def test_literal_fuselage_preset(self) -> None:
         """Invalid fuselage preset should fail validation."""
         with pytest.raises(ValidationError):
@@ -187,6 +190,7 @@ class TestAircraftDesign:
         # Sections always sum to fuselage_length
         assert abs(nose_len + cabin_len + tail_len - d.fuselage_length) < 1e-9
 
+    @pytest.mark.smoke
     def test_serialization_round_trip(self) -> None:
         """Serialize to dict and back should produce identical model."""
         original = AircraftDesign(id="round-trip", wing_span=1500)
