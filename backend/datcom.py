@@ -720,15 +720,17 @@ def compute_dynamic_modes(
     # ── Longitudinal eigenvalues ───────────────────────────────────────────
     try:
         evals_long = np.linalg.eig(A_long)[0]
-        # Sort by magnitude of real part (largest = short-period, smallest = phugoid)
-        evals_long_sorted = sorted(evals_long, key=lambda e: abs(e.real), reverse=True)
+        # Sort by oscillation frequency |imag| (descending):
+        # short-period has HIGHER frequency than phugoid.
+        # Using abs(real) (damping) can mis-identify modes when phugoid is overdamped.
+        evals_long_sorted = sorted(evals_long, key=lambda e: abs(e.imag), reverse=True)
 
-        # Short-period: largest |real| eigenvalue (complex pair)
+        # Short-period: highest-frequency eigenvalue (complex pair, indices 0 & 1)
         sp_ev = evals_long_sorted[0]
         sp_omega_n, sp_zeta, sp_period_s = _damping_freq_from_eigenvalue(sp_ev)
 
-        # Phugoid: smallest |real| (complex pair)
-        ph_ev = evals_long_sorted[2]  # index 2 (pair: 0,1 = SP, 2,3 = phugoid)
+        # Phugoid: lowest-frequency eigenvalue (complex pair, indices 2 & 3)
+        ph_ev = evals_long_sorted[2]
         ph_omega_n, ph_zeta, ph_period_s = _damping_freq_from_eigenvalue(ph_ev)
 
         # Use Lanchester approximation as sanity check for phugoid
