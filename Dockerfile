@@ -29,6 +29,7 @@ RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev
 COPY backend/ ./backend/
 COPY --from=frontend-build /app/frontend/dist ./static/
 COPY airfoils/ ./airfoils/
+COPY datcom/ ./datcom/
 
 # Create data directories
 RUN mkdir -p /data/designs /data/tmp
