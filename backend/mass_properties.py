@@ -109,9 +109,12 @@ def estimate_inertia(
     m_motor_kg = design.motor_weight_g / 1000.0
     m_battery_kg = design.battery_weight_g / 1000.0
 
-    # Total for distribution of electronics
-    m_avionics_kg = max(0.0, (_get(derived, "weight_total_g") / 1000.0)
-                        - m_wing_kg - m_tail_kg - m_fus_kg
+    # Total for distribution of electronics.
+    # weight_total_g (airframe geometry) + motor + battery = full aircraft mass.
+    # Subtract all known structural/propulsion components to get residual
+    # electronics (servos, ESC, receiver, wiring).
+    m_total_kg = (_get(derived, "weight_total_g") + design.motor_weight_g + design.battery_weight_g) / 1000.0
+    m_avionics_kg = max(0.0, m_total_kg - m_wing_kg - m_tail_kg - m_fus_kg
                         - m_motor_kg - m_battery_kg)
 
     # ── Key geometric dimensions (SI, metres) ─────────────────────────────
