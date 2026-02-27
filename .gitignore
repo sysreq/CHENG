@@ -28,3 +28,8 @@ Thumbs.db
 *.log
 .claude/worktrees/
 /gcloud-bin
+
+# pytest-testmon dependency database (regenerated per developer agent, never committed)
+# To populate: python -m pytest tests/backend/ --testmon
+# After any full run, subsequent runs auto-select only affected tests.
+.testmondata
