@@ -132,14 +132,24 @@ def estimate_inertia(
     else:  # Conventional
         r_fus_m = (design.wing_chord * 0.35) / 2000.0
 
-    # Motor position (nose region, fraction of fuselage length)
-    x_motor_m = L_m * 0.05  # ~5% from nose for tractor configs
+    # Motor position from nose (respects tractor vs. pusher configuration).
+    # Tractor: motor at ~5% of fuselage length (nose).
+    # Pusher:  motor at ~95% of fuselage length (tail).
+    if getattr(design, "motor_config", "Tractor") == "Pusher":
+        x_motor_m = L_m * 0.95
+    else:
+        x_motor_m = L_m * 0.05
 
-    # Battery position
+    # Battery position from nose
     x_battery_m = L_m * design.battery_position_frac
 
-    # CG position from derived
-    estimated_cg_mm = _get(derived, "estimated_cg_mm", L_m * 0.30 * 1000.0)
+    # CG position from nose — used to compute motor/battery moment arms.
+    # NOTE: derived["estimated_cg_mm"] is wing-LE-referenced (see engine._compute_cg
+    # docstring: "CG distance aft of wing root LE").  We cannot convert it to
+    # nose-referenced here without knowing wing_x.  Use a fixed-fraction estimate
+    # of 30% fuselage length, which matches the engine fallback and gives
+    # physically plausible arm lengths for inertia estimation purposes.
+    cg_x_m = L_m * 0.30
 
     # ── Wing contribution ─────────────────────────────────────────────────
     # Model each half as a slender rod with distributed mass along the span.
@@ -172,9 +182,7 @@ def estimate_inertia(
     I_tail_yaw = m_tail_kg * l_t_m ** 2    # added to Izz
 
     # ── Motor contribution ────────────────────────────────────────────────
-    # Point mass near nose, at distance x_motor from CG
-    # CG is roughly at 30% of fuselage length
-    cg_x_m = estimated_cg_mm / 1000.0
+    # Point mass at x_motor_m from nose, at distance from nose-referenced CG
     x_motor_from_cg = abs(x_motor_m - cg_x_m)
     I_motor_pitch = m_motor_kg * x_motor_from_cg ** 2  # added to Iyy
 
