@@ -14,13 +14,13 @@
 # Escalation rules:
 #   - If infra files changed (*.toml, *.yaml, *.yml, docker*, Makefile, .github/*)
 #     → Run full backend + frontend suite instead of change-scoped
-#   - If broad changes (≥3 modules): skip this script, run full suite manually
+#   - If broad changes (3+ modules): skip this script, run full suite manually
 #   - If testmon data is stale/missing: fall back to full pytest
 #
 # See docs/test_strategy.md for the complete test policy.
 # =============================================================================
 
-set -euo pipefail
+set -uo pipefail
 
 # ---------------------------------------------------------------------------
 # Resolve repo root (works from any working directory)
@@ -59,7 +59,7 @@ if [ -n "$ALL_CHANGED" ]; then
             *.toml|*.yaml|*.yml|Dockerfile*|docker-compose*|Makefile|.github/*)
                 INFRA_CHANGED=true ;;
             scripts/*)
-                # Script changes don't require re-running tests — the script itself changed
+                # Script changes don't require re-running tests
                 : ;;
         esac
     done <<< "$ALL_CHANGED"
@@ -71,6 +71,13 @@ echo "Frontend changed: $FRONTEND_CHANGED"
 echo "Infra changed:    $INFRA_CHANGED"
 echo ""
 
+# Helper: print failure message and exit 1
+fail() {
+    echo ""
+    echo "[FAIL] $*"
+    exit 1
+}
+
 # ---------------------------------------------------------------------------
 # ESCALATION: Infrastructure change → full suite
 # ---------------------------------------------------------------------------
@@ -81,20 +88,12 @@ if [ "$INFRA_CHANGED" = true ]; then
 
     echo "--- Full backend suite ---"
     cd "$REPO_ROOT"
-    python -m pytest tests/backend/ -q --tb=short
-    BACKEND_EXIT=$?
+    python -m pytest tests/backend/ -q --tb=short || fail "Full backend suite failed. Fix failing tests before committing."
 
     echo ""
     echo "--- Full frontend suite ---"
     cd "$REPO_ROOT/frontend"
-    pnpm exec vitest run --config ../tests/frontend/vitest.config.ts
-    FRONTEND_EXIT=$?
-
-    if [ $BACKEND_EXIT -ne 0 ] || [ $FRONTEND_EXIT -ne 0 ]; then
-        echo ""
-        echo "[FAIL] Full suite failed. Fix failing tests before committing."
-        exit 1
-    fi
+    pnpm exec vitest run --config ../tests/frontend/vitest.config.ts || fail "Full frontend suite failed. Fix failing tests before committing."
 
     echo ""
     echo "[PASS] Full suite passed (escalated due to infra change)"
@@ -110,21 +109,15 @@ echo "--- Tier 1: Smoke tests (always) ---"
 # Backend smoke tests
 echo "[backend] pytest -m smoke"
 cd "$REPO_ROOT"
-python -m pytest tests/backend/ -m smoke --tb=short -q
-SMOKE_BACKEND_EXIT=$?
+python -m pytest tests/backend/ -m smoke --tb=short -q \
+    || fail "Backend smoke tests failed. Fix before committing."
 
 # Frontend smoke tests
 echo ""
 echo "[frontend] vitest run (smoke only)"
 cd "$REPO_ROOT/frontend"
-pnpm exec vitest run --config ../tests/frontend/vitest.smoke.config.ts
-SMOKE_FRONTEND_EXIT=$?
-
-if [ $SMOKE_BACKEND_EXIT -ne 0 ] || [ $SMOKE_FRONTEND_EXIT -ne 0 ]; then
-    echo ""
-    echo "[FAIL] Smoke tests failed. Fix before committing."
-    exit 1
-fi
+pnpm exec vitest run --config ../tests/frontend/vitest.smoke.config.ts \
+    || fail "Frontend smoke tests failed. Fix before committing."
 
 echo ""
 echo "[PASS] Smoke tests passed"
@@ -143,8 +136,6 @@ fi
 echo ""
 echo "--- Tier 2: Change-scoped tests ---"
 
-TIER2_EXIT=0
-
 # Backend change-scoped
 if [ "$BACKEND_CHANGED" = true ]; then
     echo "[backend] pytest --testmon (change-scoped)"
@@ -152,18 +143,14 @@ if [ "$BACKEND_CHANGED" = true ]; then
 
     if [ -f ".testmondata" ]; then
         # testmon data exists — run only affected tests
-        python -m pytest tests/backend/ --testmon --tb=short -q
-        TESTMON_EXIT=$?
+        python -m pytest tests/backend/ --testmon --tb=short -q \
+            || fail "Backend change-scoped tests failed. Fix before committing."
     else
         # No testmon data — fall back to full backend suite
         echo "  [WARN] .testmondata not found — running full backend suite"
         echo "  Tip: Run 'python -m pytest tests/backend/ --testmon' once to initialize"
-        python -m pytest tests/backend/ -q --tb=short
-        TESTMON_EXIT=$?
-    fi
-
-    if [ $TESTMON_EXIT -ne 0 ]; then
-        TIER2_EXIT=1
+        python -m pytest tests/backend/ -q --tb=short \
+            || fail "Full backend suite failed. Fix before committing."
     fi
 fi
 
@@ -177,20 +164,17 @@ if [ "$FRONTEND_CHANGED" = true ]; then
     if git rev-parse HEAD~1 >/dev/null 2>&1; then
         pnpm exec vitest run \
             --config ../tests/frontend/vitest.config.ts \
-            --changed HEAD~1
-        VITEST_CHANGED_EXIT=$?
+            --changed HEAD~1 \
+            || fail "Frontend change-scoped tests failed. Fix before committing."
     else
-        # First commit on branch — compare against plan branch base
-        echo "  [INFO] HEAD~1 not available — comparing against origin/plan/test-optimization-plan"
-        PLAN_BASE="$(git rev-parse --abbrev-ref --symbolic-full-name @{upstream} 2>/dev/null || echo 'origin/plan/test-optimization-plan')"
+        # First commit on branch — compare against upstream base
+        PLAN_BASE="$(git rev-parse --abbrev-ref --symbolic-full-name @{upstream} 2>/dev/null \
+            || echo 'origin/plan/test-optimization-plan')"
+        echo "  [INFO] HEAD~1 not available — comparing against $PLAN_BASE"
         pnpm exec vitest run \
             --config ../tests/frontend/vitest.config.ts \
-            --changed "$PLAN_BASE"
-        VITEST_CHANGED_EXIT=$?
-    fi
-
-    if [ $VITEST_CHANGED_EXIT -ne 0 ]; then
-        TIER2_EXIT=1
+            --changed "$PLAN_BASE" \
+            || fail "Frontend change-scoped tests failed. Fix before committing."
     fi
 fi
 
@@ -199,10 +183,5 @@ fi
 # ---------------------------------------------------------------------------
 
 echo ""
-if [ $TIER2_EXIT -ne 0 ]; then
-    echo "[FAIL] Change-scoped tests failed. Fix failing tests before committing."
-    exit 1
-fi
-
 echo "[PASS] Pre-commit tests complete (smoke + change-scoped)"
 exit 0
