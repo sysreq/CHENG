@@ -265,6 +265,37 @@ export interface AircraftDesign {
    *  @unit % @min 85 @max 98 @default 92 */
   tailGearPosition: number;
 
+  // ── Mass Properties Override (MP01–MP07) ─────────────────────────────────
+  /** MP01: Measured total aircraft mass (g). Overrides weight estimate when set.
+   *  @unit g @min 50 @max 10000 */
+  massTotalOverrideG?: number | null;
+  /** MP02: Measured CG position along fuselage longitudinal axis from nose (mm).
+   *  @unit mm @min 0 @max 2000 */
+  cgOverrideXMm?: number | null;
+  /** MP03: Measured CG vertical offset (mm, positive = up).
+   *  @unit mm @min -50 @max 100 */
+  cgOverrideZMm?: number | null;
+  /** MP04: Measured CG lateral offset (mm, positive = starboard).
+   *  @unit mm @min -100 @max 100 */
+  cgOverrideYMm?: number | null;
+  /** MP05: Measured roll moment of inertia (kg·m²).
+   *  @unit kg·m² @min 0.0001 @max 10 */
+  ixxOverrideKgM2?: number | null;
+  /** MP06: Measured pitch moment of inertia (kg·m²).
+   *  @unit kg·m² @min 0.0001 @max 10 */
+  iyyOverrideKgM2?: number | null;
+  /** MP07: Measured yaw moment of inertia (kg·m²).
+   *  @unit kg·m² @min 0.0001 @max 10 */
+  izzOverrideKgM2?: number | null;
+
+  // ── Flight Condition (FC01–FC02) ─────────────────────────────────────────
+  /** FC01: Cruise airspeed for dynamic stability analysis (m/s).
+   *  @unit m/s @min 10 @max 100 @default 50 */
+  flightSpeedMs?: number;
+  /** FC02: Flight altitude for ISA atmosphere model (m MSL).
+   *  @unit m @min 0 @max 3000 @default 0 */
+  flightAltitudeM?: number;
+
   // ── Export / Print ────────────────────────────────────────────────
   /** Printer bed X. @unit mm @min 100 @max 500 @default 220 */
   printBedX: number;
@@ -288,6 +319,83 @@ export interface AircraftDesign {
   teMinThickness: number;
   /** 3D print support strategy. @default "minimal" */
   supportStrategy: SupportStrategy;
+}
+
+// ---------------------------------------------------------------------------
+// DynamicStabilityResult — computed by backend/datcom.py
+// ---------------------------------------------------------------------------
+
+/**
+ * Dynamic stability analysis results from DATCOM empirical method.
+ * Serialized from backend DynamicStabilityResult Pydantic model (camelCase).
+ */
+export interface DynamicStabilityResult {
+  // ── Longitudinal modes ────────────────────────────────────────────────
+  /** Short-period natural frequency (rad/s). */
+  spOmegaN: number;
+  /** Short-period damping ratio. */
+  spZeta: number;
+  /** Short-period period (s). Infinity if critically damped. */
+  spPeriodS: number;
+  /** Phugoid natural frequency (rad/s). */
+  phugoidOmegaN: number;
+  /** Phugoid damping ratio. */
+  phugoidZeta: number;
+  /** Phugoid period (s). */
+  phugoidPeriodS: number;
+
+  // ── Lateral modes ─────────────────────────────────────────────────────
+  /** Dutch roll natural frequency (rad/s). */
+  drOmegaN: number;
+  /** Dutch roll damping ratio. */
+  drZeta: number;
+  /** Dutch roll period (s). */
+  drPeriodS: number;
+  /** Roll mode time constant (s). */
+  rollTauS: number;
+  /** Spiral mode time constant (s). Negative = divergent. */
+  spiralTauS: number;
+  /** Spiral mode doubling time (s). Infinity if stable or convergent. */
+  spiralT2S: number;
+
+  // ── Stability derivatives (longitudinal) ─────────────────────────────
+  /** Lift-curve slope dCL/dα (per rad). */
+  clAlpha: number;
+  /** Drag-curve slope dCD/dα (per rad). */
+  cdAlpha: number;
+  /** Pitch stiffness dCm/dα (per rad). Negative = stable. */
+  cmAlpha: number;
+  /** Pitch damping due to pitch rate (per rad). */
+  clQ: number;
+  /** Pitch damping dCm/d(qc/2V) (per rad). Negative = stable. */
+  cmQ: number;
+  /** Lift due to alpha-dot (per rad). */
+  clAlphadot: number;
+  /** Pitch due to alpha-dot (per rad). */
+  cmAlphadot: number;
+
+  // ── Stability derivatives (lateral) ──────────────────────────────────
+  /** Side force due to sideslip (per rad). */
+  cyBeta: number;
+  /** Roll moment due to sideslip / dihedral effect (per rad). Negative = stable. */
+  clBeta: number;
+  /** Yaw moment due to sideslip / weathercock stability (per rad). Positive = stable. */
+  cnBeta: number;
+  /** Side force due to roll rate. */
+  cyP: number;
+  /** Roll damping dCl/d(pb/2V) (per rad). Negative = stable. */
+  clP: number;
+  /** Yaw due to roll rate (adverse yaw). */
+  cnP: number;
+  /** Side force due to yaw rate. */
+  cyR: number;
+  /** Roll due to yaw rate. */
+  clR: number;
+  /** Yaw damping dCn/d(rb/2V) (per rad). Negative = stable. */
+  cnR: number;
+
+  /** True when derivatives are estimated (DATCOM), False when measured. */
+  derivativesEstimated: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -328,6 +436,10 @@ export interface DerivedValues {
   tailVolumeV: number;
   /** Wing loading = total weight / wing area. @unit g/dm2 */
   wingLoadingGDm2: number;
+
+  // Dynamic stability (dynamic-stability-datcom plan)
+  /** DATCOM dynamic stability analysis results. Null when not yet computed or on error. */
+  dynamicStability?: DynamicStabilityResult | null;
 }
 
 /**
@@ -352,6 +464,8 @@ export const DEFAULT_DERIVED_VALUES: DerivedValues = {
   tailVolumeH: 0,
   tailVolumeV: 0,
   wingLoadingGDm2: 0,
+  // Dynamic stability — null until backend DATCOM analysis completes
+  dynamicStability: null,
 };
 
 // ---------------------------------------------------------------------------
