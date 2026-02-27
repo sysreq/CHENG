@@ -796,7 +796,10 @@ def compute_dynamic_modes(
             spiral_ev_val = 0.01
 
         roll_tau_s = -1.0 / roll_ev if abs(roll_ev) > 1e-6 else 10.0
-        spiral_tau_s = 1.0 / spiral_ev_val if abs(spiral_ev_val) > 1e-6 else 1e6
+        # spiral_tau_s convention: positive = stable/convergent, negative = divergent.
+        # Eigenvalue sign: stable spiral has s < 0, divergent has s > 0.
+        # tau = -1/s → stable: tau > 0, divergent: tau < 0.  Matches docstring.
+        spiral_tau_s = -1.0 / spiral_ev_val if abs(spiral_ev_val) > 1e-6 else 1e6
 
         # Time to double for spiral (divergent if spiral_ev_val > 0)
         if spiral_ev_val > 1e-6:
