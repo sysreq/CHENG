@@ -287,6 +287,76 @@ class AircraftDesign(CamelModel):
 
 
 # ---------------------------------------------------------------------------
+# Dynamic Stability Result — computed by DATCOM pipeline, read-only
+# ---------------------------------------------------------------------------
+
+class DynamicStabilityResult(CamelModel):
+    """DATCOM-computed dynamic stability mode characteristics.
+
+    Serialized to frontend as camelCase via alias_generator=to_camel.
+    All frequencies in rad/s; periods and time constants in seconds.
+    """
+
+    # Longitudinal modes
+    sp_omega_n: float = 0.0
+    """Short-period natural frequency (rad/s)."""
+
+    sp_zeta: float = 0.0
+    """Short-period damping ratio."""
+
+    sp_period_s: float = 0.0
+    """Short-period period (s)."""
+
+    phugoid_omega_n: float = 0.0
+    """Phugoid natural frequency (rad/s)."""
+
+    phugoid_zeta: float = 0.0
+    """Phugoid damping ratio."""
+
+    phugoid_period_s: float = 0.0
+    """Phugoid period (s)."""
+
+    # Lateral/directional modes
+    dr_omega_n: float = 0.0
+    """Dutch roll natural frequency (rad/s)."""
+
+    dr_zeta: float = 0.0
+    """Dutch roll damping ratio."""
+
+    dr_period_s: float = 0.0
+    """Dutch roll period (s)."""
+
+    roll_tau_s: float = 0.0
+    """Roll mode time constant (s)."""
+
+    spiral_tau_s: float = 0.0
+    """Spiral mode time constant (s). Negative = divergent."""
+
+    spiral_t2_s: float = 0.0
+    """Spiral time-to-double (s). Large positive = effectively stable."""
+
+    # Stability derivatives (passthrough for frontend display)
+    cl_alpha: float = 0.0
+    cd_alpha: float = 0.0
+    cm_alpha: float = 0.0
+    cl_q: float = 0.0
+    cm_q: float = 0.0
+    cl_alphadot: float = 0.0
+    cm_alphadot: float = 0.0
+    cy_beta: float = 0.0
+    cl_beta: float = 0.0
+    cn_beta: float = 0.0
+    cy_p: float = 0.0
+    cl_p: float = 0.0
+    cn_p: float = 0.0
+    cy_r: float = 0.0
+    cl_r: float = 0.0
+    cn_r: float = 0.0
+
+    derivatives_estimated: bool = True
+
+
+# ---------------------------------------------------------------------------
 # Derived Values — computed by geometry engine, read-only
 # ---------------------------------------------------------------------------
 
@@ -317,6 +387,10 @@ class DerivedValues(CamelModel):
     tail_volume_h: float = 0.0
     tail_volume_v: float = 0.0
     wing_loading_g_dm2: float = 0.0
+
+    # Dynamic stability fields (v1.2) — computed by DATCOM pipeline.
+    # None when DATCOM computation is unavailable or fails.
+    dynamic_stability: Optional[DynamicStabilityResult] = None
 
 
 # ---------------------------------------------------------------------------
