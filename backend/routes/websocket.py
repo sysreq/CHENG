@@ -262,7 +262,8 @@ async def preview_websocket(ws: WebSocket) -> None:
                 derived = DerivedValues(**derived_dict)
 
                 # Compute warnings (canonical module)
-                warnings_list = compute_warnings(latest)
+                # Pass derived_dict so V36-V48 dynamic/mass-property warnings fire.
+                warnings_list = compute_warnings(latest, derived_dict)
 
                 # Generate geometry in thread pool with limiter.
                 # abandon_on_cancel=False ensures the thread releases

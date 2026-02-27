@@ -1115,18 +1115,341 @@ def _check_v35(
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Dynamic stability warnings  (V36-V45)  [v1.2]
+# ---------------------------------------------------------------------------
+
+
+def _check_v36(ds: object, out: list[ValidationWarning]) -> None:
+    """V36: Short-period under-damped (ζ_sp < 0.35)."""
+    zeta = getattr(ds, "sp_zeta", None)
+    if zeta is not None and zeta < 0.35:
+        out.append(
+            ValidationWarning(
+                id="V36",
+                message=(
+                    f"Short-period mode is under-damped (ζ = {zeta:.3f}). "
+                    f"Increase horizontal tail area or tail arm to add pitch damping."
+                ),
+                fields=["h_stab_span", "h_stab_chord", "tail_arm"],
+            )
+        )
+
+
+def _check_v37(ds: object, out: list[ValidationWarning]) -> None:
+    """V37: Short-period over-damped (ζ_sp > 1.5) — sluggish pitch response."""
+    zeta = getattr(ds, "sp_zeta", None)
+    if zeta is not None and zeta > 1.5:
+        out.append(
+            ValidationWarning(
+                id="V37",
+                message=(
+                    f"Short-period mode is heavily over-damped (ζ = {zeta:.3f}). "
+                    f"Pitch response may feel sluggish. Consider reducing tail area."
+                ),
+                fields=["h_stab_span", "h_stab_chord"],
+            )
+        )
+
+
+def _check_v38(ds: object, out: list[ValidationWarning]) -> None:
+    """V38: Phugoid unstable (ζ_ph < 0) — diverging speed oscillation."""
+    zeta = getattr(ds, "phugoid_zeta", None)
+    if zeta is not None and zeta < 0.0:
+        out.append(
+            ValidationWarning(
+                id="V38",
+                message=(
+                    f"Phugoid mode is unstable (ζ = {zeta:.3f}). "
+                    f"Aircraft will exhibit diverging speed/altitude oscillation."
+                ),
+                fields=["tail_arm", "h_stab_span", "h_stab_chord"],
+            )
+        )
+
+
+def _check_v39(ds: object, out: list[ValidationWarning]) -> None:
+    """V39: Dutch roll unstable (ζ_dr < 0) — diverging yaw/roll oscillation."""
+    zeta = getattr(ds, "dr_zeta", None)
+    if zeta is not None and zeta < 0.0:
+        out.append(
+            ValidationWarning(
+                id="V39",
+                message=(
+                    f"Dutch roll mode is unstable (ζ = {zeta:.3f}). "
+                    f"Increase vertical tail area or add winglets to improve yaw stability."
+                ),
+                fields=["v_stab_span", "v_stab_chord"],
+            )
+        )
+
+
+def _check_v40(ds: object, out: list[ValidationWarning]) -> None:
+    """V40: Dutch roll lightly damped (0 <= ζ_dr < 0.08) — oscillatory but convergent."""
+    zeta = getattr(ds, "dr_zeta", None)
+    if zeta is not None and 0.0 <= zeta < 0.08:
+        out.append(
+            ValidationWarning(
+                id="V40",
+                message=(
+                    f"Dutch roll mode is lightly damped (ζ = {zeta:.3f} < 0.08). "
+                    f"Consider increasing vertical tail area."
+                ),
+                fields=["v_stab_span", "v_stab_chord"],
+            )
+        )
+
+
+def _check_v41(ds: object, out: list[ValidationWarning]) -> None:
+    """V41: Spiral mode diverges quickly (T2 < 8 s) — MIL-F-8785C Level 2 limit."""
+    t2 = getattr(ds, "spiral_t2_s", None)
+    if t2 is not None and not math.isinf(t2) and t2 < 8.0:
+        out.append(
+            ValidationWarning(
+                id="V41",
+                message=(
+                    f"Spiral mode diverges rapidly (T2 = {t2:.1f} s). "
+                    f"Aircraft will roll off unattended. Increase dihedral or reduce wing sweep."
+                ),
+                fields=["wing_dihedral", "wing_sweep", "v_stab_span"],
+            )
+        )
+
+
+def _check_v42(ds: object, out: list[ValidationWarning]) -> None:
+    """V42: Roll mode sluggish (τ_roll > 1.0 s) — slow aileron response."""
+    tau = getattr(ds, "roll_tau_s", None)
+    if tau is not None and tau > 1.0:
+        out.append(
+            ValidationWarning(
+                id="V42",
+                message=(
+                    f"Roll mode time constant is large (τ = {tau:.2f} s). "
+                    f"Roll response will feel sluggish. Reduce wing span or increase aileron area."
+                ),
+                fields=["wing_span", "aileron_enable"],
+            )
+        )
+
+
+def _check_v43(design: AircraftDesign, ds: object, out: list[ValidationWarning]) -> None:
+    """V43: CL_trim exceeds section CL_max — stall at cruise condition."""
+    cl_trim = getattr(ds, "cl_alpha", None)  # Not directly; need flight condition access.
+    # We re-derive CL_trim from mass and flight condition using the same ISA formula.
+    try:
+        from backend.mass_properties import resolve_mass_properties
+        from backend.datcom import compute_flight_condition
+        from backend.geometry.engine import compute_derived_values
+        from backend.airfoil_data import interpolate_section_aero
+
+        derived_dict = compute_derived_values(design)
+        mass_props = resolve_mass_properties(design, derived_dict)
+        fc = compute_flight_condition(design, mass_props)
+
+        # Section CL_max for the wing airfoil at cruise Re/Mach
+        wing_aero = interpolate_section_aero(
+            design.wing_airfoil,
+            Re=fc.rho * fc.speed_ms * (design.wing_chord / 1000.0) / 1.81e-5,
+            Mach=fc.speed_ms / 340.3,
+        )
+        cl_max_section = wing_aero["cl_max"]
+
+        if fc.CL_trim > cl_max_section:
+            out.append(
+                ValidationWarning(
+                    id="V43",
+                    message=(
+                        f"Aircraft is stalling at cruise (CL_trim = {fc.CL_trim:.3f} > "
+                        f"CL_max = {cl_max_section:.3f}). Reduce flight speed or increase wing area."
+                    ),
+                    fields=["flight_speed_ms", "wing_span", "wing_chord"],
+                )
+            )
+    except Exception:
+        # V43 check is best-effort — never block validation
+        pass
+
+
+def _check_v44(design: AircraftDesign, out: list[ValidationWarning]) -> None:
+    """V44: Flying wing (BWB) — DATCOM accuracy limited for tailless configurations."""
+    if design.fuselage_preset == "Blended-Wing-Body":
+        out.append(
+            ValidationWarning(
+                id="V44",
+                message=(
+                    "Flying wing detected: DATCOM empirical methods have reduced accuracy "
+                    "for tailless configurations. Dynamic stability results are indicative only."
+                ),
+                fields=["fuselage_preset"],
+            )
+        )
+
+
+def _check_v45(ds: object, out: list[ValidationWarning]) -> None:
+    """V45: CL_trim < 0.1 — aircraft is cruising too fast (near zero lift)."""
+    # CL_trim stored in dynamic_stability object via flight condition.
+    # We access it indirectly — recompute only if dynamic_stability is available.
+    # Since V43 already recomputes, V45 uses ds.cl_alpha as a proxy for trim speed adequacy.
+    # A better approach: store CL_trim in DynamicStabilityResult. For now, use cl_alpha
+    # as a plausibility check (very low CL_alpha means design may be degenerate).
+    # The real CL_trim check is done in V43. V45 here re-derives it using mass + flight cond.
+    try:
+        # Access the design from the closure — ds is passed from validate_dynamic_stability
+        # which has access to both design and ds. We use the design captured in the outer scope.
+        # This check is bypassed here; the actual CL_trim < 0.1 check is done in
+        # validate_dynamic_stability() directly (see below).
+        pass
+    except Exception:
+        pass
+
+
+def validate_dynamic_stability(
+    design: AircraftDesign,
+    derived: dict,
+    out: list[ValidationWarning],
+) -> None:
+    """Run dynamic-stability warnings V36-V45 against derived.dynamic_stability.
+
+    Skips all checks if dynamic_stability is None (DATCOM unavailable or failed).
+    """
+    ds = derived.get("dynamic_stability") if isinstance(derived, dict) else getattr(derived, "dynamic_stability", None)
+    if ds is None:
+        return
+
+    _check_v36(ds, out)
+    _check_v37(ds, out)
+    _check_v38(ds, out)
+    _check_v39(ds, out)
+    _check_v40(ds, out)
+    _check_v41(ds, out)
+    _check_v42(ds, out)
+    _check_v43(design, ds, out)
+    _check_v44(design, out)
+
+    # V45: CL_trim < 0.1 — re-derive from mass + flight condition
+    try:
+        from backend.mass_properties import resolve_mass_properties
+        from backend.datcom import compute_flight_condition
+
+        mass_props = resolve_mass_properties(design, derived)
+        fc = compute_flight_condition(design, mass_props)
+        if fc.CL_trim < 0.1:
+            out.append(
+                ValidationWarning(
+                    id="V45",
+                    message=(
+                        f"Cruise lift coefficient is very low (CL_trim = {fc.CL_trim:.3f}). "
+                        f"Aircraft may be flying too fast for its weight."
+                    ),
+                    fields=["flight_speed_ms", "wing_span", "wing_chord"],
+                )
+            )
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Mass properties warnings  (V46-V48)  [v1.2]
+# ---------------------------------------------------------------------------
+
+
+def validate_mass_properties(
+    design: AircraftDesign,
+    derived: dict,
+    out: list[ValidationWarning],
+) -> None:
+    """Run mass-property override warnings V46-V48.
+
+    All checks are best-effort and never block validation.
+    """
+    # V46: mass_total_override_g differs from weight_total_g by > 40%
+    if design.mass_total_override_g is not None:
+        try:
+            airframe_g = derived.get("weight_total_g", 0.0) if isinstance(derived, dict) else getattr(derived, "weight_total_g", 0.0)
+            computed_total_g = (
+                airframe_g
+                + design.motor_weight_g
+                + design.battery_weight_g
+            )
+            if computed_total_g > 0:
+                diff_pct = abs(design.mass_total_override_g - computed_total_g) / computed_total_g * 100.0
+                if diff_pct > 40.0:
+                    out.append(
+                        ValidationWarning(
+                            id="V46",
+                            message=(
+                                f"Measured mass ({design.mass_total_override_g:.0f} g) differs from "
+                                f"estimated total ({computed_total_g:.0f} g) by {diff_pct:.0f}%. "
+                                f"Check motor/battery weights."
+                            ),
+                            fields=["mass_total_override_g", "motor_weight_g", "battery_weight_g"],
+                        )
+                    )
+        except Exception:
+            pass
+
+    # V47: cg_override_x_mm differs from estimated_cg_mm by > 15% of fuselage_length
+    if design.cg_override_x_mm is not None:
+        try:
+            # estimated_cg_mm is wing-root-LE-referenced; cg_override_x_mm is nose-referenced.
+            # Convert estimated_cg to nose-referenced using wing_x position.
+            from backend.geometry.engine import _compute_wing_mount
+            wing_x, _ = _compute_wing_mount(design)
+            estimated_cg_from_root_le = derived.get("estimated_cg_mm", 0.0) if isinstance(derived, dict) else getattr(derived, "estimated_cg_mm", 0.0)
+            estimated_cg_nose_ref = wing_x + estimated_cg_from_root_le
+            diff_mm = abs(design.cg_override_x_mm - estimated_cg_nose_ref)
+            threshold_mm = design.fuselage_length * 0.15
+            if diff_mm > threshold_mm:
+                out.append(
+                    ValidationWarning(
+                        id="V47",
+                        message=(
+                            f"Measured CG ({design.cg_override_x_mm:.0f} mm from nose) differs from "
+                            f"estimated CG ({estimated_cg_nose_ref:.0f} mm from nose) by "
+                            f"{diff_mm:.0f} mm (> 15% of fuselage length). Verify CG measurement."
+                        ),
+                        fields=["cg_override_x_mm", "battery_position_frac"],
+                    )
+                )
+        except Exception:
+            pass
+
+    # V48: iyy_override_kg_m2 < ixx_override_kg_m2 (implausible inertia — pitch < roll)
+    if design.iyy_override_kg_m2 is not None and design.ixx_override_kg_m2 is not None:
+        if design.iyy_override_kg_m2 < design.ixx_override_kg_m2:
+            out.append(
+                ValidationWarning(
+                    id="V48",
+                    message=(
+                        f"Pitch inertia Iyy ({design.iyy_override_kg_m2:.4f} kg·m²) is less than "
+                        f"roll inertia Ixx ({design.ixx_override_kg_m2:.4f} kg·m²). "
+                        f"For a fixed-wing aircraft, Iyy should be larger than Ixx."
+                    ),
+                    fields=["iyy_override_kg_m2", "ixx_override_kg_m2"],
+                )
+            )
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
 
-def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
+def compute_warnings(design: AircraftDesign, derived: dict | None = None) -> list[ValidationWarning]:
     """Compute all non-blocking validation warnings for a design.
 
     Returns a list of ValidationWarning objects.  Each warning has a unique
     ID (V01-V08 structural, V09-V13 aero/structural, V16-V23 print,
     V24-V28 printability, V30 control surfaces, V29 multi-section wing,
-    V31 landing gear, V32 tail arm clamping, V34-V35 static stability),
+    V31 landing gear, V32 tail arm clamping, V34-V35 static stability,
+    V36-V45 dynamic stability, V46-V48 mass properties),
     a human-readable message, and the list of affected parameter field names.
+
+    Args:
+        design: The aircraft design parameters.
+        derived: Optional derived values dict (from compute_derived_values()).
+                 When provided, enables V36-V48 dynamic stability and mass
+                 property warnings. When None, those checks are skipped.
     """
     warnings: list[ValidationWarning] = []
 
@@ -1184,5 +1507,10 @@ def compute_warnings(design: AircraftDesign) -> list[ValidationWarning]:
     if static_margin_pct is not None:
         _check_v34(design, warnings, static_margin_pct)
         _check_v35(design, warnings, static_margin_pct)
+
+    # Dynamic stability warnings (V36-V45) [v1.2] — requires derived dict
+    if derived is not None:
+        validate_dynamic_stability(design, derived, warnings)
+        validate_mass_properties(design, derived, warnings)
 
     return warnings
