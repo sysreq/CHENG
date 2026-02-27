@@ -25,6 +25,7 @@ def reset_module():
 class TestHealthEndpoint:
     """Health endpoint returns required fields for Cloud Run readiness probes."""
 
+    @pytest.mark.smoke
     @pytest.mark.asyncio
     async def test_health_returns_status_ok(self):
         from backend.main import app
@@ -34,6 +35,7 @@ class TestHealthEndpoint:
         data = r.json()
         assert data["status"] == "ok"
 
+    @pytest.mark.smoke
     @pytest.mark.asyncio
     async def test_health_returns_mode_field(self):
         """Cloud Run startup/liveness probes rely on /health; mode field aids debugging."""
@@ -45,6 +47,7 @@ class TestHealthEndpoint:
         assert "mode" in data
         assert data["mode"] in ("local", "cloud")
 
+    @pytest.mark.smoke
     @pytest.mark.asyncio
     async def test_health_returns_version(self):
         from backend.main import app

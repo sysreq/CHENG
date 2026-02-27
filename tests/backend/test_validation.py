@@ -343,6 +343,7 @@ class TestV08:
 
 
 class TestDefaultDesign:
+    @pytest.mark.smoke
     def test_default_has_few_warnings(self) -> None:
         """Default design parameters should produce a flyable, printable design."""
         design = AircraftDesign()
