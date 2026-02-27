@@ -1179,7 +1179,7 @@ def _check_v39(ds: object, out: list[ValidationWarning]) -> None:
                     f"Dutch roll mode is unstable (ζ = {zeta:.3f}). "
                     f"Increase vertical tail area or add winglets to improve yaw stability."
                 ),
-                fields=["v_stab_span", "v_stab_chord"],
+                fields=["v_stab_height", "v_stab_root_chord"],
             )
         )
 
@@ -1195,7 +1195,7 @@ def _check_v40(ds: object, out: list[ValidationWarning]) -> None:
                     f"Dutch roll mode is lightly damped (ζ = {zeta:.3f} < 0.08). "
                     f"Consider increasing vertical tail area."
                 ),
-                fields=["v_stab_span", "v_stab_chord"],
+                fields=["v_stab_height", "v_stab_root_chord"],
             )
         )
 
@@ -1211,7 +1211,7 @@ def _check_v41(ds: object, out: list[ValidationWarning]) -> None:
                     f"Spiral mode diverges rapidly (T2 = {t2:.1f} s). "
                     f"Aircraft will roll off unattended. Increase dihedral or reduce wing sweep."
                 ),
-                fields=["wing_dihedral", "wing_sweep", "v_stab_span"],
+                fields=["wing_dihedral", "wing_sweep", "v_stab_height"],
             )
         )
 
@@ -1232,18 +1232,29 @@ def _check_v42(ds: object, out: list[ValidationWarning]) -> None:
         )
 
 
-def _check_v43(design: AircraftDesign, ds: object, out: list[ValidationWarning]) -> None:
-    """V43: CL_trim exceeds section CL_max — stall at cruise condition."""
-    cl_trim = getattr(ds, "cl_alpha", None)  # Not directly; need flight condition access.
-    # We re-derive CL_trim from mass and flight condition using the same ISA formula.
+def _check_v43(
+    design: AircraftDesign,
+    ds: object,
+    out: list[ValidationWarning],
+    derived: "dict | None" = None,
+) -> None:
+    """V43: CL_trim exceeds section CL_max — stall at cruise condition.
+
+    Uses the already-computed ``derived`` dict (passed from validate_dynamic_stability)
+    to avoid duplicate compute_derived_values() calls.
+    """
     try:
         from backend.mass_properties import resolve_mass_properties
         from backend.datcom import compute_flight_condition
-        from backend.geometry.engine import compute_derived_values
         from backend.airfoil_data import interpolate_section_aero
 
-        derived_dict = compute_derived_values(design)
-        mass_props = resolve_mass_properties(design, derived_dict)
+        # Use the derived dict already available from the caller; fall back to
+        # recomputing only if it was not passed (standalone usage).
+        if derived is None:
+            from backend.geometry.engine import compute_derived_values
+            derived = compute_derived_values(design)
+
+        mass_props = resolve_mass_properties(design, derived)
         fc = compute_flight_condition(design, mass_props)
 
         # Section CL_max for the wing airfoil at cruise Re/Mach
@@ -1323,7 +1334,7 @@ def validate_dynamic_stability(
     _check_v40(ds, out)
     _check_v41(ds, out)
     _check_v42(ds, out)
-    _check_v43(design, ds, out)
+    _check_v43(design, ds, out, derived=derived)
     _check_v44(design, out)
 
     # V45: CL_trim < 0.1 — re-derive from mass + flight condition
