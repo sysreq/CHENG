@@ -29,6 +29,24 @@ branch. You do **not** merge your own PRs.
 
 ---
 
+## Test Policy
+
+CHENG uses a three-tier test architecture. As a developer agent, you run
+Tier 1 and Tier 2 automatically via the pre-commit script. Tier 3 is
+enforced at merge time by CI.
+
+| Tier | Name | When | Time Budget | How |
+|------|------|------|-------------|-----|
+| 1 | Smoke | Always (pre-commit) | < 15s | `pytest -m smoke` + vitest smoke config |
+| 2 | Change-scoped | Pre-commit when source changes | < 45s | `pytest --testmon` + `vitest --changed` |
+| 3 | Full suite | Pre-merge (CI enforced) | < 10 min | Full `pytest` + full `vitest run` |
+
+**Escalation rule:** If you are making broad changes (3+ modules, shared
+utilities, or config files), skip the pre-commit script and run the full
+suite manually instead.
+
+---
+
 ## Full Workflow
 
 ```
@@ -38,16 +56,18 @@ Setup worktree + branch (off Base branch)
     ↓
 Implement solution
     ↓
+Run pre-commit tests (smoke + change-scoped via scripts/test-precommit.sh)
+    ↓ (tests pass)
 Gemini peer review loop (max 3 cycles)
     ↓ (repeat until Gemini approves or max cycles reached)
-Fix Gemini feedback → re-review
+Fix Gemini feedback → re-run tests → re-review
     ↓ (Gemini approves)
 Open Pull Request (targeting Base branch, linked to issue)
     ↓
 Poll for kilo-code-bot review comment (every 30s, 10-min timeout)
     ↓
 Parse comment: "No Issues Found | Recommendation: Merge"?
-    ↓ No → fix → push → reply → resume polling (max 3 fix cycles)
+    ↓ No → fix → run tests → push → reply → resume polling (max 3 fix cycles)
     ↓ Yes
 Label PR "Ready to Merge" → Done
 ```
@@ -115,7 +135,35 @@ Error: <git output>
 
 ---
 
-## Step 4: Gemini Peer Review Loop
+## Step 4: Run Pre-Commit Tests
+
+Before Gemini review and before opening a PR, run the pre-commit test script
+from the repo root:
+
+```bash
+bash scripts/test-precommit.sh
+```
+
+This automatically runs Tier 1 (smoke, always) and Tier 2 (change-scoped,
+based on your diff). It detects whether your changes are backend-only,
+frontend-only, or both and runs the appropriate subset.
+
+- **If tests pass**: proceed to Step 5 (Gemini review).
+- **If tests fail**: fix the failures, commit, and re-run. Do not proceed with
+  failing tests.
+- **If you are making broad changes** (3+ modules, shared utilities, config
+  files), escalate to the full suite instead:
+  ```bash
+  cd <worktree-path>
+  python -m pytest tests/backend/ -v
+  cd frontend && pnpm exec vitest run --config ../tests/frontend/vitest.config.ts
+  ```
+- **On pre-merge**: CI will run the full suite automatically. You do not need
+  to run it manually unless escalating.
+
+---
+
+## Step 5: Gemini Peer Review Loop
 
 Do **not** open a PR until Gemini approves.
 
@@ -169,15 +217,15 @@ echo "$REVIEW_OUTPUT"
 
 ### Evaluate Gemini's response
 
-- **APPROVED** (or no blocking issues): proceed to Step 5.
+- **APPROVED** (or no blocking issues): proceed to Step 6.
 - **Issues raised**: address all feedback, commit, increment cycle counter,
-  return to top of Step 4.
+  return to top of Step 5.
 
 Document the final Gemini outcome for the PR description.
 
 ---
 
-## Step 5: Open the Pull Request
+## Step 6: Open the Pull Request
 
 ```bash
 gh pr create \
@@ -197,7 +245,7 @@ Closes #<issue-number>
 Cycles used: <N> of 3
 
 ## Testing
-<how the solution was tested>" \
+<how the solution was tested, including which test tiers passed>" \
   --base <base-branch> \
   --head <branch-name>
 ```
@@ -208,7 +256,7 @@ Save the PR number returned by this command.
 
 ---
 
-## Step 6: Poll for kilo-code-bot Review
+## Step 7: Poll for kilo-code-bot Review
 
 After the PR is open, enter a polling loop. **Do not proceed until kilo-code-bot
 has commented.** This may take several minutes — that is expected.
@@ -277,7 +325,7 @@ while [ $ELAPSED -lt $MAX_WAIT ]; do
       echo "✅ kilo-code-bot approves. Proceeding to label."
       break
     else
-      echo "⚠️  kilo-code-bot found issues. Proceeding to Step 6a."
+      echo "⚠️  kilo-code-bot found issues. Proceeding to Step 7a."
       KILO_NEEDS_CHANGES=true
       break
     fi
@@ -298,12 +346,12 @@ fi
 
 ### Branch on outcome:
 
-- **`No Issues Found` + `Recommendation: Merge`** → proceed to Step 7.
-- **Feedback found** → proceed to Step 6a.
+- **`No Issues Found` + `Recommendation: Merge`** → proceed to Step 8.
+- **Feedback found** → proceed to Step 7a.
 
 ---
 
-## Step 6a: Address kilo-code-bot Feedback
+## Step 7a: Address kilo-code-bot Feedback
 
 ```bash
 FIX_CYCLE=$((FIX_CYCLE + 1))
@@ -320,27 +368,31 @@ echo "Fix cycle $FIX_CYCLE of $MAX_FIX_CYCLES"
 ```
 
 1. Read the bot's comment. Fix every issue raised.
-2. Commit:
+2. Run pre-commit tests:
+   ```bash
+   bash scripts/test-precommit.sh
+   ```
+3. Commit:
    ```
    fix: address kilo-code-bot review (cycle <N>) - <brief description>
    ```
-3. Push:
+4. Push:
    ```bash
    git push origin <branch-name>
    ```
-4. Reply on the PR:
+5. Reply on the PR:
    ```bash
    gh pr comment $PR_NUMBER --body "Thanks for the review. I've addressed the following (fix cycle $FIX_CYCLE of $MAX_FIX_CYCLES):
    - <fix 1>
    - <fix 2>
 
-   Ready for re-review."
+   Pre-commit tests passing. Ready for re-review."
    ```
-5. Reset `ELAPSED=0`, set `KILO_NEEDS_CHANGES=false`, return to **Step 6**.
+6. Reset `ELAPSED=0`, set `KILO_NEEDS_CHANGES=false`, return to **Step 7**.
 
 ---
 
-## Step 7: Label the PR "Ready to Merge"
+## Step 8: Label the PR "Ready to Merge"
 
 ```bash
 # Create the label if it doesn't already exist
@@ -361,6 +413,7 @@ Your work is complete. Return success to the PM agent.
 ## Rules
 
 - **Never merge your own PR.**
+- **Always run pre-commit tests** (`bash scripts/test-precommit.sh`) before opening or updating a PR.
 - **Never open a PR before Gemini approves** the code.
 - **Always set `--base` to the `Base branch` input**, never hardcode `main`.
 - **Always branch your worktree off `Base branch`**, not `main`.
@@ -370,6 +423,7 @@ Your work is complete. Return success to the PM agent.
 - **Check exit codes** on `gemini` and `gh` calls. Report BLOCKED with error
   output rather than interpreting garbage as review feedback.
 - **Respect all cycle and timeout limits:**
+  - Pre-commit tests: must pass before Gemini review or PR update.
   - Gemini review: **3 cycles max.**
   - kilo-code-bot polling: **600 seconds per wait.**
   - kilo-code-bot fix cycles: **3 cycles max.**
