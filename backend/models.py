@@ -224,6 +224,67 @@ class AircraftDesign(CamelModel):
     tail_wheel_diameter: float = Field(default=12.0, ge=5.0, le=40.0)   # mm
     tail_gear_position: float = Field(default=92.0, ge=85.0, le=98.0)   # % fuselage length
 
+    # ── Mass Properties Override (MP01–MP07) ─────────────────────────────────
+    # Optional measured values that replace CHENG's geometric estimates when set.
+    # All default to None for backward compatibility with existing designs.
+    mass_total_override_g: Optional[float] = Field(
+        default=None,
+        ge=50.0,
+        le=10000.0,
+        description="MP01: Measured total aircraft mass in grams. Overrides weight_total_g.",
+    )
+    cg_override_x_mm: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=2000.0,
+        description="MP02: Measured CG position along fuselage longitudinal axis (mm from nose).",
+    )
+    cg_override_z_mm: Optional[float] = Field(
+        default=None,
+        ge=-50.0,
+        le=100.0,
+        description="MP03: Measured CG offset in vertical direction (mm, positive up).",
+    )
+    cg_override_y_mm: Optional[float] = Field(
+        default=None,
+        ge=-100.0,
+        le=100.0,
+        description="MP04: Measured CG offset in lateral direction (mm, positive starboard).",
+    )
+    ixx_override_kg_m2: Optional[float] = Field(
+        default=None,
+        ge=0.0001,
+        le=10.0,
+        description="MP05: Measured roll moment of inertia (kg·m²).",
+    )
+    iyy_override_kg_m2: Optional[float] = Field(
+        default=None,
+        ge=0.0001,
+        le=10.0,
+        description="MP06: Measured pitch moment of inertia (kg·m²).",
+    )
+    izz_override_kg_m2: Optional[float] = Field(
+        default=None,
+        ge=0.0001,
+        le=10.0,
+        description="MP07: Measured yaw moment of inertia (kg·m²).",
+    )
+
+    # ── Flight Condition (FC01–FC02) ─────────────────────────────────────────
+    # Used by the DATCOM dynamic stability analysis. Default 50 m/s / sea level.
+    flight_speed_ms: float = Field(
+        default=50.0,
+        ge=10.0,
+        le=100.0,
+        description="FC01: Cruise airspeed for dynamic stability analysis (m/s).",
+    )
+    flight_altitude_m: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=3000.0,
+        description="FC02: Flight altitude for ISA atmosphere model (m above MSL).",
+    )
+
 
 # ---------------------------------------------------------------------------
 # Derived Values — computed by geometry engine, read-only
