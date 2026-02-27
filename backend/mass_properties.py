@@ -246,7 +246,12 @@ def resolve_mass_properties(
     if design.cg_override_x_mm is not None:
         cg_x_mm = float(design.cg_override_x_mm)
     else:
-        cg_x_mm = _get(derived, "estimated_cg_mm")
+        # NOTE: derived["estimated_cg_mm"] is wing-LE-referenced (distance aft of
+        # wing root LE), not nose-referenced.  MassProperties.cg_x_mm is defined
+        # as nose-referenced.  We cannot convert without knowing wing_x here, so
+        # use 30% of fuselage length from nose — consistent with the conventional
+        # RC "balance at 25-30% MAC" rule and the engine's own fallback.
+        cg_x_mm = design.fuselage_length * 0.30
 
     if design.cg_override_z_mm is not None:
         cg_z_mm = float(design.cg_override_z_mm)
