@@ -36,22 +36,61 @@ substitutions:
   _REPOSITORY: cheng-images
 
 steps:
-  # Step 1: Build the production Docker image
+  # Step 1: Pull cache images (best-effort — don't fail if registry is cold)
+  - name: gcr.io/cloud-builders/docker
+    id: pull-cache
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        docker pull "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:fe-cache" || true
+        docker pull "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:latest" || true
+
+  # Step 2: Build the frontend-build stage and tag it for cache reuse.
+  # Caching this intermediate stage separately ensures `pnpm build` only
+  # runs when frontend source files actually change, not on every deploy.
+  - name: gcr.io/cloud-builders/docker
+    id: build-frontend
+    env:
+      - DOCKER_BUILDKIT=1
+    args:
+      - build
+      - --target
+      - frontend-build
+      - --build-arg
+      - BUILDKIT_INLINE_CACHE=1
+      - --cache-from
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:fe-cache"
+      - --tag
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:fe-cache"
+      - .
+    waitFor:
+      - pull-cache
+
+  # Step 3: Build the production Docker image using both cache sources
   - name: gcr.io/cloud-builders/docker
     id: build
+    env:
+      - DOCKER_BUILDKIT=1
     args:
       - build
       - --target
       - runtime
+      - --build-arg
+      - BUILDKIT_INLINE_CACHE=1
+      - --cache-from
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:fe-cache"
+      - --cache-from
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:latest"
       - --tag
       - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${COMMIT_SHA}"
       - --tag
       - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:latest"
-      - --cache-from
-      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:latest"
       - .
+    waitFor:
+      - build-frontend
 
-  # Step 2: Push the image to Artifact Registry
+  # Step 4: Push all tags to Artifact Registry (runtime + fe-cache)
   - name: gcr.io/cloud-builders/docker
     id: push
     args:
@@ -61,7 +100,7 @@ steps:
     waitFor:
       - build
 
-  # Step 3: Deploy to Cloud Run
+  # Step 5: Deploy to Cloud Run
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     id: deploy
     entrypoint: gcloud
@@ -97,6 +136,7 @@ steps:
 images:
   - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${COMMIT_SHA}"
   - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:latest"
+  - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:fe-cache"
 
 options:
   # Use a high-CPU machine to keep the CadQuery/OCC build fast
