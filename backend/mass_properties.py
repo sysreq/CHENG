@@ -179,10 +179,19 @@ def estimate_inertia(
     x_battery_from_cg = abs(x_battery_m - cg_x_m)
     I_battery_pitch = m_battery_kg * x_battery_from_cg ** 2
 
+    # ── Avionics contribution ─────────────────────────────────────────────
+    # Residual electronics (servos, ESC, receiver) are distributed inside the
+    # fuselage near the CG.  Model as a fuselage-like cylinder of the same
+    # cross-section so we reuse r_fus_m:
+    #   Ixx_avionics ≈ (1/2) * m * r²   (compact roll inertia)
+    #   Iyy_avionics ≈ (1/12) * m * (L² + 3r²)  (distributed along fuselage)
+    I_avionics_roll = 0.5 * m_avionics_kg * r_fus_m ** 2
+    I_avionics_pitch = (1.0 / 12.0) * m_avionics_kg * (L_m ** 2 + 3.0 * r_fus_m ** 2)
+
     # ── Assemble totals ───────────────────────────────────────────────────
-    ixx = I_wing_roll + I_fus_roll
-    iyy = I_wing_pitch + I_fus_pitch + I_tail_pitch + I_motor_pitch + I_battery_pitch
-    izz = I_wing_yaw + I_fus_pitch + I_tail_yaw + I_motor_pitch + I_battery_pitch
+    ixx = I_wing_roll + I_fus_roll + I_avionics_roll
+    iyy = I_wing_pitch + I_fus_pitch + I_tail_pitch + I_motor_pitch + I_battery_pitch + I_avionics_pitch
+    izz = I_wing_yaw + I_fus_pitch + I_tail_yaw + I_motor_pitch + I_battery_pitch + I_avionics_pitch
 
     # Ensure minimum plausible values and physical ordering constraint
     # (small floating point errors can break Ixx < Iyy < Izz in degenerate cases)
