@@ -18,6 +18,8 @@ import { ModeBadge } from './ModeBadge';
 import { useModeInfo } from '../hooks/useModeInfo';
 import { UnitToggle } from './UnitToggle';
 import { StabilityOverlay } from './StabilityOverlay';
+import type { StabilityTab } from './StabilityOverlay';
+import { DynamicStabilitySummaryCard } from './DynamicStabilitySummaryCard';
 import { PRESET_DESCRIPTIONS } from '../lib/presets';
 import {
   listCustomPresets,
@@ -520,6 +522,7 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [plotsOpen, setPlotsOpen] = useState(false);
+  const [plotsInitialTab, setPlotsInitialTab] = useState<StabilityTab>('static');
   const [isEditingName, setIsEditingName] = useState(false);
   const togglePlotsButtonRef = useRef<HTMLButtonElement>(null);
   const [editNameValue, setEditNameValue] = useState(designName);
@@ -795,7 +798,10 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
         {/* Toggle Plots button (#317) — opens/closes the stability plots overlay */}
         <button
           ref={togglePlotsButtonRef}
-          onClick={() => setPlotsOpen((v) => !v)}
+          onClick={() => {
+            if (!plotsOpen) setPlotsInitialTab('static');
+            setPlotsOpen((v) => !v);
+          }}
           aria-pressed={plotsOpen}
           aria-controls="stability-overlay"
           aria-label={plotsOpen ? 'Hide stability plots' : 'Show stability plots'}
@@ -1025,8 +1031,18 @@ export function Toolbar({ onOpenExport }: ToolbarProps): React.JSX.Element {
         <StabilityOverlay
           onClose={() => setPlotsOpen(false)}
           toggleButtonRef={togglePlotsButtonRef}
+          initialTab={plotsInitialTab}
         />
       )}
+
+      {/* Dynamic Stability Summary Card (#359) — compact in-viewport status */}
+      <DynamicStabilitySummaryCard
+        overlayOpen={plotsOpen}
+        onOpen={() => {
+          setPlotsInitialTab('dynamic');
+          setPlotsOpen(true);
+        }}
+      />
 
       {/* Load Design Dialog (#93) */}
       <LoadDesignDialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen} />
