@@ -124,11 +124,11 @@ class TestComputeDerivedValues:
         """Derived values should compute for default parameters."""
         result = compute_derived_values(default_design)
         assert isinstance(result, dict)
-        # 12 base fields + 7 stability fields (v1.1)
-        assert len(result) == 19
+        # 12 base fields + 7 stability fields (v1.1) + 1 dynamic stability field (v1.2)
+        assert len(result) == 20
 
     def test_all_keys_present(self, default_design: AircraftDesign) -> None:
-        """All 19 derived value keys must be present (12 base + 7 stability v1.1)."""
+        """All 20 derived value keys must be present (12 base + 7 stability v1.1 + 1 dynamic v1.2)."""
         result = compute_derived_values(default_design)
         expected_keys = {
             # Base derived values (12)
@@ -152,14 +152,22 @@ class TestComputeDerivedValues:
             "tail_volume_h",
             "tail_volume_v",
             "wing_loading_g_dm2",
+            # Dynamic stability field (v1.2, 1 field)
+            "dynamic_stability",
         }
         assert set(result.keys()) == expected_keys
 
     def test_all_values_are_floats(self, default_design: AircraftDesign) -> None:
-        """All derived values should be numeric (float)."""
+        """Scalar derived values should be numeric; dynamic_stability may be a model or None."""
+        from backend.models import DynamicStabilityResult
         result = compute_derived_values(default_design)
         for key, val in result.items():
-            assert isinstance(val, (int, float)), f"{key} is {type(val)}"
+            if key == "dynamic_stability":
+                assert val is None or isinstance(val, DynamicStabilityResult), (
+                    f"dynamic_stability should be DynamicStabilityResult or None, got {type(val)}"
+                )
+            else:
+                assert isinstance(val, (int, float)), f"{key} is {type(val)}"
 
     def test_wing_tip_chord_rectangular(self) -> None:
         """With taper_ratio=1.0, tip chord == root chord."""
@@ -248,10 +256,17 @@ class TestComputeDerivedValues:
         assert result["wall_thickness_mm"] == pytest.approx(bwb_design.wall_thickness)
 
     def test_positive_values(self, trainer_design: AircraftDesign) -> None:
-        """All derived values should be positive for a valid design."""
+        """All scalar derived values should be positive for a valid design."""
+        from backend.models import DynamicStabilityResult
         result = compute_derived_values(trainer_design)
         for key, val in result.items():
-            assert val > 0, f"{key} = {val}, expected > 0"
+            if key == "dynamic_stability":
+                # dynamic_stability is a nested model or None — not a scalar
+                assert val is None or isinstance(val, DynamicStabilityResult), (
+                    f"dynamic_stability should be DynamicStabilityResult or None, got {type(val)}"
+                )
+            else:
+                assert val > 0, f"{key} = {val}, expected > 0"
 
     def test_sport_preset(self, sport_design: AircraftDesign) -> None:
         """Sport preset should produce reasonable derived values."""

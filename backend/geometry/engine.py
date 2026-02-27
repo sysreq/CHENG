@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import cadquery as cq
 
-from backend.models import AircraftDesign, DerivedValues, GenerationResult
+from backend.models import AircraftDesign, DerivedValues, DynamicStabilityResult, GenerationResult
 from backend.stability import compute_static_stability
 
 # Lazy import of anyio -- only needed when running async code.
@@ -447,6 +447,67 @@ def compute_derived_values(design: AircraftDesign) -> dict[str, float]:
         # so the response shape remains consistent (all 19 keys always present).
         stability = _stability_zero()
     result.update(stability)
+
+    # Dynamic stability metrics (v1.2) — DATCOM pipeline.
+    # Wrapped in try/except: failure must never break the main preview path.
+    try:
+        import dataclasses as _dc
+        from backend.mass_properties import resolve_mass_properties
+        from backend.datcom import (
+            compute_flight_condition,
+            compute_stability_derivatives,
+            compute_dynamic_modes,
+        )
+
+        mass_props = resolve_mass_properties(design, result)
+        fc = compute_flight_condition(design, mass_props)
+        derivs = compute_stability_derivatives(design, mass_props, fc)
+        modes = compute_dynamic_modes(design, mass_props, fc, derivs)
+
+        # dataclasses.asdict uses the dataclass field names (uppercase for
+        # derivatives: CL_alpha, etc.).  Map them to the snake_case Pydantic
+        # model fields (cl_alpha, etc.) by lowercasing.
+        modes_dict = _dc.asdict(modes)
+        ds = DynamicStabilityResult(
+            sp_omega_n=modes_dict["sp_omega_n"],
+            sp_zeta=modes_dict["sp_zeta"],
+            sp_period_s=modes_dict["sp_period_s"],
+            phugoid_omega_n=modes_dict["phugoid_omega_n"],
+            phugoid_zeta=modes_dict["phugoid_zeta"],
+            phugoid_period_s=modes_dict["phugoid_period_s"],
+            dr_omega_n=modes_dict["dr_omega_n"],
+            dr_zeta=modes_dict["dr_zeta"],
+            dr_period_s=modes_dict["dr_period_s"],
+            roll_tau_s=modes_dict["roll_tau_s"],
+            spiral_tau_s=modes_dict["spiral_tau_s"],
+            spiral_t2_s=modes_dict["spiral_t2_s"],
+            cl_alpha=modes_dict["CL_alpha"],
+            cd_alpha=modes_dict["CD_alpha"],
+            cm_alpha=modes_dict["Cm_alpha"],
+            cl_q=modes_dict["CL_q"],
+            cm_q=modes_dict["Cm_q"],
+            cl_alphadot=modes_dict["CL_alphadot"],
+            cm_alphadot=modes_dict["Cm_alphadot"],
+            cy_beta=modes_dict["CY_beta"],
+            cl_beta=modes_dict["Cl_beta"],
+            cn_beta=modes_dict["Cn_beta"],
+            cy_p=modes_dict["CY_p"],
+            cl_p=modes_dict["Cl_p"],
+            cn_p=modes_dict["Cn_p"],
+            cy_r=modes_dict["CY_r"],
+            cl_r=modes_dict["Cl_r"],
+            cn_r=modes_dict["Cn_r"],
+            derivatives_estimated=modes_dict["derivatives_estimated"],
+        )
+        result["dynamic_stability"] = ds
+    except Exception as _datcom_exc:
+        import warnings as _warnings
+        _warnings.warn(
+            f"DATCOM dynamic stability computation failed: {_datcom_exc}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        result["dynamic_stability"] = None
 
     return result
 
