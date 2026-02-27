@@ -217,7 +217,10 @@ def resolve_mass_properties(
     if design.mass_total_override_g is not None:
         mass_g = float(design.mass_total_override_g)
     else:
-        mass_g = _get(derived, "weight_total_g")
+        # weight_total_g from derived covers airframe only (wing + tail + fuselage).
+        # Motor and battery are separate design fields — add them for total aircraft mass.
+        airframe_g = _get(derived, "weight_total_g")
+        mass_g = airframe_g + design.motor_weight_g + design.battery_weight_g
 
     # ── CG position (MP02-MP04) ────────────────────────────────────────────
     if design.cg_override_x_mm is not None:
